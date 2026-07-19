@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { Save, Printer } from "lucide-react";
 
-export function SaveQuoteBar({ module, title, summary, disabled }) {
+export function SaveQuoteBar({ module, title, summary, inputs, disabled }) {
   const [open, setOpen] = useState(false);
   const [customer, setCustomer] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -18,7 +18,7 @@ export function SaveQuoteBar({ module, title, summary, disabled }) {
   const save = async () => {
     setSaving(true);
     try {
-      await api.post("/quotes", { module, title, summary, customer_name: customer, customer_email: customerEmail, notes });
+      await api.post("/quotes", { module, title, summary, inputs: inputs || {}, customer_name: customer, customer_email: customerEmail, notes });
       toast.success("Quote saved");
       setOpen(false); setCustomer(""); setCustomerEmail(""); setNotes("");
     } catch (e) {

@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money, num } from "@/lib/format";
 import { PricingPanel } from "@/components/Metric";
+import { useRequote } from "@/lib/useRequote";
 import { toast } from "sonner";
 import { Calculator, Layers, FileStack, DollarSign, Tag } from "lucide-react";
 
@@ -83,6 +84,14 @@ export default function PaperPrinting() {
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
     finally { setLoading(false); }
   };
+
+  useRequote((rq) => {
+    if (rq.productId) setProductId(rq.productId);
+    if (rq.sheet) setSheet(rq.sheet);
+    if (rq.laminate != null) setLaminate(rq.laminate);
+    if (rq.side) setSide(rq.side);
+    if (rq.focusQty) setFocusQty(rq.focusQty);
+  }, calc);
 
   const qtys = result?.qtys || [];
   const rowFor = (r, qty) => r?.quote.rows.find((x) => x.qty === qty);
@@ -178,7 +187,7 @@ export default function PaperPrinting() {
                           wholesale_unit: focusRow?.[`wholesale_unit_${side}`],
                         }} />
                       </div>
-                      <div className="mt-4"><SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} /></div>
+                      <div className="mt-4"><SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} inputs={{ productId, sheet, laminate, side, focusQty }} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} /></div>
                     </div>
                   </div>
 

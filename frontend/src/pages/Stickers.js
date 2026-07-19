@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import NestingCanvas from "@/components/NestingCanvas";
 import { Metric, ConfigCard, EmptyState, SectionLabel, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,14 @@ export default function Stickers() {
       setSel(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
+
+  useRequote((rq) => {
+    if (rq.w != null) setW(rq.w);
+    if (rq.h != null) setH(rq.h);
+    if (rq.qty != null) setQty(rq.qty);
+    if (rq.finishing) setFinishing(rq.finishing);
+    if (rq.laminate != null) setLaminate(rq.laminate);
+  }, calc);
 
   const SizeCtl = ({ label, val, set }) => (
     <div className="mb-5">
@@ -92,7 +101,7 @@ export default function Stickers() {
                 {sel.layout && <NestingCanvas layout={sel.layout} />}
                 <PricingPanel r={sel} className="mt-3" />
                 <div className="mt-3 flex justify-end">
-                  <SaveQuoteBar module="Stickers" title={`Sticker ${w}x${h} x${qty} · ${sel.material}`} summary={sel} />
+                  <SaveQuoteBar module="Stickers" title={`Sticker ${w}x${h} x${qty} · ${sel.material}`} inputs={{ w, h, qty, finishing, laminate }} summary={sel} />
                 </div>
               </div>
 

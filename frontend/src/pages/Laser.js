@@ -8,6 +8,7 @@ import NestingCanvas from "@/components/NestingCanvas";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,7 +135,7 @@ export default function Laser() {
                       <CostRow label="Setup" value={sel.setup} />
                     </div>
                     <PricingPanel r={sel} className="mt-3" />
-                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Laser" title={`Laser ${sel.material.name}`} summary={sel} /></div>
+                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Laser" title={`Laser ${sel.material.name}`} inputs={{ sizes, cfg }} summary={sel} /></div>
                   </div>
                   <div>
                     <SectionLabel>Compare Materials</SectionLabel>

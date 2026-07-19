@@ -8,6 +8,7 @@ import NestingCanvas from "@/components/NestingCanvas";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,12 @@ export default function DTF() {
       setRes(data);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
+
+  useRequote((rq) => {
+    if (rq.garmentId !== undefined) setGarmentId(rq.garmentId || "none");
+    if (rq.quantity != null) setQuantity(rq.quantity);
+    if (Array.isArray(rq.placements) && rq.placements.length) setPlacements(rq.placements);
+  }, calc);
 
   return (
     <div data-testid="dtf-page">
@@ -104,7 +111,7 @@ export default function DTF() {
                       <CostRow label="Labor" value={res.labor} />
                     </div>
                     <PricingPanel r={res} className="mt-3" />
-                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="DTF" title={`DTF x${res.quantity}`} summary={res} /></div>
+                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="DTF" title={`DTF x${res.quantity}`} inputs={{ garmentId, quantity, placements }} summary={res} /></div>
                   </div>
                 </div>
               )}

@@ -6,6 +6,7 @@ import NestingCanvas from "@/components/NestingCanvas";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,6 +35,11 @@ export default function ChannelLetters() {
       setSel(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
+
+  useRequote((rq) => {
+    if (Array.isArray(rq.letters) && rq.letters.length) setLetters(rq.letters);
+    if (rq.sheetSize) setSheetSize(rq.sheetSize);
+  }, calc);
 
   return (
     <div data-testid="channel-letters-page">
@@ -73,7 +79,7 @@ export default function ChannelLetters() {
                   <CostRow label="Labor" value={sel.labor} />
                 </div>
                 <PricingPanel r={sel} className="mt-3" />
-                <div className="mt-3 flex justify-end"><SaveQuoteBar module="Channel Letters" title={`Channel x${sel.quantity} ${sel.material.name}`} summary={sel} /></div>
+                <div className="mt-3 flex justify-end"><SaveQuoteBar module="Channel Letters" title={`Channel x${sel.quantity} ${sel.material.name}`} inputs={{ letters, sheetSize }} summary={sel} /></div>
               </div>
               <div>
                 <SectionLabel>Compare Materials</SectionLabel>

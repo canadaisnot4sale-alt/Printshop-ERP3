@@ -6,6 +6,7 @@ import CrudManager from "@/components/CrudManager";
 import NestingCanvas from "@/components/NestingCanvas";
 import { Metric, EmptyState, SectionLabel, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,12 @@ export default function LargeFormat() {
       setSel(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
+
+  useRequote((rq) => {
+    if (Array.isArray(rq.sizes) && rq.sizes.length) setSizes(rq.sizes);
+    if (rq.mode) setMode(rq.mode);
+    if (rq.laminate != null) setLaminate(rq.laminate);
+  }, calc);
 
   const totalPieces = sizes.reduce((a, s) => a + (+s.qty || 0), 0);
 
@@ -163,7 +170,7 @@ export default function LargeFormat() {
                     {sel.layout && <NestingCanvas layout={sel.layout} />}
                     <PricingPanel r={sel.total} className="mt-3" />
                     <div className="mt-3 flex justify-end">
-                      <SaveQuoteBar module="Gran Formato" title={`${sel.material.name} · ${res.mode}`} summary={sel} />
+                      <SaveQuoteBar module="Gran Formato" title={`${sel.material.name} · ${res.mode}`} inputs={{ sizes, mode, laminate }} summary={sel} />
                     </div>
                   </div>
 

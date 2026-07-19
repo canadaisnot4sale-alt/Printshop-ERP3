@@ -55,7 +55,7 @@ export default function QuoteDetailDialog({ quote, open, onOpenChange }) {
   const specs = rows.filter((r) => !r.money);
   const costs = rows.filter((r) => r.money);
   const route = MODULE_ROUTES[quote.module];
-  const requote = () => { onOpenChange(false); if (route) navigate(route); };
+  const requote = () => { onOpenChange(false); if (route) navigate(route, { state: { requote: quote.inputs || {} } }); };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { toast } from "sonner";
 import { Calculator, BookOpen, FileStack, Layers, DollarSign } from "lucide-react";
 
@@ -42,6 +43,8 @@ export default function Booklet() {
       setRes(data);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
+
+  useRequote((rq) => { if (rq.f) setF((p) => ({ ...p, ...rq.f })); }, calc);
 
   const bindingLabel = BINDINGS.find((b) => b.v === f.binding)?.l;
 
@@ -114,7 +117,7 @@ export default function Booklet() {
                   <SectionLabel>{res.cover?.name} · {res.inside?.name}</SectionLabel>
                   <div className="mt-auto"><PricingPanel r={res} /></div>
                   <div className="mt-4 flex justify-end">
-                    <SaveQuoteBar module="Booklet" title={`Booklet ${res.cover?.name || ""} x${f.quantity}`} summary={res} />
+                    <SaveQuoteBar module="Booklet" title={`Booklet ${res.cover?.name || ""} x${f.quantity}`} inputs={{ f }} summary={res} />
                   </div>
                 </div>
               </div>

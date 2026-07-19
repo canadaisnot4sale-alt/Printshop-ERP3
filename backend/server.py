@@ -1094,13 +1094,14 @@ class QuoteIn(BaseModel):
     module: str
     title: str
     summary: dict
+    inputs: dict = {}
     customer_name: str = ""
     customer_email: str = ""
     notes: str = ""
 
 @api_router.post("/quotes")
 async def save_quote(body: QuoteIn, user=Depends(get_current_user)):
-    doc = {"module": body.module, "title": body.title, "summary": body.summary,
+    doc = {"module": body.module, "title": body.title, "summary": body.summary, "inputs": body.inputs,
            "customer_name": body.customer_name, "customer_email": body.customer_email, "notes": body.notes,
            "user_id": user["id"], "user_email": user["email"], "created_at": now_iso()}
     res = await db.quotes.insert_one(doc)

@@ -8,6 +8,7 @@ import NestingCanvas from "@/components/NestingCanvas";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,13 @@ export default function DirectPrint() {
       setSel(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
+
+  useRequote((rq) => {
+    if (Array.isArray(rq.sizes) && rq.sizes.length) setSizes(rq.sizes);
+    if (rq.sheetSize) setSheetSize(rq.sheetSize);
+    if (rq.cnc != null) setCnc(rq.cnc);
+    if (rq.cncLen != null) setCncLen(rq.cncLen);
+  }, calc);
 
   return (
     <div data-testid="direct-print-page">
@@ -114,7 +122,7 @@ export default function DirectPrint() {
                       <CostRow label="CNC cut" value={sel.cnc_cost} />
                     </div>
                     <PricingPanel r={sel} className="mt-3" />
-                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Direct Print" title={`Direct ${sel.material.name} ${sheetSize}`} summary={sel} /></div>
+                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Direct Print" title={`Direct ${sel.material.name} ${sheetSize}`} inputs={{ sizes, sheetSize, cnc, cncLen }} summary={sel} /></div>
                   </div>
                   <div>
                     <SectionLabel>Compare Materials</SectionLabel>

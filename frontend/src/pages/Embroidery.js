@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { CostRow } from "@/components/Totals";
 import { Metric, ConfigCard, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,13 @@ export default function Embroidery() {
       setRes(data);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
+
+  useRequote((rq) => {
+    if (rq.garmentId !== undefined) setGarmentId(rq.garmentId || "none");
+    if (rq.quantity != null) setQuantity(rq.quantity);
+    if (rq.digitizing != null) setDigitizing(rq.digitizing);
+    if (Array.isArray(rq.placements) && rq.placements.length) setPlacements(rq.placements);
+  }, calc);
 
   return (
     <div data-testid="embroidery-page">
@@ -98,7 +106,7 @@ export default function Embroidery() {
                 <CostRow label="Embroidery" value={res.embroidery_cost} />
                 <CostRow label="Digitizing" value={res.setup} />
                 <PricingPanel r={res} className="mt-3" />
-                <div className="mt-3 flex justify-end"><SaveQuoteBar module="Embroidery" title={`Embroidery ${res.total_stitches}st x${res.quantity}`} summary={res} /></div>
+                <div className="mt-3 flex justify-end"><SaveQuoteBar module="Embroidery" title={`Embroidery ${res.total_stitches}st x${res.quantity}`} inputs={{ garmentId, quantity, digitizing, placements }} summary={res} /></div>
               </div>
             </div>
           )}

@@ -6,6 +6,7 @@ import CrudManager from "@/components/CrudManager";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,11 @@ export default function RollStickers() {
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
+  useRequote((rq) => {
+    if (rq.matId) setMatId(rq.matId);
+    if (rq.qty != null) setQty(rq.qty);
+  }, calc);
+
   return (
     <div data-testid="roll-stickers-page">
       <PageHeader title="Roll Stickers" eyebrow="Live Pricing" subtitle="Label rolls · 5-piece waste + ink cleaning (Epson ColorWorks C6000A)" />
@@ -92,7 +98,7 @@ export default function RollStickers() {
                     <CostRow label="Ink + cleaning" value={res.ink_cost} />
                     <CostRow label="Labor" value={res.labor} />
                     <PricingPanel r={res} className="mt-3" />
-                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Roll Stickers" title={`Roll Stickers ${res.material.name} x${res.quantity}`} summary={res} /></div>
+                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Roll Stickers" title={`Roll Stickers ${res.material.name} x${res.quantity}`} inputs={{ matId, qty }} summary={res} /></div>
                   </div>
                 </div>
               )}

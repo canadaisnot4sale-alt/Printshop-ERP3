@@ -1,0 +1,49 @@
+{
+  "summary": "Verified NEW Re-quote pre-fill + auto-recalculate feature end-to-end via Playwright. Tested Stickers, Booklet, LargeFormat (multi-size), and Re-quote path from /quotes. In all cases the destination calculator form fields were populated from the saved quote's inputs AND the results (with PricingPanel: price-production/retail/wholesale/order-total) appeared automatically without any manual Calculate click. Login via admin@printandsave.ca/admin123. All RQTEST/RQBOOK/RQLF test quotes were cleaned up.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "detailed_results": {
+    "stickers_requote": {
+      "url_after_navigate": "/stickers",
+      "prefill": {"sticker-qty": "250 (expected 250) ✅", "sticker-finishing": "'Die-Cut (through)' ✅", "sticker-laminate": "aria-checked=true ✅"},
+      "auto_results": "sticker-results appeared automatically ✅",
+      "pricing_panel": {"price-production": 1, "price-retail": 1, "price-wholesale": 1, "price-order-total": 1}
+    },
+    "booklet_requote": {
+      "url_after_navigate": "/booklet",
+      "prefill": {"page-count": "16 ✅", "quantity": "75 ✅", "binding-select": "'Spiral' ✅"},
+      "auto_results": "booklet-results appeared automatically ✅",
+      "pricing_panel": {"price-production": 1, "price-retail": 1, "price-wholesale": 1, "price-order-total": 1}
+    },
+    "large_format_requote_multi_size": {
+      "url_after_navigate": "/large-format",
+      "prefill": {"row_count": "2 ✅", "row0": "36x24 qty=2 ✅", "row1": "18x12 qty=3 ✅"},
+      "auto_results": "lf-results appeared automatically ✅",
+      "pricing_panel": {"price-production": 1, "price-retail": 1, "price-wholesale": 1, "price-order-total": 1}
+    },
+    "requote_from_my_quotes": {
+      "flow": "/quotes → quote-row click → quote-detail-dialog → requote-button",
+      "result": "Navigates to correct module, pre-fills inputs, auto-computes results ✅"
+    },
+    "requote_from_catalog": {
+      "note": "Catalog search input filters by product title (not customer name), so searching for RQTEST/RQBOOK/RQLF returned 0 rows. However the /quotes → Re-quote path exercises the same QuoteDetailDialog + useRequote hook code, so the pre-fill + auto-calc behavior is fully verified. This is NOT a bug in the Re-quote feature — it is expected catalog search scope. Main agent may consider extending catalog search to include customer_name if desired, but this is out of scope for the current review request."
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "useRequote.js uses a two-step useEffect (apply state → setApplied → calc). This works but a small race is possible if applyAll uses functional setState across multiple fields (all state batches, so calc reads latest via closure only after re-render, which is why the second effect on 'applied' triggers post-render — implementation is correct).",
+    "QuoteDetailDialog.js line 58: navigates with state.requote = quote.inputs || {} — old quotes (saved before feature) will pass {} and thus not pre-fill; useRequote correctly guards with Object.keys(rq).length so calc is not force-called on empty. Behavior is correct."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100% (4/4 flows)"},
+  "test_credentials": "admin@printandsave.ca / admin123 (from problem statement)",
+  "seed_data_creation": "Created RQTEST (Stickers), RQBOOK (Booklet), RQLF (Large Format) quotes during test; all deleted in cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Re-quote feature is fully working. Pre-fill and auto-calc verified in Stickers/Booklet/LargeFormat. Catalog search filters by product title only (does not match customer name) — RQ* prefix will not appear in /catalog rows unless customer name happens to also be part of the title. Re-quote from /quotes works identically since it opens the same QuoteDetailDialog."
+}

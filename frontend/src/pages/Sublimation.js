@@ -6,6 +6,7 @@ import CrudManager from "@/components/CrudManager";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,11 @@ export default function Sublimation() {
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
+  useRequote((rq) => {
+    if (rq.productId) setProductId(rq.productId);
+    if (rq.qty != null) setQty(rq.qty);
+  }, calc);
+
   return (
     <div data-testid="sublimation-page">
       <PageHeader title="Sublimation" eyebrow="Live Pricing" subtitle="Mugs, frames, keychains… · auto paper consumption (SureColor F570)" />
@@ -96,7 +102,7 @@ export default function Sublimation() {
                     <CostRow label="Ink" value={res.ink_cost} />
                     <CostRow label="Labor" value={res.labor} />
                     <PricingPanel r={res} className="mt-3" />
-                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Sublimation" title={`${res.product.name} x${res.quantity}`} summary={res} /></div>
+                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Sublimation" title={`${res.product.name} x${res.quantity}`} inputs={{ productId, qty }} summary={res} /></div>
                   </div>
                 </div>
               )}
