@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader";
 import {
   FileText, BookOpen, Ruler, Sticker, Printer, Settings, ArrowRight,
   Shirt, Sparkles, Scissors, PanelTop, Type, Users, FolderOpen,
+  Coffee, Disc, BookMarked,
 } from "lucide-react";
 
 const CARDS = [
@@ -18,6 +19,9 @@ const CARDS = [
   { to: "/laser", label: "Laser", desc: "Material + cut + engraving", icon: Scissors },
   { to: "/direct-print", label: "Direct Print", desc: "UV on 4x8 / 5x10 sheets + CNC", icon: PanelTop },
   { to: "/channel-letters", label: "Channel Letters", desc: "Auto-nested letter faces", icon: Type },
+  { to: "/sublimation", label: "Sublimation", desc: "Mugs, frames, keychains + paper calc", icon: Coffee },
+  { to: "/roll-stickers", label: "Roll Stickers", desc: "Label rolls + ink cleaning waste", icon: Disc },
+  { to: "/catalog", label: "Price Catalog", desc: "All quoted products, A–Z", icon: BookMarked },
   { to: "/quotes", label: "Quotes", desc: "Saved quotes", icon: FolderOpen },
   { to: "/equipment", label: "Equipment", desc: "Ink & true production cost", icon: Printer, admin: true },
   { to: "/users", label: "Users", desc: "Roles: admin, client, reseller", icon: Users, admin: true },

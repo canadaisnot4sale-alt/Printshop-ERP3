@@ -89,6 +89,26 @@ const GROUPS = [
       { name: "sticker_laminate_per_sqft", label: "Lamination / ft² (CAD)" },
     ],
   },
+  {
+    title: "Sublimation (F570)",
+    fields: [
+      { name: "sublimation_paper_width", label: "Paper roll width (in)" },
+      { name: "sublimation_paper_length_ft", label: "Paper roll length (ft)" },
+      { name: "sublimation_paper_roll_cost", label: "Paper roll cost (CAD)" },
+      { name: "sublimation_ink_per_sqft", label: "Ink / ft² (CAD)" },
+      { name: "sublimation_labor_per_unit", label: "Labor / unit (CAD)" },
+    ],
+  },
+  {
+    title: "Roll Stickers (C6000A)",
+    fields: [
+      { name: "rollsticker_waste_pieces", label: "Waste pieces / job" },
+      { name: "rollsticker_cleaning_cost", label: "Ink cleaning / job (CAD)" },
+      { name: "rollsticker_ink_per_sticker", label: "Ink / sticker (CAD)" },
+      { name: "rollsticker_labor", label: "Labor / job (CAD)" },
+      { name: "rollsticker_stickers_per_min", label: "Stickers / minute" },
+    ],
+  },
 ];
 
 export default function Settings() {

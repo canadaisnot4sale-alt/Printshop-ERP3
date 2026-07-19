@@ -16,6 +16,9 @@ import Embroidery from "@/pages/Embroidery";
 import Laser from "@/pages/Laser";
 import DirectPrint from "@/pages/DirectPrint";
 import ChannelLetters from "@/pages/ChannelLetters";
+import Sublimation from "@/pages/Sublimation";
+import RollStickers from "@/pages/RollStickers";
+import Catalog from "@/pages/Catalog";
 import Users from "@/pages/Users";
 import Quotes from "@/pages/Quotes";
 
@@ -44,6 +47,9 @@ function App() {
             <Route path="/laser" element={<Protected><Laser /></Protected>} />
             <Route path="/direct-print" element={<Protected><DirectPrint /></Protected>} />
             <Route path="/channel-letters" element={<Protected><ChannelLetters /></Protected>} />
+            <Route path="/sublimation" element={<Protected><Sublimation /></Protected>} />
+            <Route path="/roll-stickers" element={<Protected><RollStickers /></Protected>} />
+            <Route path="/catalog" element={<Protected><Catalog /></Protected>} />
             <Route path="/quotes" element={<Protected><Quotes /></Protected>} />
             <Route path="/equipment" element={<Protected adminOnly><Equipment /></Protected>} />
             <Route path="/users" element={<Protected adminOnly><Users /></Protected>} />

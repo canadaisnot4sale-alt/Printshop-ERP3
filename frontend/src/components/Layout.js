@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutGrid, FileText, BookOpen, Ruler, Sticker, Printer, Settings as Cog, LogOut,
   Shirt, Sparkles, Scissors, PanelTop, Type, Users as UsersIcon, FolderOpen,
+  Coffee, Disc, BookMarked,
 } from "lucide-react";
 
 const NAV = [
@@ -17,6 +18,9 @@ const NAV = [
   { to: "/laser", label: "Laser", icon: Scissors, testid: "nav-laser" },
   { to: "/direct-print", label: "Direct Print", icon: PanelTop, testid: "nav-direct-print" },
   { to: "/channel-letters", label: "Channel Letters", icon: Type, testid: "nav-channel-letters" },
+  { to: "/sublimation", label: "Sublimation", icon: Coffee, testid: "nav-sublimation" },
+  { to: "/roll-stickers", label: "Roll Stickers", icon: Disc, testid: "nav-roll-stickers" },
+  { to: "/catalog", label: "Price Catalog", icon: BookMarked, testid: "nav-catalog" },
   { to: "/quotes", label: "My Quotes", icon: FolderOpen, testid: "nav-quotes" },
   { section: "Administration", admin: true },
   { to: "/equipment", label: "Equipment", icon: Printer, testid: "nav-equipment", admin: true },

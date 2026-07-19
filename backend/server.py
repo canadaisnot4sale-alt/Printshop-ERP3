@@ -123,11 +123,42 @@ class RollMaterial(BaseModel):
 
 class Equipment(BaseModel):
     name: str
+    module: str = "general"
     ink_config: str = "CMYK"
     cartridge_ml: float = 220
     ink_price: float = 0.0
     ink_consumption_ml_sqft: float = 0.5
     maintenance_pct: float = 5.0
+
+class EquipmentSupply(BaseModel):
+    equipment_id: str
+    name: str
+    supplier: str = ""
+    part_number: str = ""
+    description: str = ""
+    price: float = 0.0
+    purchase_date: str = ""
+    install_date: str = ""
+
+class SublimationProduct(BaseModel):
+    name: str
+    category: str = "mug"
+    model: str = ""
+    price_per_box: float = 0.0
+    pieces_per_box: float = 1
+    cost_per_unit: float = 0.0
+    uses_paper: bool = False
+    print_bleed_w: float = 0.0
+    print_bleed_h: float = 0.0
+
+class RollStickerMaterial(BaseModel):
+    name: str
+    paper_type: str = "gloss"
+    roll_cost: float = 0.0
+    pieces_per_roll: float = 1000
+    roll_width: float = 4.0
+    sticker_w: float = 3.0
+    sticker_h: float = 3.0
 
 class SizePreset(BaseModel):
     name: str
@@ -211,6 +242,18 @@ class Settings(BaseModel):
     dtf_gutter_in: float = 0.25
     # Embroidery digitizing (1-3 logos, optional)
     embroidery_digitizing_1_3: float = 69.0
+    # Sublimation (SureColor F570)
+    sublimation_paper_width: float = 24.0
+    sublimation_paper_length_ft: float = 150.0
+    sublimation_paper_roll_cost: float = 45.0
+    sublimation_ink_per_sqft: float = 0.30
+    sublimation_labor_per_unit: float = 1.0
+    # Roll stickers (Epson ColorWorks C6000A)
+    rollsticker_waste_pieces: float = 5.0
+    rollsticker_cleaning_cost: float = 1.50
+    rollsticker_ink_per_sticker: float = 0.01
+    rollsticker_labor: float = 5.0
+    rollsticker_stickers_per_min: float = 30.0
     currency: str = "CAD"
 
 SHEET_SIZES = {
@@ -258,7 +301,7 @@ COST_FIELDS = {
     "cover_cost", "inside_cost", "print_cost", "binding_cost", "total_cost", "cost_per_sheet",
     "cost_per_box", "price_per_sqft", "cost_each", "dtf_cost", "garment_cost", "labor",
     "embroidery_cost", "setup", "cut_cost", "engrave_cost", "cnc_cost", "face_cost",
-    "return_cost", "sheet_cost", "base_cost",
+    "return_cost", "sheet_cost", "base_cost", "ink_cost", "blank_cost",
 }
 RETAIL_FIELDS = {
     "customer_price", "customer_price_4_0", "customer_price_4_4", "selling_price",
@@ -473,6 +516,27 @@ register_crud("size-presets", SizePreset, "size_presets")
 register_crud("garments", Garment, "garments")
 register_crud("laser-materials", LaserMaterial, "laser_materials")
 register_crud("sheet-materials", SheetMaterial, "sheet_materials")
+register_crud("sublimation-products", SublimationProduct, "sublimation_products")
+register_crud("roll-sticker-materials", RollStickerMaterial, "roll_sticker_materials")
+
+# ---------------- Equipment supplies (admin) ----------------
+@api_router.get("/equipment/{equipment_id}/supplies")
+async def list_supplies(equipment_id: str, user=Depends(get_current_user)):
+    items = await db.equipment_supplies.find({"equipment_id": equipment_id}).sort("created_at", -1).to_list(500)
+    return [clean(i) for i in items]
+
+@api_router.post("/equipment-supplies")
+async def add_supply(body: EquipmentSupply, user=Depends(require_admin)):
+    doc = body.model_dump()
+    doc["created_at"] = now_iso()
+    res = await db.equipment_supplies.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return clean(doc)
+
+@api_router.delete("/equipment-supplies/{supply_id}")
+async def delete_supply(supply_id: str, user=Depends(require_admin)):
+    await db.equipment_supplies.delete_one({"_id": ObjectId(supply_id)})
+    return {"ok": True}
 
 # Presets are per-user convenience (any authenticated user manages their own)
 def register_user_crud(path, model, collection):
@@ -909,6 +973,74 @@ async def calc_channel(body: ChannelCalcIn, user=Depends(get_current_user)):
     return {"results": results, "sheet_size": body.sheet_size, "heights": CHANNEL_HEIGHTS}
 
 
+class SublimationCalcIn(BaseModel):
+    product_id: str
+    quantity: int = 25
+
+@api_router.post("/calc/sublimation")
+async def calc_sublimation(body: SublimationCalcIn, user=Depends(get_current_user)):
+    s = await get_settings()
+    p = await db.sublimation_products.find_one({"_id": ObjectId(body.product_id)})
+    if not p:
+        raise HTTPException(404, "Product not found")
+    p = clean(p)
+    blank = p.get("cost_per_unit") or (p["price_per_box"] / p["pieces_per_box"] if p.get("pieces_per_box") else 0)
+    blank_cost = blank * body.quantity
+    paper_cost = 0.0
+    ink_cost = 0.0
+    used_len = 0.0
+    if p.get("uses_paper") and p.get("print_bleed_w") and p.get("print_bleed_h"):
+        placed, used_len, area = nest_pieces(
+            [{"w": p["print_bleed_w"], "h": p["print_bleed_h"], "qty": body.quantity, "label": p["name"]}],
+            s["sublimation_paper_width"])
+        roll_area = (s["sublimation_paper_width"] * s["sublimation_paper_length_ft"] * 12.0) / 144.0
+        cost_per_sqft = s["sublimation_paper_roll_cost"] / roll_area if roll_area else 0
+        paper_cost = area * cost_per_sqft
+        ink_cost = area * s["sublimation_ink_per_sqft"]
+    labor = s["sublimation_labor_per_unit"] * body.quantity
+    base = blank_cost + paper_cost + ink_cost + labor
+    return scrub({
+        "product": p, "quantity": body.quantity, "paper_used_in": round(used_len, 1),
+        "blank_cost": round(blank_cost, 2), "material_cost": round(paper_cost, 2),
+        "ink_cost": round(ink_cost, 2), "labor": round(labor, 2), "base_cost": round(base, 2),
+        "retail_total": markup_price(base, s["retail_markup_pct"]),
+        "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+        "unit_price": round(markup_price(base, s["retail_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+        "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+    }, user["role"])
+
+
+class RollStickerCalcIn(BaseModel):
+    material_id: str
+    quantity: int = 500
+
+@api_router.post("/calc/rollsticker")
+async def calc_rollsticker(body: RollStickerCalcIn, user=Depends(get_current_user)):
+    s = await get_settings()
+    m = await db.roll_sticker_materials.find_one({"_id": ObjectId(body.material_id)})
+    if not m:
+        raise HTTPException(404, "Material not found")
+    m = clean(m)
+    waste = s["rollsticker_waste_pieces"]
+    total_pieces = body.quantity + waste
+    rolls = math.ceil(total_pieces / m["pieces_per_roll"]) if m.get("pieces_per_roll") else 1
+    material_cost = rolls * m["roll_cost"]
+    ink_cost = body.quantity * s["rollsticker_ink_per_sticker"] + s["rollsticker_cleaning_cost"]
+    labor = s["rollsticker_labor"]
+    base = material_cost + ink_cost + labor
+    prod_min = body.quantity / s["rollsticker_stickers_per_min"] if s["rollsticker_stickers_per_min"] else 0
+    return scrub({
+        "material": m, "quantity": body.quantity, "waste_pieces": waste, "rolls_needed": rolls,
+        "production_minutes": round(prod_min, 1),
+        "material_cost": round(material_cost, 2), "ink_cost": round(ink_cost, 2), "labor": round(labor, 2),
+        "base_cost": round(base, 2),
+        "retail_total": markup_price(base, s["retail_markup_pct"]),
+        "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+        "unit_price": round(markup_price(base, s["retail_markup_pct"]) / body.quantity, 3) if body.quantity else 0,
+        "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / body.quantity, 3) if body.quantity else 0,
+    }, user["role"])
+
+
 # ---------------- Saved quotes ----------------
 class QuoteIn(BaseModel):
     module: str
@@ -1106,12 +1238,30 @@ async def seed_demo():
         await db.roll_materials.insert_many(mats)
     if await db.equipment.count_documents({}) == 0:
         eqs = [
-            {"name": "Ricoh Pro C7200", "ink_config": "CMYK", "cartridge_ml": 500, "ink_price": 180.0, "ink_consumption_ml_sqft": 0.4, "maintenance_pct": 6.0},
-            {"name": "Roland TrueVIS", "ink_config": "CMYK + Wh", "cartridge_ml": 500, "ink_price": 220.0, "ink_consumption_ml_sqft": 0.6, "maintenance_pct": 8.0},
+            {"name": "Ricoh Pro C7200", "module": "paper", "ink_config": "CMYK", "cartridge_ml": 500, "ink_price": 180.0, "ink_consumption_ml_sqft": 0.4, "maintenance_pct": 6.0},
+            {"name": "Xerox Versant 280", "module": "paper", "ink_config": "CMYK", "cartridge_ml": 500, "ink_price": 190.0, "ink_consumption_ml_sqft": 0.4, "maintenance_pct": 6.0},
+            {"name": "Konica AccurioPress C3080", "module": "paper", "ink_config": "CMYK", "cartridge_ml": 500, "ink_price": 200.0, "ink_consumption_ml_sqft": 0.4, "maintenance_pct": 7.0},
+            {"name": "Roland TrueVIS", "module": "largeformat", "ink_config": "CMYK + Wh", "cartridge_ml": 500, "ink_price": 220.0, "ink_consumption_ml_sqft": 0.6, "maintenance_pct": 8.0},
+            {"name": "Glowforge Pro", "module": "laser", "ink_config": "N/A", "cartridge_ml": 0, "ink_price": 0.0, "ink_consumption_ml_sqft": 0.0, "maintenance_pct": 5.0},
+            {"name": "xTool F2", "module": "laser", "ink_config": "N/A", "cartridge_ml": 0, "ink_price": 0.0, "ink_consumption_ml_sqft": 0.0, "maintenance_pct": 5.0},
+            {"name": "SureColor F570", "module": "sublimation", "ink_config": "CMYK", "cartridge_ml": 140, "ink_price": 70.0, "ink_consumption_ml_sqft": 0.35, "maintenance_pct": 5.0},
+            {"name": "Epson ColorWorks C6000A", "module": "rollsticker", "ink_config": "CMYK", "cartridge_ml": 50, "ink_price": 45.0, "ink_consumption_ml_sqft": 0.3, "maintenance_pct": 6.0},
         ]
         for e in eqs:
             e["created_at"] = now_iso()
         await db.equipment.insert_many(eqs)
+    if await db.sublimation_products.count_documents({}) == 0:
+        await db.sublimation_products.insert_many([
+            {"name": "11oz Mug", "category": "mug", "model": "AA-11", "price_per_box": 36.0, "pieces_per_box": 36, "cost_per_unit": 0.0, "uses_paper": True, "print_bleed_w": 8.75, "print_bleed_h": 3.75, "created_at": now_iso()},
+            {"name": "Photo Frame 8.5x11", "category": "frame", "model": "FR-811", "price_per_box": 120.0, "pieces_per_box": 24, "cost_per_unit": 0.0, "uses_paper": True, "print_bleed_w": 8.75, "print_bleed_h": 11.25, "created_at": now_iso()},
+            {"name": "Metal Keychain", "category": "keychain", "model": "KC-2", "price_per_box": 50.0, "pieces_per_box": 100, "cost_per_unit": 0.0, "uses_paper": True, "print_bleed_w": 2.25, "print_bleed_h": 1.25, "created_at": now_iso()},
+        ])
+    if await db.roll_sticker_materials.count_documents({}) == 0:
+        await db.roll_sticker_materials.insert_many([
+            {"name": "Gloss Label 4\"", "paper_type": "gloss", "roll_cost": 60.0, "pieces_per_roll": 1000, "roll_width": 4.0, "sticker_w": 3.0, "sticker_h": 3.0, "created_at": now_iso()},
+            {"name": "Matte Label 4\"", "paper_type": "matte", "roll_cost": 55.0, "pieces_per_roll": 1000, "roll_width": 4.0, "sticker_w": 3.0, "sticker_h": 3.0, "created_at": now_iso()},
+            {"name": "Clear Label 4\"", "paper_type": "transparent", "roll_cost": 75.0, "pieces_per_roll": 800, "roll_width": 4.0, "sticker_w": 3.0, "sticker_h": 3.0, "created_at": now_iso()},
+        ])
     if await db.size_presets.count_documents({}) == 0:
         presets = [
             {"name": "Yard Sign 24x18", "width": 24, "height": 18, "created_at": now_iso()},

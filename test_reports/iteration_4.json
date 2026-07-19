@@ -1,0 +1,34 @@
+{
+  "summary": "V5 end-to-end verified. Backend: 77/77 pytest pass (added 15 tests in test_v5_features.py covering Sublimation products+calc+RBAC, Roll Sticker materials+calc+RBAC, Equipment seeded-by-module + supplies CRUD + admin-only guard, catalog derives from /quotes, new Settings v5 fields). Frontend: admin sees new nav items (Sublimation/Roll Stickers/Price Catalog); sublimation calc (Photo Frame default x25) renders sub-results with 'Paper used' line + Retail & Wholesale; rollsticker (Clear Label x500) renders rs-results with rolls/waste/production minutes + Retail & Wholesale. Save Quote dialog captures customer via [data-testid=quote-customer] and confirms via [data-testid=quote-save-confirm]; Catalog shows 7 rows sorted alphabetically (C,D,M,R,S,T,...), A-Z index buttons filter correctly, search 'roll' -> 1 row, empty state visible when filtered out. Equipment By-Module tab shows all 5 headings (Paper Printing, Laser, Sublimation, Roll Stickers, Large Format) and all 6 seeded machines (Xerox Versant 280, Konica AccurioPress C3080, Glowforge Pro, xTool F2, SureColor F570, Epson ColorWorks C6000A) with True Cost/sqft. Supplies dialog opens, adds a supply, deletes it. Manage Machines tab exposes equipment-add-button + equipment-row/edit/delete. RBAC: reseller sees only wholesale on both new modules with CRUD tabs hidden; /equipment redirects to /. Client (new registration) sees only retail with CRUD tabs hidden; /equipment redirects. English UI throughout.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_rbac_and_modules.py",
+    "/app/backend/tests/test_v3_features.py",
+    "/app/backend/tests/test_v5_features.py",
+    "/app/test_reports/pytest/iter4_all.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 1292 lines — extract routers (sublimation.py, rollstickers.py, equipment.py, calc/*.py) and models.py; single-file backend is a maintenance risk.",
+    "Save-quote confirm testid is 'quote-save-confirm' (not 'save-quote-confirm' as one might expect from the button testid family 'save-quote-button'/'print-quote-button'). Consider aligning to 'save-quote-confirm' or documenting this naming in the PRD.",
+    "Catalog.priceOf() has ~8 fallback keys across module summary shapes — safer to normalize server-side by storing a canonical 'price' field on each quote at save time so /catalog does not need to know every module's payload contract.",
+    "Sublimation/RollStickers frontend expect res.retail_total/wholesale_total even when the current role is scrubbed to only one side; TotalsBlock likely renders — verify it handles undefined side gracefully (works in current test, but worth an eyeball).",
+    "Equipment analyze() serially fetches /calc/equipment/{id} for each machine on load — with 8+ machines this is 8 sequential requests; consider a single /equipment/costs bulk endpoint."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v5_features.py (new — 15 tests for v5 endpoints & RBAC)"
+  ],
+  "success_rate": {"backend": "100% (77/77 pytest)", "frontend": "100% for verified flows (admin full v5 + supplies CRUD + catalog alphabetical/search/A-Z; reseller wholesale-only + hidden CRUD/admin nav; client retail-only + /equipment redirect)"},
+  "test_credentials": "Admin admin@printandsave.ca/admin123; Reseller cliente1@test.com/test123; Client via self-registration on /login (toggle-auth-mode + name/email/password).",
+  "seed_data_creation": "Auto-seeded on backend startup. Verified sublimation_products + roll_sticker_materials + equipment-by-module all present.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "JWT localStorage 'pns_token'. Register requires clicking [data-testid=toggle-auth-mode] first to reveal name-input. SaveQuote testids: save-quote-button (opens dialog), quote-customer / quote-customer-email / quote-notes, quote-save-confirm. Catalog derives from GET /quotes and dedupes by title using latest created_at. Equipment supplies uses POST /equipment-supplies (equipment_id in body) not nested under /equipment/{id}. Seeded machine name is 'Xerox Versant 280' not 'Versant 280'. Reseller cliente1 has role=reseller (promoted from client at some point) — do not re-promote in tests.",
+  "rca of the issue": "N/A — no blocking bugs. Initial test expectation of a machine named 'Versant 280' failed because backend seeds it as 'Xerox Versant 280'; test corrected."
+}
