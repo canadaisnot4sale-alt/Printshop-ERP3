@@ -1,11 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import NestingCanvas from "@/components/NestingCanvas";
 import { SectionLabel, PricingPanel, priceOf } from "@/components/Metric";
 import { money } from "@/lib/format";
-import { Copy } from "lucide-react";
+import api, { apiErr } from "@/lib/api";
+import { toast } from "sonner";
+import { Copy, Mail } from "lucide-react";
 
 const MONEY_RE = /(cost|price|total|unit|charge|labor)/i;
 const SKIP_RE = /(_id$|^id$|layout|placements|rows|qtys|results|role|markup|created_at|user_email|emailed)/i;
@@ -47,6 +50,9 @@ const MODULE_ROUTES = {
 
 export default function QuoteDetailDialog({ quote, open, onOpenChange }) {
   const navigate = useNavigate();
+  const [showEmail, setShowEmail] = useState(false);
+  const [recipient, setRecipient] = useState("");
+  const [sending, setSending] = useState(false);
   const rows = useMemo(() => (quote ? flatten(quote.summary, [], 0) : []), [quote]);
   const layout = useMemo(() => (quote ? findLayout(quote.summary) : null), [quote]);
   if (!quote) return null;
@@ -56,6 +62,17 @@ export default function QuoteDetailDialog({ quote, open, onOpenChange }) {
   const costs = rows.filter((r) => r.money);
   const route = MODULE_ROUTES[quote.module];
   const requote = () => { onOpenChange(false); if (route) navigate(route, { state: { requote: quote.inputs || {} } }); };
+
+  const toggleEmail = () => { setRecipient(quote.customer_email || ""); setShowEmail((v) => !v); };
+  const sendEmail = async () => {
+    setSending(true);
+    try {
+      await api.post(`/quotes/${quote.id}/email`, { recipient_email: recipient });
+      toast.success(`Quote emailed to ${recipient}`);
+      setShowEmail(false);
+    } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
+    finally { setSending(false); }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -70,12 +87,28 @@ export default function QuoteDetailDialog({ quote, open, onOpenChange }) {
             {quote.customer_name && <span className="text-slate-500">· {quote.customer_name}</span>}
             {quote.created_at && <span className="text-slate-400 num">· {new Date(quote.created_at).toLocaleDateString()}</span>}
           </div>
-          {route && (
-            <Button data-testid="requote-button" onClick={requote} size="sm" variant="outline" className="rounded-lg">
-              <Copy size={14} className="mr-1.5" /> Re-quote
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {quote.id && (
+              <Button data-testid="detail-email-button" onClick={toggleEmail} size="sm" variant="outline" className="rounded-lg">
+                <Mail size={14} className="mr-1.5" /> Email
+              </Button>
+            )}
+            {route && (
+              <Button data-testid="requote-button" onClick={requote} size="sm" variant="outline" className="rounded-lg">
+                <Copy size={14} className="mr-1.5" /> Re-quote
+              </Button>
+            )}
+          </div>
         </div>
+
+        {showEmail && (
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="detail-email-form">
+            <Input data-testid="detail-email-recipient" type="email" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="customer@email.com" className="rounded-lg bg-white" />
+            <Button data-testid="detail-email-send" onClick={sendEmail} disabled={sending || !recipient} className="bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg shrink-0">
+              {sending ? "Sending…" : "Send"}
+            </Button>
+          </div>
+        )}
 
         {price != null && <PricingPanel r={pricing} className="mt-2" />}
 
