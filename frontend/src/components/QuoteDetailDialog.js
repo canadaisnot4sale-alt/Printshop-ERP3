@@ -4,16 +4,18 @@ import NestingCanvas from "@/components/NestingCanvas";
 import { SectionLabel } from "@/components/Metric";
 import { money } from "@/lib/format";
 
-const MONEY_RE = /(cost|price|total|unit|charge|labor|markup)/i;
-const SKIP_RE = /(_id$|^id$|layout|placements|rows|qtys|results|role)/i;
+const MONEY_RE = /(cost|price|total|unit|charge|labor)/i;
+const SKIP_RE = /(_id$|^id$|layout|placements|rows|qtys|results|role|markup|created_at|user_email|emailed)/i;
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T/;
 const humanize = (k) => k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 function flatten(obj, out, depth) {
   if (!obj || typeof obj !== "object" || depth > 2) return out;
   Object.entries(obj).forEach(([k, v]) => {
-    if (SKIP_RE.test(k) || v == null) return;
+    if (SKIP_RE.test(k) || v == null || v === "") return;
     if (Array.isArray(v)) return;
     if (typeof v === "object") return flatten(v, out, depth + 1);
+    if (typeof v === "string" && ISO_RE.test(v)) return;
     if (typeof v === "boolean") return out.push({ label: humanize(k), value: v ? "Yes" : "No" });
     const isMoney = MONEY_RE.test(k) && typeof v === "number";
     out.push({ label: humanize(k), value: isMoney ? money(v) : String(v), money: isMoney });
