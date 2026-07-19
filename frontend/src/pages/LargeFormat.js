@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
 import NestingCanvas from "@/components/NestingCanvas";
+import { Metric, EmptyState, SectionLabel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money, num } from "@/lib/format";
 import { toast } from "sonner";
-import { Plus, X, Calculator } from "lucide-react";
+import { Plus, X, Calculator, Layers, Ruler, Tag, DollarSign } from "lucide-react";
 
 const MODES = [
   { v: "print", l: "Print Only" },
@@ -50,6 +51,8 @@ const presetCols = [
   { name: "height", label: "H", mono: true, render: (i) => `${num(i.height, 0)}"` },
 ];
 
+const sell = (t) => t?.selling_price ?? t?.wholesale_price;
+
 export default function LargeFormat() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -58,6 +61,7 @@ export default function LargeFormat() {
   const [laminate, setLaminate] = useState(false);
   const [presets, setPresets] = useState([]);
   const [res, setRes] = useState(null);
+  const [sel, setSel] = useState(null);
 
   useEffect(() => { api.get("/size-presets").then((r) => setPresets(r.data)); }, []);
 
@@ -74,30 +78,33 @@ export default function LargeFormat() {
       const body = { sizes: sizes.map((s) => ({ width: +s.width, height: +s.height, qty: +s.qty })), mode, laminate };
       const { data } = await api.post("/calc/largeformat", body);
       setRes(data);
+      setSel(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
+  const totalPieces = sizes.reduce((a, s) => a + (+s.qty || 0), 0);
+
   return (
     <div data-testid="large-format-page">
-      <PageHeader title="Large Format" subtitle="Roll media · nesting · tiling · comparison" />
+      <PageHeader title="Large Format" eyebrow="Live Pricing" subtitle="Roll media · nesting · tiling · comparison" />
       <div className="p-8">
         <Tabs defaultValue="estimate">
-          <TabsList className="rounded-sm">
-            <TabsTrigger value="estimate" data-testid="tab-estimate">Estimating</TabsTrigger>
-            {isAdmin && <TabsTrigger value="materials" data-testid="tab-materials">Roll Materials</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="presets" data-testid="tab-presets">Size Presets</TabsTrigger>}
+          <TabsList className="rounded-full bg-slate-100 p-1">
+            <TabsTrigger value="estimate" data-testid="tab-estimate" className="rounded-full">Estimating</TabsTrigger>
+            {isAdmin && <TabsTrigger value="materials" data-testid="tab-materials" className="rounded-full">Roll Materials</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="presets" data-testid="tab-presets" className="rounded-full">Size Presets</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="estimate" className="mt-6 grid lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-sm p-6">
+            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-6 h-fit">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-head font-bold">Sizes ({sizes.length}/25)</h3>
                 <div className="flex gap-2">
                   <Select onValueChange={addPreset}>
-                    <SelectTrigger data-testid="preset-select" className="rounded-sm h-9 w-40 text-xs"><SelectValue placeholder="+ Add preset" /></SelectTrigger>
+                    <SelectTrigger data-testid="preset-select" className="rounded-lg h-9 w-40 text-xs"><SelectValue placeholder="+ Add preset" /></SelectTrigger>
                     <SelectContent>{presets.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
                   </Select>
-                  <Button data-testid="add-size-button" onClick={addRow} size="sm" variant="outline" className="rounded-sm"><Plus size={15} /></Button>
+                  <Button data-testid="add-size-button" onClick={addRow} size="sm" variant="outline" className="rounded-lg"><Plus size={15} /></Button>
                 </div>
               </div>
               <div className="space-y-2">
@@ -106,9 +113,9 @@ export default function LargeFormat() {
                 </div>
                 {sizes.map((s, i) => (
                   <div key={i} className="grid grid-cols-12 gap-2 items-center" data-testid={`size-row-${i}`}>
-                    <Input className="col-span-4 rounded-sm num" type="number" value={s.width} onChange={(e) => upd(i, "width", e.target.value)} />
-                    <Input className="col-span-4 rounded-sm num" type="number" value={s.height} onChange={(e) => upd(i, "height", e.target.value)} />
-                    <Input className="col-span-3 rounded-sm num" type="number" value={s.qty} onChange={(e) => upd(i, "qty", e.target.value)} />
+                    <Input className="col-span-4 rounded-lg num" type="number" value={s.width} onChange={(e) => upd(i, "width", e.target.value)} />
+                    <Input className="col-span-4 rounded-lg num" type="number" value={s.height} onChange={(e) => upd(i, "height", e.target.value)} />
+                    <Input className="col-span-3 rounded-lg num" type="number" value={s.qty} onChange={(e) => upd(i, "qty", e.target.value)} />
                     <button className="col-span-1 text-slate-400 hover:text-red-500" onClick={() => rmRow(i)}><X size={16} /></button>
                   </div>
                 ))}
@@ -117,7 +124,7 @@ export default function LargeFormat() {
                 <div>
                   <Label className="text-xs">Finishing Mode</Label>
                   <Select value={mode} onValueChange={setMode}>
-                    <SelectTrigger data-testid="mode-select" className="rounded-sm mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger data-testid="mode-select" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>{MODES.map((m) => <SelectItem key={m.v} value={m.v}>{m.l}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
@@ -126,54 +133,61 @@ export default function LargeFormat() {
                   <Switch data-testid="lf-laminate" checked={laminate} onCheckedChange={setLaminate} />
                 </div>
               </div>
-              <Button data-testid="calc-lf-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
+              <Button data-testid="calc-lf-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
                 <Calculator size={16} className="mr-2" />Compare Materials
               </Button>
             </div>
 
-            <div className="lg:col-span-5">
-              {!res ? (
-                <div className="bg-white border border-slate-200 rounded-sm p-12 text-center text-slate-400">Add sizes and compare compatible materials.</div>
+            <div className="lg:col-span-7">
+              {!res || !sel ? (
+                <EmptyState>Add sizes and compare compatible materials.</EmptyState>
               ) : (
-                <div className="space-y-4" data-testid="lf-results">
-                  {res.results.map((r, idx) => (
-                    <div key={r.material.id} className="bg-white border border-slate-200 rounded-sm p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="font-head font-bold">
-                          {r.material.name}
-                          {idx === 0 && <span className="ml-2 text-[10px] font-mono uppercase bg-[#2495D3] text-white px-2 py-0.5 rounded-sm">Best</span>}
+                <div className="space-y-6" data-testid="lf-results">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Metric icon={Layers} label="Pieces" value={totalPieces} />
+                    <Metric icon={Ruler} label="Print Width" value={`${num(sel.material.printable_width, 0)}"`} />
+                    {sell(sel.total) != null && <Metric icon={Tag} label={sel.total.selling_price != null ? "Retail Total" : "Wholesale Total"} value={money(sell(sel.total))} accent />}
+                    <Metric icon={DollarSign} label="Material" value={money(sel.total.material_cost ?? 0)} sub={`Print ${money(sel.total.printing_cost ?? 0)}`} />
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-xl p-5">
+                    <SectionLabel>{sel.material.name} · Layout</SectionLabel>
+                    <div className="space-y-1 mb-3">
+                      {sel.sizes.map((s, i) => (
+                        <div key={i} className="flex justify-between text-xs num text-slate-600">
+                          <span>{num(s.width, 0)}×{num(s.height, 0)}" ×{s.qty}{s.tiled && <span className="ml-1 text-amber-600">tiled {s.panels}p</span>}</span>
+                          <span>{money(s.selling_price ?? s.wholesale_price)}</span>
                         </div>
-                        <div className="text-xs font-mono text-slate-500">{num(r.material.printable_width, 0)}" print</div>
-                      </div>
-                      <div className="space-y-1 mb-3">
-                        {r.sizes.map((s, i) => (
-                          <div key={i} className="flex justify-between text-xs num text-slate-600">
-                            <span>{num(s.width, 0)}×{num(s.height, 0)}" ×{s.qty}
-                              {s.tiled && <span className="ml-1 text-amber-600">tiled {s.panels}p</span>}
-                            </span>
-                            <span>{money(s.selling_price ?? s.wholesale_price)}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {r.layout && <NestingCanvas layout={r.layout} />}
-                      {r.total.material_cost != null && (
-                        <div className="flex justify-between text-xs text-slate-500 border-t border-slate-100 pt-2 num">
-                          <span>Material {money(r.total.material_cost)} · Impresión {money(r.total.printing_cost)}</span>
-                        </div>
-                      )}
-                      <div className="flex items-baseline justify-between mt-2">
-                        <span className="num text-2xl font-black text-[#2495D3]">{money(r.total.selling_price ?? r.total.wholesale_price)}</span>
-                        {r.total.selling_price != null && r.total.wholesale_price != null && (
-                          <span className="text-xs text-slate-500 num">Wholesale {money(r.total.wholesale_price)}</span>
-                        )}
-                      </div>
-                      {idx === 0 && (
-                        <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
-                          <SaveQuoteBar module="Gran Formato" title={`${r.material.name} · ${res.mode}`} summary={r} />
-                        </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
+                    {sel.layout && <NestingCanvas layout={sel.layout} />}
+                    <div className="mt-3 flex justify-end">
+                      <SaveQuoteBar module="Gran Formato" title={`${sel.material.name} · ${res.mode}`} summary={sel} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <SectionLabel>Compare Materials</SectionLabel>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {res.results.map((r, idx) => {
+                        const isSel = sel.material.id === r.material.id;
+                        return (
+                          <button key={r.material.id} data-testid="lf-compare-row" onClick={() => setSel(r)}
+                            className={`text-left rounded-xl border p-4 transition-all ${isSel ? "border-[#2495D3] ring-1 ring-[#2495D3]" : "border-slate-200 hover:border-slate-300"}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="font-head font-bold text-sm">{r.material.name}</div>
+                              {idx === 0 && <span className="text-[10px] font-mono uppercase bg-emerald-500 text-white px-2 py-0.5 rounded-full">Best Value</span>}
+                            </div>
+                            <div className="text-[11px] font-mono text-slate-400 mt-0.5">{num(r.material.printable_width, 0)}" print</div>
+                            <div className="num text-xl font-black text-[#2495D3] mt-2">{money(sell(r.total))}</div>
+                            {r.total.selling_price != null && r.total.wholesale_price != null && (
+                              <div className="text-[11px] text-slate-500 num">WS {money(r.total.wholesale_price)}</div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
 import { TotalsBlock, CostRow } from "@/components/Totals";
+import { Metric, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money } from "@/lib/format";
 import { toast } from "sonner";
-import { Calculator } from "lucide-react";
+import { Calculator, Coffee, Hash, Tag, DollarSign } from "lucide-react";
 
 const prodFields = [
   { name: "name", label: "Product Name", type: "text", full: true },
@@ -55,43 +56,48 @@ export default function Sublimation() {
 
   return (
     <div data-testid="sublimation-page">
-      <PageHeader title="Sublimation" subtitle="Mugs, frames, keychains… · auto paper consumption (SureColor F570)" />
+      <PageHeader title="Sublimation" eyebrow="Live Pricing" subtitle="Mugs, frames, keychains… · auto paper consumption (SureColor F570)" />
       <div className="p-8">
         <Tabs defaultValue="calc">
-          <TabsList className="rounded-sm">
-            <TabsTrigger value="calc" data-testid="tab-calc">Calculator</TabsTrigger>
-            {isAdmin && <TabsTrigger value="products" data-testid="tab-sub-products">Products</TabsTrigger>}
+          <TabsList className="rounded-full bg-slate-100 p-1">
+            <TabsTrigger value="calc" data-testid="tab-calc" className="rounded-full">Calculator</TabsTrigger>
+            {isAdmin && <TabsTrigger value="products" data-testid="tab-sub-products" className="rounded-full">Products</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="calc" className="mt-6 grid lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-sm p-6 h-fit">
+            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-6 h-fit">
               <h3 className="font-head font-bold mb-4">Job</h3>
               <Label className="text-xs">Product</Label>
               <Select value={productId} onValueChange={setProductId}>
-                <SelectTrigger data-testid="sub-product-select" className="rounded-sm mt-1 mb-4"><SelectValue placeholder="Choose product" /></SelectTrigger>
+                <SelectTrigger data-testid="sub-product-select" className="rounded-lg mt-1 mb-4"><SelectValue placeholder="Choose product" /></SelectTrigger>
                 <SelectContent>{products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
               </Select>
               <Label className="text-xs">Quantity</Label>
-              <Input data-testid="sub-qty" type="number" value={qty} onChange={(e) => setQty(e.target.value)} className="rounded-sm mt-1 mb-4 num" />
-              <Button data-testid="calc-sub-button" onClick={calc} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
+              <Input data-testid="sub-qty" type="number" value={qty} onChange={(e) => setQty(e.target.value)} className="rounded-lg mt-1 mb-4 num" />
+              <Button data-testid="calc-sub-button" onClick={calc} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
                 <Calculator size={16} className="mr-2" />Calculate
               </Button>
             </div>
             <div className="lg:col-span-7">
               {!res ? (
-                <div className="bg-white border border-slate-200 rounded-sm p-12 text-center text-slate-400">Select a product and calculate.</div>
+                <EmptyState>Select a product and calculate.</EmptyState>
               ) : (
-                <div className="bg-white border border-slate-200 rounded-sm p-6" data-testid="sub-results">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-head font-bold">{res.product.name} · {res.quantity} pcs</h3>
-                    <SaveQuoteBar module="Sublimation" title={`${res.product.name} x${res.quantity}`} summary={res} />
+                <div className="space-y-6" data-testid="sub-results">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Metric icon={Coffee} label="Product" value={res.quantity} sub={res.product.name} />
+                    <Metric icon={Hash} label="Paper Used" value={res.paper_used_in > 0 ? `${res.paper_used_in}"` : "—"} />
+                    {priceOf(res) != null && <Metric icon={Tag} label={res.retail_total != null ? "Retail" : "Wholesale"} value={money(priceOf(res))} accent />}
+                    {(res.unit_price ?? res.wholesale_unit) != null && <Metric icon={DollarSign} label="Per Unit" value={money(res.unit_price ?? res.wholesale_unit)} />}
                   </div>
-                  {res.paper_used_in > 0 && <div className="text-xs text-slate-500 num mb-2">Paper used: {res.paper_used_in}" of 24" roll</div>}
-                  <CostRow label="Blank cost" value={res.blank_cost} />
-                  <CostRow label="Sublimation paper" value={res.material_cost} />
-                  <CostRow label="Ink" value={res.ink_cost} />
-                  <CostRow label="Labor" value={res.labor} />
-                  <TotalsBlock r={res} />
+                  <div className="bg-white border border-slate-200 rounded-xl p-5">
+                    <SectionLabel>{res.product.name} · Cost Breakdown</SectionLabel>
+                    <CostRow label="Blank cost" value={res.blank_cost} />
+                    <CostRow label="Sublimation paper" value={res.material_cost} />
+                    <CostRow label="Ink" value={res.ink_cost} />
+                    <CostRow label="Labor" value={res.labor} />
+                    <TotalsBlock r={res} />
+                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Sublimation" title={`${res.product.name} x${res.quantity}`} summary={res} /></div>
+                  </div>
                 </div>
               )}
             </div>

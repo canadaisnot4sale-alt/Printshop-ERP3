@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import api, { apiErr } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
+import { Metric, ConfigCard, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
+import { CostRow, TotalsBlock } from "@/components/Totals";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { money } from "@/lib/format";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { toast } from "sonner";
-import { Calculator } from "lucide-react";
+import { Calculator, BookOpen, FileStack, Layers, DollarSign } from "lucide-react";
 
 const BINDINGS = [
   { v: "saddle", l: "Saddle Stitch" },
@@ -42,79 +43,83 @@ export default function Booklet() {
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
-  const Row = ({ label, val, hl }) => (
-    <div className="flex justify-between py-2 border-b border-slate-100">
-      <span className="text-sm text-slate-600">{label}</span>
-      <span className={`num tabular text-sm ${hl ? "text-[#2495D3] font-bold" : ""}`}>{val}</span>
-    </div>
-  );
+  const bindingLabel = BINDINGS.find((b) => b.v === f.binding)?.l;
 
   return (
     <div data-testid="booklet-page">
-      <PageHeader title="Booklets" subtitle="Cover + inside paper · binding · production cost" />
+      <PageHeader title="Booklets" eyebrow="Live Pricing" subtitle="Cover + inside paper · binding · production cost" />
       <div className="p-8 grid lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-sm p-6">
-          <h3 className="font-head font-bold mb-4">Booklet Specification</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <Label className="text-xs">Cover Paper</Label>
-              <Select value={f.cover_stock_id} onValueChange={(v) => set("cover_stock_id", v)}>
-                <SelectTrigger data-testid="cover-select" className="rounded-sm mt-1"><SelectValue placeholder="Cover" /></SelectTrigger>
-                <SelectContent>{stocks.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-              </Select>
+        <div className="lg:col-span-5">
+          <ConfigCard title="Booklet Specification">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label className="text-xs">Cover Paper</Label>
+                <Select value={f.cover_stock_id} onValueChange={(v) => set("cover_stock_id", v)}>
+                  <SelectTrigger data-testid="cover-select" className="rounded-lg mt-1"><SelectValue placeholder="Cover" /></SelectTrigger>
+                  <SelectContent>{stocks.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs">Inside Pages Paper</Label>
+                <Select value={f.inside_stock_id} onValueChange={(v) => set("inside_stock_id", v)}>
+                  <SelectTrigger data-testid="inside-select" className="rounded-lg mt-1"><SelectValue placeholder="Inside" /></SelectTrigger>
+                  <SelectContent>{stocks.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label className="text-xs">Page Count</Label><Input data-testid="page-count" type="number" value={f.page_count} onChange={(e) => set("page_count", e.target.value)} className="rounded-lg mt-1 num" /></div>
+              <div><Label className="text-xs">Quantity</Label><Input data-testid="quantity" type="number" value={f.quantity} onChange={(e) => set("quantity", e.target.value)} className="rounded-lg mt-1 num" /></div>
+              <div><Label className="text-xs">Width (in)</Label><Input type="number" value={f.width} onChange={(e) => set("width", e.target.value)} className="rounded-lg mt-1 num" /></div>
+              <div><Label className="text-xs">Height (in)</Label><Input type="number" value={f.height} onChange={(e) => set("height", e.target.value)} className="rounded-lg mt-1 num" /></div>
+              <div className="col-span-2">
+                <Label className="text-xs">Binding</Label>
+                <Select value={f.binding} onValueChange={(v) => set("binding", v)}>
+                  <SelectTrigger data-testid="binding-select" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>{BINDINGS.map((b) => <SelectItem key={b.v} value={b.v}>{b.l}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 flex items-center justify-between py-1">
+                <Label className="text-xs">Laminated Cover</Label>
+                <Switch data-testid="laminate-cover" checked={f.laminate_cover} onCheckedChange={(v) => set("laminate_cover", v)} />
+              </div>
             </div>
-            <div className="col-span-2">
-              <Label className="text-xs">Inside Pages Paper</Label>
-              <Select value={f.inside_stock_id} onValueChange={(v) => set("inside_stock_id", v)}>
-                <SelectTrigger data-testid="inside-select" className="rounded-sm mt-1"><SelectValue placeholder="Inside" /></SelectTrigger>
-                <SelectContent>{stocks.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label className="text-xs">Page Count</Label><Input data-testid="page-count" type="number" value={f.page_count} onChange={(e) => set("page_count", e.target.value)} className="rounded-sm mt-1" /></div>
-            <div><Label className="text-xs">Quantity</Label><Input data-testid="quantity" type="number" value={f.quantity} onChange={(e) => set("quantity", e.target.value)} className="rounded-sm mt-1" /></div>
-            <div><Label className="text-xs">Width (in)</Label><Input type="number" value={f.width} onChange={(e) => set("width", e.target.value)} className="rounded-sm mt-1" /></div>
-            <div><Label className="text-xs">Height (in)</Label><Input type="number" value={f.height} onChange={(e) => set("height", e.target.value)} className="rounded-sm mt-1" /></div>
-            <div className="col-span-2">
-              <Label className="text-xs">Binding</Label>
-              <Select value={f.binding} onValueChange={(v) => set("binding", v)}>
-                <SelectTrigger data-testid="binding-select" className="rounded-sm mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>{BINDINGS.map((b) => <SelectItem key={b.v} value={b.v}>{b.l}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-2 flex items-center justify-between py-1">
-              <Label className="text-xs">Laminated Cover</Label>
-              <Switch data-testid="laminate-cover" checked={f.laminate_cover} onCheckedChange={(v) => set("laminate_cover", v)} />
-            </div>
-          </div>
-          <Button data-testid="calc-booklet-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
-            <Calculator size={16} className="mr-2" />Calculate
-          </Button>
+            <Button data-testid="calc-booklet-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
+              <Calculator size={16} className="mr-2" />Calculate
+            </Button>
+          </ConfigCard>
         </div>
 
-        <div className="lg:col-span-5">
-          <div className="bg-white border border-slate-200 rounded-sm p-6 sticky top-24" data-testid="booklet-results">
-            <h3 className="font-head font-bold mb-4">Estimate</h3>
-            {!res ? <p className="text-sm text-slate-400">Fill the spec and calculate.</p> : (
-              <>
-                <Row label={`Cover sheets`} val={res.cover_sheets} />
-                <Row label={`Inside sheets`} val={res.inside_sheets} />
-                {res.cover_cost != null && <Row label="Cover cost" val={money(res.cover_cost)} />}
-                {res.inside_cost != null && <Row label="Inside cost" val={money(res.inside_cost)} />}
-                {res.print_cost != null && <Row label="Printing" val={money(res.print_cost)} />}
-                {res.lamination != null && <Row label="Lamination" val={money(res.lamination)} />}
-                {res.binding_cost != null && <Row label="Binding" val={money(res.binding_cost)} />}
-                {res.total_cost != null && <Row label="Total production cost" val={money(res.total_cost)} />}
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  <div className="text-xs font-mono uppercase tracking-widest text-slate-500">{res.customer_price != null ? "Customer Price" : "Wholesale Price"}</div>
-                  <div className="num text-4xl font-black text-[#2495D3] mt-1">{money(res.customer_price ?? res.wholesale_price)}</div>
-                  {res.unit_price != null && <div className="text-xs text-slate-500 mt-1 num">{money(res.unit_price)} / unidad{res.wholesale_price != null ? ` · Wholesale ${money(res.wholesale_price)}` : ""}</div>}
+        <div className="lg:col-span-7">
+          {!res ? (
+            <EmptyState>Fill the specification and calculate to see a full production breakdown.</EmptyState>
+          ) : (
+            <div className="space-y-6" data-testid="booklet-results">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Metric icon={FileStack} label="Cover Sheets" value={res.cover_sheets} />
+                <Metric icon={Layers} label="Inside Sheets" value={res.inside_sheets} />
+                <Metric icon={BookOpen} label="Binding" value={bindingLabel?.split(" ")[0]} sub={`${f.page_count}pp`} />
+                {priceOf(res) != null && <Metric icon={DollarSign} label={`Price · ${f.quantity}`} value={new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(priceOf(res))} accent />}
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-white border border-slate-200 rounded-xl p-5">
+                  <SectionLabel>Cost Breakdown</SectionLabel>
+                  <CostRow label="Cover cost" value={res.cover_cost} />
+                  <CostRow label="Inside cost" value={res.inside_cost} />
+                  <CostRow label="Printing" value={res.print_cost} />
+                  <CostRow label="Lamination" value={res.lamination} />
+                  <CostRow label="Binding" value={res.binding_cost} />
+                  <CostRow label="Total production cost" value={res.total_cost} />
                 </div>
-                <div className="mt-4 flex justify-end">
-                  <SaveQuoteBar module="Booklet" title={`Booklet ${res.cover?.name || ""} x${f.quantity}`} summary={res} />
+                <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col">
+                  <SectionLabel>{res.cover?.name} · {res.inside?.name}</SectionLabel>
+                  <div className="mt-auto"><TotalsBlock r={res} /></div>
+                  <div className="mt-4 flex justify-end">
+                    <SaveQuoteBar module="Booklet" title={`Booklet ${res.cover?.name || ""} x${f.quantity}`} summary={res} />
+                  </div>
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

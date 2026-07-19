@@ -6,6 +6,7 @@ import CrudManager from "@/components/CrudManager";
 import SizesEditor from "@/components/SizesEditor";
 import NestingCanvas from "@/components/NestingCanvas";
 import { TotalsBlock, CostRow } from "@/components/Totals";
+import { Metric, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money } from "@/lib/format";
 import { toast } from "sonner";
-import { Calculator } from "lucide-react";
+import { Calculator, FileStack, Ruler, Tag } from "lucide-react";
 
 const sheetFields = [
   { name: "name", label: "Name", type: "text", full: true },
@@ -43,6 +44,7 @@ export default function DirectPrint() {
   const [cnc, setCnc] = useState(false);
   const [cncLen, setCncLen] = useState(0);
   const [res, setRes] = useState(null);
+  const [sel, setSel] = useState(null);
 
   useEffect(() => { api.get("/config").then((r) => setSheetSizes(Object.keys(r.data.big_sheets))); }, []);
 
@@ -55,28 +57,29 @@ export default function DirectPrint() {
       const { data } = await api.post("/calc/directprint", body);
       if (!data.results.length) toast.info("Add sheet materials first.");
       setRes(data);
+      setSel(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
   return (
     <div data-testid="direct-print-page">
-      <PageHeader title="Direct Print (UV)" subtitle="Sheets 4x8 / 5x10 · CMYKWW · auto-nesting · optional CNC" />
+      <PageHeader title="Direct Print (UV)" eyebrow="Live Pricing" subtitle="Sheets 4x8 / 5x10 · CMYKWW · auto-nesting · optional CNC" />
       <div className="p-8">
         <Tabs defaultValue="calc">
-          <TabsList className="rounded-sm">
-            <TabsTrigger value="calc" data-testid="tab-calc">Calculator</TabsTrigger>
-            {isAdmin && <TabsTrigger value="materials" data-testid="tab-sheet-materials">Sheet Materials</TabsTrigger>}
+          <TabsList className="rounded-full bg-slate-100 p-1">
+            <TabsTrigger value="calc" data-testid="tab-calc" className="rounded-full">Calculator</TabsTrigger>
+            {isAdmin && <TabsTrigger value="materials" data-testid="tab-sheet-materials" className="rounded-full">Sheet Materials</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="calc" className="mt-6 grid lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-sm p-6">
+            <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl p-6">
               <h3 className="font-head font-bold mb-3">Pieces</h3>
               <SizesEditor sizes={sizes} setSizes={setSizes} module="directprint" />
               <div className="grid grid-cols-2 gap-4 mt-5">
                 <div>
                   <Label className="text-xs">Sheet size</Label>
                   <Select value={sheetSize} onValueChange={setSheetSize}>
-                    <SelectTrigger data-testid="dp-sheet-size" className="rounded-sm mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger data-testid="dp-sheet-size" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>{sheetSizes.map((s) => <SelectItem key={s} value={s}>{s} ft</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
@@ -85,34 +88,53 @@ export default function DirectPrint() {
                   <Switch data-testid="dp-cnc" checked={cnc} onCheckedChange={setCnc} />
                 </div>
                 {cnc && (
-                  <div className="col-span-2"><Label className="text-xs">CNC cut length (in)</Label><Input data-testid="dp-cnc-len" type="number" value={cncLen} onChange={(e) => setCncLen(e.target.value)} className="rounded-sm mt-1 num" /></div>
+                  <div className="col-span-2"><Label className="text-xs">CNC cut length (in)</Label><Input data-testid="dp-cnc-len" type="number" value={cncLen} onChange={(e) => setCncLen(e.target.value)} className="rounded-lg mt-1 num" /></div>
                 )}
               </div>
-              <Button data-testid="calc-dp-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
+              <Button data-testid="calc-dp-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
                 <Calculator size={16} className="mr-2" />Compare Materials
               </Button>
             </div>
-            <div className="lg:col-span-5">
-              {!res ? (
-                <div className="bg-white border border-slate-200 rounded-sm p-12 text-center text-slate-400">Enter pieces and compare materials.</div>
+            <div className="lg:col-span-6">
+              {!res || !sel ? (
+                <EmptyState>Enter pieces and compare materials.</EmptyState>
               ) : (
-                <div className="space-y-4" data-testid="dp-results">
-                  {res.results.map((r, i) => (
-                    <div key={r.material.id} className="bg-white border border-slate-200 rounded-sm p-5">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="font-head font-bold">{r.material.name}{i === 0 && <span className="ml-2 text-[10px] font-mono uppercase bg-[#2495D3] text-white px-2 py-0.5 rounded-sm">Best</span>}</div>
-                        <SaveQuoteBar module="Direct Print" title={`Direct ${r.material.name} ${sheetSize}`} summary={r} />
-                      </div>
-                      <div className="text-xs text-slate-500 num mb-1">{r.sheets} sheet(s) · {r.print_sqft} ft²</div>
-                      {r.layout && <NestingCanvas layout={r.layout} />}
-                      <div className="mt-3">
-                        <CostRow label="Material (sheets)" value={r.sheet_cost} />
-                        <CostRow label="UV print" value={r.print_cost} />
-                        <CostRow label="CNC cut" value={r.cnc_cost} />
-                      </div>
-                      <TotalsBlock r={r} />
+                <div className="space-y-6" data-testid="dp-results">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <Metric icon={FileStack} label="Sheets" value={sel.sheets} sub={`${sel.sheet_size} ft`} />
+                    <Metric icon={Ruler} label="Print Area" value={`${sel.print_sqft} ft²`} />
+                    {priceOf(sel) != null && <Metric icon={Tag} label={sel.retail_total != null ? "Retail" : "Wholesale"} value={money(priceOf(sel))} accent />}
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-5">
+                    <SectionLabel>{sel.material.name} · Layout</SectionLabel>
+                    {sel.layout && <NestingCanvas layout={sel.layout} />}
+                    <div className="mt-3">
+                      <CostRow label="Material (sheets)" value={sel.sheet_cost} />
+                      <CostRow label="UV print" value={sel.print_cost} />
+                      <CostRow label="CNC cut" value={sel.cnc_cost} />
                     </div>
-                  ))}
+                    <TotalsBlock r={sel} />
+                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Direct Print" title={`Direct ${sel.material.name} ${sheetSize}`} summary={sel} /></div>
+                  </div>
+                  <div>
+                    <SectionLabel>Compare Materials</SectionLabel>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {res.results.map((r, idx) => {
+                        const isSel = sel.material.id === r.material.id;
+                        return (
+                          <button key={r.material.id} data-testid="dp-compare-row" onClick={() => setSel(r)}
+                            className={`text-left rounded-xl border p-4 transition-all ${isSel ? "border-[#2495D3] ring-1 ring-[#2495D3]" : "border-slate-200 hover:border-slate-300"}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="font-head font-bold text-sm">{r.material.name}</div>
+                              {idx === 0 && <span className="text-[10px] font-mono uppercase bg-emerald-500 text-white px-2 py-0.5 rounded-full">Best</span>}
+                            </div>
+                            <div className="text-[11px] font-mono text-slate-400 mt-0.5">{r.sheets} sheet(s)</div>
+                            <div className="num text-xl font-black text-[#2495D3] mt-2">{money(priceOf(r))}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

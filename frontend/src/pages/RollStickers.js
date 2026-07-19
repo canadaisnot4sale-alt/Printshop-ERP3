@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
 import { TotalsBlock, CostRow } from "@/components/Totals";
+import { Metric, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money } from "@/lib/format";
 import { toast } from "sonner";
-import { Calculator } from "lucide-react";
+import { Calculator, Disc, Hash, Tag, Clock } from "lucide-react";
 
 const matFields = [
   { name: "name", label: "Name", type: "text", full: true },
@@ -52,42 +53,47 @@ export default function RollStickers() {
 
   return (
     <div data-testid="roll-stickers-page">
-      <PageHeader title="Roll Stickers" subtitle="Label rolls · 5-piece waste + ink cleaning (Epson ColorWorks C6000A)" />
+      <PageHeader title="Roll Stickers" eyebrow="Live Pricing" subtitle="Label rolls · 5-piece waste + ink cleaning (Epson ColorWorks C6000A)" />
       <div className="p-8">
         <Tabs defaultValue="calc">
-          <TabsList className="rounded-sm">
-            <TabsTrigger value="calc" data-testid="tab-calc">Calculator</TabsTrigger>
-            {isAdmin && <TabsTrigger value="materials" data-testid="tab-rs-materials">Roll Materials</TabsTrigger>}
+          <TabsList className="rounded-full bg-slate-100 p-1">
+            <TabsTrigger value="calc" data-testid="tab-calc" className="rounded-full">Calculator</TabsTrigger>
+            {isAdmin && <TabsTrigger value="materials" data-testid="tab-rs-materials" className="rounded-full">Roll Materials</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="calc" className="mt-6 grid lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-sm p-6 h-fit">
+            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-6 h-fit">
               <h3 className="font-head font-bold mb-4">Job</h3>
               <Label className="text-xs">Roll material</Label>
               <Select value={matId} onValueChange={setMatId}>
-                <SelectTrigger data-testid="rs-material-select" className="rounded-sm mt-1 mb-4"><SelectValue placeholder="Choose material" /></SelectTrigger>
+                <SelectTrigger data-testid="rs-material-select" className="rounded-lg mt-1 mb-4"><SelectValue placeholder="Choose material" /></SelectTrigger>
                 <SelectContent>{mats.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.paper_type})</SelectItem>)}</SelectContent>
               </Select>
               <Label className="text-xs">Quantity</Label>
-              <Input data-testid="rs-qty" type="number" value={qty} onChange={(e) => setQty(e.target.value)} className="rounded-sm mt-1 mb-4 num" />
-              <Button data-testid="calc-rs-button" onClick={calc} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
+              <Input data-testid="rs-qty" type="number" value={qty} onChange={(e) => setQty(e.target.value)} className="rounded-lg mt-1 mb-4 num" />
+              <Button data-testid="calc-rs-button" onClick={calc} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
                 <Calculator size={16} className="mr-2" />Calculate
               </Button>
             </div>
             <div className="lg:col-span-7">
               {!res ? (
-                <div className="bg-white border border-slate-200 rounded-sm p-12 text-center text-slate-400">Select a material and calculate.</div>
+                <EmptyState>Select a material and calculate.</EmptyState>
               ) : (
-                <div className="bg-white border border-slate-200 rounded-sm p-6" data-testid="rs-results">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-head font-bold">{res.material.name} · {res.quantity} pcs</h3>
-                    <SaveQuoteBar module="Roll Stickers" title={`Roll Stickers ${res.material.name} x${res.quantity}`} summary={res} />
+                <div className="space-y-6" data-testid="rs-results">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Metric icon={Disc} label="Rolls" value={res.rolls_needed} sub={`${res.waste_pieces} waste`} />
+                    <Metric icon={Hash} label="Quantity" value={res.quantity} />
+                    {priceOf(res) != null && <Metric icon={Tag} label={res.retail_total != null ? "Retail" : "Wholesale"} value={money(priceOf(res))} accent />}
+                    <Metric icon={Clock} label="Production" value={`${res.production_minutes} min`} />
                   </div>
-                  <div className="text-xs text-slate-500 num mb-2">{res.rolls_needed} roll(s) · {res.waste_pieces} waste · ~{res.production_minutes} min production</div>
-                  <CostRow label="Material (rolls)" value={res.material_cost} />
-                  <CostRow label="Ink + cleaning" value={res.ink_cost} />
-                  <CostRow label="Labor" value={res.labor} />
-                  <TotalsBlock r={res} />
+                  <div className="bg-white border border-slate-200 rounded-xl p-5">
+                    <SectionLabel>{res.material.name} · Cost Breakdown</SectionLabel>
+                    <CostRow label="Material (rolls)" value={res.material_cost} />
+                    <CostRow label="Ink + cleaning" value={res.ink_cost} />
+                    <CostRow label="Labor" value={res.labor} />
+                    <TotalsBlock r={res} />
+                    <div className="mt-3 flex justify-end"><SaveQuoteBar module="Roll Stickers" title={`Roll Stickers ${res.material.name} x${res.quantity}`} summary={res} /></div>
+                  </div>
                 </div>
               )}
             </div>
