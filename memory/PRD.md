@@ -32,5 +32,19 @@ Excel-style ERP/estimating system for a print shop automating pricing, material 
 - P2: Brute-force login lockout; dark mode toggle.
 - P2: Standardize sticker calc material shape (string -> dict).
 
-## Next Tasks
-- Await user feedback; likely add estimate saving + PDF export, and logo upload.
+## Implemented (2026-07-19) — v2
+- 3 ROLES (RBAC + server-side field-level price scrubbing): admin (full access + edit + costs + all prices), client (retail prices only, read-only), reseller (wholesale prices only, read-only). Self-registration defaults to `client`; admin promotes via Users page. All CRUD/settings writes gated by `require_admin`; non-admin gets 403 and admin routes redirect in UI.
+- User management page (admin): list users, change role, delete (with self-guards).
+- 5 NEW MODULES: DTF/Playeras (garment + DTF by area + labor), Bordados (per-1000-stitches + digitizing + garment), Láser (sheet material + cut length + engraving), Impresión Directa UV (sheet materials 4x8/5x10, per-sqft print, optional CNC cut, material comparison), Channel Letters (auto letters-per-sheet, heights 6"–48", channel-capable materials). Each with editable defaults in Settings.
+- Logo integrated (login + sidebar). Save Quote + PDF/print on every calculator; Quotes page (users see own, admin sees all).
+- Verified: 31/31 RBAC+module backend tests, 18/18 existing, full frontend E2E for all 3 roles — all passing.
+
+Note: Direct Print & Channel Letters use full-sheet material costing (whole sheet billed regardless of n-up) — standard for sign shops buying full sheets.
+
+## Backlog (updated)
+- P1: PDF quote as branded document (currently browser print); email quote.
+- P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
+- P2: Brute-force login lockout; dark mode; split server.py into modules.
+
+## Original Problem Statement (v2 additions)
+Roles (admin/client-retail/reseller-wholesale) + modules DTF, Embroidery, Laser, Direct Print (Coroplast/ACM/PVC UV CMYKWW on 4x8 & 5x10 sheets + CNC), Channel Letters (6"–48", auto from sheet sizes).
