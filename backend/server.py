@@ -1253,6 +1253,39 @@ async def startup():
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pw)}})
     await get_settings()
     await seed_demo()
+    await backfill_quote_inputs()
+
+def _reconstruct_inputs(module, s):
+    """Best-effort rebuild of calculator inputs from a saved quote summary.
+    Only returns inputs for modules whose summary fully captures the config; otherwise {}."""
+    try:
+        if module == "Paper":
+            row = s.get("row") or {}
+            return {
+                "productId": (s.get("product") or {}).get("id"),
+                "sheet": s.get("sheet"),
+                "side": s.get("side"),
+                "focusQty": s.get("focus_qty"),
+                "laminate": bool(row.get("lamination")),
+            }
+        if module == "Stickers":
+            return {"w": s.get("width"), "h": s.get("height"), "qty": s.get("qty"),
+                    "finishing": s.get("finishing"), "laminate": bool(s.get("laminate"))}
+        if module == "Sublimation":
+            return {"productId": (s.get("product") or {}).get("id"), "qty": s.get("quantity")}
+        if module == "Roll Stickers":
+            return {"matId": (s.get("material") or {}).get("id"), "qty": s.get("quantity")}
+    except Exception:
+        return {}
+    return {}
+
+async def backfill_quote_inputs():
+    cursor = db.quotes.find({"$or": [{"inputs": {"$exists": False}}, {"inputs": {}}]})
+    async for q in cursor:
+        inp = _reconstruct_inputs(q.get("module"), q.get("summary") or {})
+        inp = {k: v for k, v in inp.items() if v is not None}
+        if inp:
+            await db.quotes.update_one({"_id": q["_id"]}, {"$set": {"inputs": inp}})
 
 async def seed_demo():
     if await db.paper_stocks.count_documents({}) == 0:

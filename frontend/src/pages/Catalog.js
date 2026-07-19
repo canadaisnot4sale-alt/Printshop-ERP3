@@ -32,7 +32,9 @@ export default function Catalog() {
 
   const filtered = items.filter((q) => {
     const t = q.title.toLowerCase();
-    if (search && !t.includes(search.toLowerCase())) return false;
+    const cust = (q.customer_name || "").toLowerCase();
+    const term = search.toLowerCase();
+    if (search && !t.includes(term) && !cust.includes(term)) return false;
     if (letter && t[0]?.toUpperCase() !== letter) return false;
     return true;
   });
@@ -51,7 +53,7 @@ export default function Catalog() {
       <PageHeader title="Price Catalog" eyebrow="Saved Products" subtitle="Every quoted product, alphabetical — click any item to see full specifications">
         <div className="relative">
           <Search size={15} className="absolute left-2.5 top-2.5 text-slate-400" />
-          <Input data-testid="catalog-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search product…" className="rounded-lg pl-8 w-64" />
+          <Input data-testid="catalog-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search product or customer…" className="rounded-lg pl-8 w-64" />
         </div>
       </PageHeader>
       <div className="p-8 flex gap-6">

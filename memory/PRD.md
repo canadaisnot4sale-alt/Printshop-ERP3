@@ -48,6 +48,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
+## Implemented (2026-07-19) — v9 Backfill + Catalog search
+- Startup migration `backfill_quote_inputs()` reconstructs `inputs` from the saved summary for legacy quotes that predate v8, so Re-quote pre-fills them too. Reliable only for modules whose summary fully captures the config (Paper, Stickers, Sublimation, Roll Stickers); other modules (Booklet/Large Format/Laser/Direct Print/Channel/DTF/Embroidery) never stored sizes/placements in the summary, so those legacy quotes just navigate (no misleading auto-calc). Verified: 3/8 existing quotes backfilled.
+- Price Catalog search now matches BOTH product title and customer name.
+
 ## Implemented (2026-07-19) — v8 Re-quote Pre-fill + Auto-recalculate
 - "Re-quote" now PRE-FILLS the destination calculator with the saved configuration and AUTO-RECALCULATES instantly with current prices, across all 11 modules.
 - Each saved quote now persists its raw `inputs` (SaveQuoteBar posts `inputs`; backend QuoteIn stores/returns it). QuoteDetailDialog passes `inputs` via router navigation state; new shared hook `lib/useRequote.js` applies them on mount then runs calc() once.
