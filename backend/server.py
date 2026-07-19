@@ -79,6 +79,11 @@ async def get_current_user(request: Request) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+async def require_admin(user=Depends(get_current_user)) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
 # ---------------- Models ----------------
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -126,6 +131,25 @@ class SizePreset(BaseModel):
     width: float
     height: float
 
+class Garment(BaseModel):
+    name: str
+    category: str = "tshirt"
+    cost_each: float = 0.0
+
+class LaserMaterial(BaseModel):
+    name: str
+    sheet_width: float = 24.0
+    sheet_height: float = 18.0
+    cost_per_sheet: float = 0.0
+
+class SheetMaterial(BaseModel):
+    name: str
+    code: str = ""
+    price_per_sqft: float = 0.0
+    inks: str = "CMYK"
+    cnc_capable: bool = True
+    channel_capable: bool = False
+
 class Settings(BaseModel):
     retail_markup_pct: float = 200.0
     wholesale_markup_pct: float = 100.0
@@ -141,25 +165,50 @@ class Settings(BaseModel):
     binding_wireo: float = 4.00
     binding_perfect: float = 5.00
     binding_per_page: float = 0.03
+    # DTF / apparel
+    dtf_per_sqft: float = 4.50
+    dtf_labor_per_shirt: float = 3.00
+    # Embroidery
+    embroidery_per_1000_stitches: float = 1.20
+    embroidery_digitizing_setup: float = 25.0
+    # Laser
+    laser_cut_per_linear_ft: float = 1.50
+    laser_engraving_per_sqin: float = 0.15
+    laser_setup: float = 10.0
+    # Direct print (UV) & CNC
+    directprint_per_sqft: float = 2.50
+    cnc_cut_per_linear_ft: float = 2.00
+    # Channel letters
+    channel_letter_width_ratio: float = 0.7
+    channel_return_depth_in: float = 4.0
+    channel_letter_labor: float = 12.0
     currency: str = "CAD"
 
 SHEET_SIZES = {
     "8.5x11": (8.5, 11), "8.5x14": (8.5, 14), "11x17": (11, 17),
     "12x18": (12, 18), "13x19": (13, 19),
 }
+BIG_SHEETS = {"4x8": (48, 96), "5x10": (60, 120)}
+CHANNEL_HEIGHTS = [6, 12, 16, 18, 22, 24, 36, 48]
 STANDARD_QTYS = [25, 50, 100, 250, 500, 1000, 2500, 5000]
 
 # ---------------- Settings helpers ----------------
 async def get_settings() -> dict:
+    defaults = Settings().model_dump()
     s = await db.settings.find_one({"_key": "global"})
     if not s:
-        d = Settings().model_dump()
+        d = dict(defaults)
         d["_key"] = "global"
         await db.settings.insert_one(d)
         s = d
     s = dict(s)
     s.pop("_id", None)
     s.pop("_key", None)
+    # backfill any new default keys added after the doc was created
+    missing = {k: v for k, v in defaults.items() if k not in s}
+    if missing:
+        await db.settings.update_one({"_key": "global"}, {"$set": missing})
+        s.update(missing)
     return s
 
 # ---------------- Calc engines ----------------
@@ -173,6 +222,39 @@ def pieces_per_sheet(sheet_w, sheet_h, pw, ph):
 
 def markup_price(cost, pct):
     return round(cost * (1 + pct / 100.0), 2)
+
+# Role-based field visibility (single shared workspace + RBAC + field-level)
+COST_FIELDS = {
+    "material_cost", "cost_4_0", "cost_4_4", "lamination", "printing_cost", "extra_cost",
+    "cover_cost", "inside_cost", "print_cost", "binding_cost", "total_cost", "cost_per_sheet",
+    "cost_per_box", "price_per_sqft", "cost_each", "dtf_cost", "garment_cost", "labor",
+    "embroidery_cost", "setup", "cut_cost", "engrave_cost", "cnc_cost", "face_cost",
+    "return_cost", "sheet_cost", "base_cost",
+}
+RETAIL_FIELDS = {
+    "customer_price", "customer_price_4_0", "customer_price_4_4", "selling_price",
+    "unit_price", "retail_price", "retail_total",
+}
+WHOLESALE_FIELDS = {
+    "wholesale_price", "wholesale_price_4_0", "wholesale_price_4_4", "wholesale_total",
+    "wholesale_unit",
+}
+
+def scrub(data, role):
+    if role == "admin":
+        return data
+    remove = set(COST_FIELDS)
+    if role == "reseller":
+        remove |= RETAIL_FIELDS
+    else:  # client and anything else -> retail only
+        remove |= WHOLESALE_FIELDS
+    def walk(o):
+        if isinstance(o, dict):
+            return {k: walk(v) for k, v in o.items() if k not in remove}
+        if isinstance(o, list):
+            return [walk(x) for x in o]
+        return o
+    return walk(data)
 
 def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19"):
     sw, sh = SHEET_SIZES.get(sheet_key, (13, 19))
@@ -262,12 +344,12 @@ async def register(body: RegisterIn, response: Response):
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already registered")
     doc = {"email": email, "password_hash": hash_password(body.password),
-           "name": body.name, "role": "user", "created_at": now_iso()}
+           "name": body.name, "role": "client", "created_at": now_iso()}
     res = await db.users.insert_one(doc)
     uid = str(res.inserted_id)
     token = create_access_token(uid, email)
     response.set_cookie("access_token", token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
-    return {"token": token, "user": {"id": uid, "email": email, "name": body.name, "role": "user"}}
+    return {"token": token, "user": {"id": uid, "email": email, "name": body.name, "role": "client"}}
 
 @api_router.post("/auth/login")
 async def login(body: LoginIn, response: Response):
@@ -299,7 +381,7 @@ def register_crud(path, model, collection, transform=None):
         return [clean(i) for i in items]
 
     @api_router.post(f"/{path}")
-    async def create_item(body: model, user=Depends(get_current_user)):
+    async def create_item(body: model, user=Depends(require_admin)):
         doc = body.model_dump()
         if transform:
             transform(doc)
@@ -309,7 +391,7 @@ def register_crud(path, model, collection, transform=None):
         return clean(doc)
 
     @api_router.put(f"/{path}/{{item_id}}")
-    async def update_item(item_id: str, body: model, user=Depends(get_current_user)):
+    async def update_item(item_id: str, body: model, user=Depends(require_admin)):
         doc = body.model_dump()
         if transform:
             transform(doc)
@@ -318,7 +400,7 @@ def register_crud(path, model, collection, transform=None):
         return clean(updated)
 
     @api_router.delete(f"/{path}/{{item_id}}")
-    async def delete_item(item_id: str, user=Depends(get_current_user)):
+    async def delete_item(item_id: str, user=Depends(require_admin)):
         await coll.delete_one({"_id": ObjectId(item_id)})
         return {"ok": True}
 
@@ -331,6 +413,47 @@ register_crud("products", Product, "products")
 register_crud("roll-materials", RollMaterial, "roll_materials")
 register_crud("equipment", Equipment, "equipment")
 register_crud("size-presets", SizePreset, "size_presets")
+register_crud("garments", Garment, "garments")
+register_crud("laser-materials", LaserMaterial, "laser_materials")
+register_crud("sheet-materials", SheetMaterial, "sheet_materials")
+
+# ---------------- User management (admin) ----------------
+ROLES = ["admin", "client", "reseller"]
+
+@api_router.get("/users")
+async def list_users(user=Depends(require_admin)):
+    users = await db.users.find().sort("created_at", -1).to_list(1000)
+    return [clean(u) for u in users]
+
+class RoleUpdate(BaseModel):
+    role: str
+
+@api_router.put("/users/{user_id}/role")
+async def update_user_role(user_id: str, body: RoleUpdate, user=Depends(require_admin)):
+    if body.role not in ROLES:
+        raise HTTPException(400, "Invalid role")
+    if str(user["id"]) == user_id and body.role != "admin":
+        raise HTTPException(400, "You cannot remove your own admin role")
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"role": body.role}})
+    updated = await db.users.find_one({"_id": ObjectId(user_id)})
+    return clean(updated)
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, user=Depends(require_admin)):
+    if str(user["id"]) == user_id:
+        raise HTTPException(400, "You cannot delete your own account")
+    await db.users.delete_one({"_id": ObjectId(user_id)})
+    return {"ok": True}
+
+@api_router.get("/config")
+async def config(user=Depends(get_current_user)):
+    return {
+        "sheet_sizes": list(SHEET_SIZES.keys()),
+        "big_sheets": {k: list(v) for k, v in BIG_SHEETS.items()},
+        "channel_heights": CHANNEL_HEIGHTS,
+        "roles": ROLES,
+        "role": user.get("role"),
+    }
 
 # ---------------- Settings routes ----------------
 @api_router.get("/settings")
@@ -338,7 +461,7 @@ async def read_settings(user=Depends(get_current_user)):
     return await get_settings()
 
 @api_router.put("/settings")
-async def write_settings(body: Settings, user=Depends(get_current_user)):
+async def write_settings(body: Settings, user=Depends(require_admin)):
     d = body.model_dump()
     await db.settings.update_one({"_key": "global"}, {"$set": d}, upsert=True)
     return await get_settings()
@@ -364,7 +487,7 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
         quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key)
         results.append({"stock": st, "quote": quote})
     results.sort(key=lambda r: r["quote"]["rows"][3]["customer_price_4_4"] if r["quote"]["rows"] else 0)
-    return {"product": product, "sheet_key": body.sheet_key, "results": results, "qtys": STANDARD_QTYS}
+    return scrub({"product": product, "sheet_key": body.sheet_key, "results": results, "qtys": STANDARD_QTYS}, user["role"])
 
 class BookletCalcIn(BaseModel):
     cover_stock_id: str
@@ -401,7 +524,7 @@ async def calc_booklet(body: BookletCalcIn, user=Depends(get_current_user)):
                     "wireo": settings["binding_wireo"], "perfect": settings["binding_perfect"]}.get(body.binding, 0)
     binding_cost = body.quantity * (binding_flat + body.page_count * settings["binding_per_page"])
     base = cover_cost + inside_cost + print_cost + lam + binding_cost
-    return {
+    return scrub({
         "cover": cover, "inside": inside, "cover_sheets": cover_sheets, "inside_sheets": inside_sheets,
         "cover_cost": round(cover_cost, 2), "inside_cost": round(inside_cost, 2),
         "print_cost": round(print_cost, 2), "lamination": round(lam, 2),
@@ -409,7 +532,7 @@ async def calc_booklet(body: BookletCalcIn, user=Depends(get_current_user)):
         "customer_price": markup_price(base, settings["retail_markup_pct"]),
         "wholesale_price": markup_price(base, settings["wholesale_markup_pct"]),
         "unit_price": round(markup_price(base, settings["retail_markup_pct"]) / body.quantity, 2),
-    }
+    }, user["role"])
 
 class LFSize(BaseModel):
     width: float
@@ -442,7 +565,7 @@ async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
         total = {k: round(v, 2) for k, v in total.items()}
         results.append({"material": m, "sizes": size_rows, "total": total})
     results.sort(key=lambda r: r["total"]["selling_price"])
-    return {"results": results, "mode": body.mode}
+    return scrub({"results": results, "mode": body.mode}, user["role"])
 
 class StickerCalcIn(BaseModel):
     width: float = 3.0
@@ -462,15 +585,217 @@ async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
         est["unit_price"] = round(est["selling_price"] / body.qty, 3) if body.qty else 0
         results.append(est)
     results.sort(key=lambda r: r["selling_price"])
-    return {"results": results}
+    return scrub({"results": results}, user["role"])
 
 @api_router.get("/calc/equipment/{eq_id}")
-async def calc_equipment(eq_id: str, user=Depends(get_current_user)):
+async def calc_equipment(eq_id: str, user=Depends(require_admin)):
     eq = await db.equipment.find_one({"_id": ObjectId(eq_id)})
     if not eq:
         raise HTTPException(404, "Not found")
     eq = clean(eq)
     return {"equipment": eq, "cost": equipment_cost(eq)}
+
+# ---------------- New module calc engines ----------------
+class DTFCalcIn(BaseModel):
+    garment_id: Optional[str] = None
+    print_width: float = 10.0
+    print_height: float = 12.0
+    quantity: int = 12
+
+@api_router.post("/calc/dtf")
+async def calc_dtf(body: DTFCalcIn, user=Depends(get_current_user)):
+    s = await get_settings()
+    garment = None
+    g_cost = 0.0
+    if body.garment_id:
+        g = await db.garments.find_one({"_id": ObjectId(body.garment_id)})
+        if g:
+            garment = clean(g)
+            g_cost = garment["cost_each"]
+    area_sqft = (body.print_width * body.print_height) / 144.0
+    dtf_cost = area_sqft * s["dtf_per_sqft"]
+    labor = s["dtf_labor_per_shirt"]
+    unit_base = g_cost + dtf_cost + labor
+    base = unit_base * body.quantity
+    return scrub({
+        "garment": garment, "print_area_sqft": round(area_sqft, 3), "quantity": body.quantity,
+        "garment_cost": round(g_cost, 2), "dtf_cost": round(dtf_cost, 2), "labor": round(labor, 2),
+        "base_cost": round(base, 2),
+        "retail_total": markup_price(base, s["retail_markup_pct"]),
+        "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+        "unit_price": round(markup_price(base, s["retail_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+        "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+    }, user["role"])
+
+class EmbroideryCalcIn(BaseModel):
+    garment_id: Optional[str] = None
+    stitch_count: int = 8000
+    quantity: int = 12
+
+@api_router.post("/calc/embroidery")
+async def calc_embroidery(body: EmbroideryCalcIn, user=Depends(get_current_user)):
+    s = await get_settings()
+    garment = None
+    g_cost = 0.0
+    if body.garment_id:
+        g = await db.garments.find_one({"_id": ObjectId(body.garment_id)})
+        if g:
+            garment = clean(g)
+            g_cost = garment["cost_each"]
+    emb = (body.stitch_count / 1000.0) * s["embroidery_per_1000_stitches"]
+    setup = s["embroidery_digitizing_setup"]
+    unit_base = g_cost + emb
+    base = unit_base * body.quantity + setup
+    return scrub({
+        "garment": garment, "stitch_count": body.stitch_count, "quantity": body.quantity,
+        "garment_cost": round(g_cost, 2), "embroidery_cost": round(emb, 2), "setup": round(setup, 2),
+        "base_cost": round(base, 2),
+        "retail_total": markup_price(base, s["retail_markup_pct"]),
+        "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+        "unit_price": round(markup_price(base, s["retail_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+        "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+    }, user["role"])
+
+class LaserCalcIn(BaseModel):
+    material_id: Optional[str] = None
+    piece_width: float = 6.0
+    piece_height: float = 6.0
+    cut_length_in: float = 24.0
+    engrave_area_sqin: float = 4.0
+    quantity: int = 10
+
+@api_router.post("/calc/laser")
+async def calc_laser(body: LaserCalcIn, user=Depends(get_current_user)):
+    s = await get_settings()
+    q = {"_id": {"$in": [ObjectId(body.material_id)]}} if body.material_id else {}
+    mats = [clean(m) for m in await db.laser_materials.find(q).to_list(200)]
+    results = []
+    for m in mats:
+        n_up = pieces_per_sheet(m["sheet_width"], m["sheet_height"], body.piece_width, body.piece_height)
+        n_up = max(n_up, 1)
+        sheets = math.ceil(body.quantity / n_up)
+        sheet_cost = sheets * m["cost_per_sheet"]
+        cut_cost = (body.cut_length_in / 12.0) * s["laser_cut_per_linear_ft"] * body.quantity
+        engrave_cost = body.engrave_area_sqin * s["laser_engraving_per_sqin"] * body.quantity
+        setup = s["laser_setup"]
+        base = sheet_cost + cut_cost + engrave_cost + setup
+        results.append(scrub({
+            "material": m, "n_up": n_up, "sheets": sheets, "quantity": body.quantity,
+            "sheet_cost": round(sheet_cost, 2), "cut_cost": round(cut_cost, 2),
+            "engrave_cost": round(engrave_cost, 2), "setup": round(setup, 2), "base_cost": round(base, 2),
+            "retail_total": markup_price(base, s["retail_markup_pct"]),
+            "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+        }, user["role"]))
+    return {"results": results}
+
+class DirectPrintCalcIn(BaseModel):
+    material_ids: Optional[List[str]] = None
+    sheet_size: str = "4x8"
+    piece_width: float = 24.0
+    piece_height: float = 18.0
+    quantity: int = 1
+    cnc: bool = False
+    cnc_cut_length_in: float = 0.0
+
+@api_router.post("/calc/directprint")
+async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_user)):
+    s = await get_settings()
+    sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
+    q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
+    mats = [clean(m) for m in await db.sheet_materials.find(q).to_list(200)]
+    results = []
+    sheet_area_sqft = (sw * sh) / 144.0
+    for m in mats:
+        n_up = pieces_per_sheet(sw, sh, body.piece_width, body.piece_height)
+        n_up = max(n_up, 1)
+        sheets = math.ceil(body.quantity / n_up)
+        sheet_cost = sheets * sheet_area_sqft * m["price_per_sqft"]
+        print_area = (body.piece_width * body.piece_height) / 144.0 * body.quantity
+        print_cost = print_area * s["directprint_per_sqft"]
+        cnc_cost = 0.0
+        if body.cnc and m.get("cnc_capable"):
+            cnc_cost = (body.cnc_cut_length_in / 12.0) * s["cnc_cut_per_linear_ft"] * body.quantity
+        base = sheet_cost + print_cost + cnc_cost
+        results.append(scrub({
+            "material": m, "sheet_size": body.sheet_size, "n_up": n_up, "sheets": sheets,
+            "quantity": body.quantity, "print_sqft": round(print_area, 2),
+            "sheet_cost": round(sheet_cost, 2), "print_cost": round(print_cost, 2),
+            "cnc_cost": round(cnc_cost, 2), "base_cost": round(base, 2),
+            "retail_total": markup_price(base, s["retail_markup_pct"]),
+            "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+        }, user["role"]))
+    results.sort(key=lambda r: r.get("retail_total", r.get("wholesale_total", 0)))
+    return {"results": results, "sheet_size": body.sheet_size}
+
+class ChannelCalcIn(BaseModel):
+    material_ids: Optional[List[str]] = None
+    sheet_size: str = "4x8"
+    letter_height: float = 24.0
+    quantity: int = 10
+
+@api_router.post("/calc/channelletters")
+async def calc_channel(body: ChannelCalcIn, user=Depends(get_current_user)):
+    s = await get_settings()
+    sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
+    q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
+    mats = [clean(m) for m in await db.sheet_materials.find({**q, "channel_capable": True}).to_list(200)]
+    lh = body.letter_height
+    lw = lh * s["channel_letter_width_ratio"]
+    ret_depth = s["channel_return_depth_in"]
+    perimeter = 2 * (lh + lw)
+    results = []
+    sheet_area_sqft = (sw * sh) / 144.0
+    for m in mats:
+        faces_per_sheet = max(pieces_per_sheet(sw, sh, lw, lh), 1)
+        face_sheets = math.ceil(body.quantity / faces_per_sheet)
+        # returns: strips of ret_depth width along the sheet; approximate linear inches per sheet
+        return_linear_per_sheet = (sw // ret_depth) * sh
+        return_needed = perimeter * body.quantity
+        return_sheets = math.ceil(return_needed / return_linear_per_sheet) if return_linear_per_sheet else 0
+        face_cost = face_sheets * sheet_area_sqft * m["price_per_sqft"]
+        return_cost = return_sheets * sheet_area_sqft * m["price_per_sqft"]
+        labor = s["channel_letter_labor"] * body.quantity
+        base = face_cost + return_cost + labor
+        results.append(scrub({
+            "material": m, "letter_height": lh, "letter_width": round(lw, 1), "quantity": body.quantity,
+            "faces_per_sheet": faces_per_sheet, "face_sheets": face_sheets, "return_sheets": return_sheets,
+            "face_cost": round(face_cost, 2), "return_cost": round(return_cost, 2), "labor": round(labor, 2),
+            "base_cost": round(base, 2),
+            "retail_total": markup_price(base, s["retail_markup_pct"]),
+            "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+            "unit_price": round(markup_price(base, s["retail_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+            "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+        }, user["role"]))
+    results.sort(key=lambda r: r.get("retail_total", r.get("wholesale_total", 0)))
+    return {"results": results, "sheet_size": body.sheet_size, "heights": CHANNEL_HEIGHTS}
+
+# ---------------- Saved quotes ----------------
+class QuoteIn(BaseModel):
+    module: str
+    title: str
+    summary: dict
+
+@api_router.post("/quotes")
+async def save_quote(body: QuoteIn, user=Depends(get_current_user)):
+    doc = {"module": body.module, "title": body.title, "summary": body.summary,
+           "user_id": user["id"], "user_email": user["email"], "created_at": now_iso()}
+    res = await db.quotes.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return clean(doc)
+
+@api_router.get("/quotes")
+async def list_quotes(user=Depends(get_current_user)):
+    q = {} if user.get("role") == "admin" else {"user_id": user["id"]}
+    items = await db.quotes.find(q).sort("created_at", -1).to_list(500)
+    return [clean(i) for i in items]
+
+@api_router.delete("/quotes/{quote_id}")
+async def delete_quote(quote_id: str, user=Depends(get_current_user)):
+    q = {"_id": ObjectId(quote_id)}
+    if user.get("role") != "admin":
+        q["user_id"] = user["id"]
+    await db.quotes.delete_one(q)
+    return {"ok": True}
 
 @api_router.get("/dashboard")
 async def dashboard(user=Depends(get_current_user)):
@@ -481,6 +806,10 @@ async def dashboard(user=Depends(get_current_user)):
         "equipment": await db.equipment.count_documents({}),
         "sticker_materials": await db.roll_materials.count_documents({"sticker_compatible": True}),
         "size_presets": await db.size_presets.count_documents({}),
+        "garments": await db.garments.count_documents({}),
+        "laser_materials": await db.laser_materials.count_documents({}),
+        "sheet_materials": await db.sheet_materials.count_documents({}),
+        "quotes": await db.quotes.count_documents({} if user.get("role") == "admin" else {"user_id": user["id"]}),
     }
 
 @api_router.get("/")
@@ -560,6 +889,23 @@ async def seed_demo():
             {"name": "Decal 12x12", "width": 12, "height": 12, "created_at": now_iso()},
         ]
         await db.size_presets.insert_many(presets)
+    if await db.garments.count_documents({}) == 0:
+        await db.garments.insert_many([
+            {"name": "Gildan 5000 T-Shirt", "category": "tshirt", "cost_each": 4.50, "created_at": now_iso()},
+            {"name": "Bella Canvas 3001", "category": "tshirt", "cost_each": 6.00, "created_at": now_iso()},
+            {"name": "Gildan 18500 Hoodie", "category": "hoodie", "cost_each": 14.00, "created_at": now_iso()},
+        ])
+    if await db.laser_materials.count_documents({}) == 0:
+        await db.laser_materials.insert_many([
+            {"name": "1/8\" Baltic Birch", "sheet_width": 24, "sheet_height": 18, "cost_per_sheet": 8.0, "created_at": now_iso()},
+            {"name": "1/8\" Acrylic Clear", "sheet_width": 24, "sheet_height": 12, "cost_per_sheet": 15.0, "created_at": now_iso()},
+        ])
+    if await db.sheet_materials.count_documents({}) == 0:
+        await db.sheet_materials.insert_many([
+            {"name": "Coroplast 4mm White", "code": "CORO-4", "price_per_sqft": 0.55, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": False, "created_at": now_iso()},
+            {"name": "ACM / Dibond 3mm", "code": "ACM-3", "price_per_sqft": 2.20, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": True, "created_at": now_iso()},
+            {"name": "PVC 6mm", "code": "PVC-6", "price_per_sqft": 1.60, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": True, "created_at": now_iso()},
+        ])
 
 @app.on_event("shutdown")
 async def shutdown():

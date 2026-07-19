@@ -39,6 +39,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA] px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
+          <img src="/logo.webp" alt="Print and Save" className="w-16 h-16 object-contain mx-auto mb-3" />
           <div className="font-head font-black text-3xl tracking-tight">
             Print <span className="text-[#2495D3]">and</span> Save
           </div>

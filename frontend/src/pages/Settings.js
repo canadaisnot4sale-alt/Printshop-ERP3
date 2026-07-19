@@ -42,6 +42,43 @@ const GROUPS = [
       { name: "binding_per_page", label: "Per Page Add (CAD)" },
     ],
   },
+  {
+    title: "DTF / Playeras",
+    fields: [
+      { name: "dtf_per_sqft", label: "DTF / ft² (CAD)" },
+      { name: "dtf_labor_per_shirt", label: "Mano de obra / playera (CAD)" },
+    ],
+  },
+  {
+    title: "Bordados",
+    fields: [
+      { name: "embroidery_per_1000_stitches", label: "Precio / 1,000 puntadas (CAD)" },
+      { name: "embroidery_digitizing_setup", label: "Digitizado / Setup (CAD)" },
+    ],
+  },
+  {
+    title: "Láser",
+    fields: [
+      { name: "laser_cut_per_linear_ft", label: "Corte / pie lineal (CAD)" },
+      { name: "laser_engraving_per_sqin", label: "Grabado / in² (CAD)" },
+      { name: "laser_setup", label: "Setup láser (CAD)" },
+    ],
+  },
+  {
+    title: "Impresión Directa y CNC",
+    fields: [
+      { name: "directprint_per_sqft", label: "Impresión UV / ft² (CAD)" },
+      { name: "cnc_cut_per_linear_ft", label: "Corte CNC / pie lineal (CAD)" },
+    ],
+  },
+  {
+    title: "Channel Letters",
+    fields: [
+      { name: "channel_letter_width_ratio", label: "Relación ancho/alto letra" },
+      { name: "channel_return_depth_in", label: "Profundidad retorno (in)" },
+      { name: "channel_letter_labor", label: "Mano de obra / letra (CAD)" },
+    ],
+  },
 ];
 
 export default function Settings() {

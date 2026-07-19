@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import api, { apiErr } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
+import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +50,8 @@ const presetCols = [
 ];
 
 export default function LargeFormat() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [sizes, setSizes] = useState([{ width: 24, height: 18, qty: 1 }]);
   const [mode, setMode] = useState("print");
   const [laminate, setLaminate] = useState(false);
@@ -78,9 +82,9 @@ export default function LargeFormat() {
       <div className="p-8">
         <Tabs defaultValue="estimate">
           <TabsList className="rounded-sm">
-            <TabsTrigger value="estimate" data-testid="tab-estimate">Estimating</TabsTrigger>
-            <TabsTrigger value="materials" data-testid="tab-materials">Roll Materials</TabsTrigger>
-            <TabsTrigger value="presets" data-testid="tab-presets">Size Presets</TabsTrigger>
+            <TabsTrigger value="estimate" data-testid="tab-estimate">Estimación</TabsTrigger>
+            {isAdmin && <TabsTrigger value="materials" data-testid="tab-materials">Materiales Rollo</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="presets" data-testid="tab-presets">Presets de Tamaño</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="estimate" className="mt-6 grid lg:grid-cols-12 gap-6">
@@ -145,19 +149,27 @@ export default function LargeFormat() {
                           <div key={i} className="flex justify-between text-xs num text-slate-600">
                             <span>{num(s.width, 0)}×{num(s.height, 0)}" ×{s.qty}
                               {s.tiled && <span className="ml-1 text-amber-600">tiled {s.panels}p</span>}
-                              {!s.fits && !s.tiled && <span className="ml-1 text-red-500">no fit</span>}
                             </span>
-                            <span>{money(s.selling_price)}</span>
+                            <span>{money(s.selling_price ?? s.wholesale_price)}</span>
                           </div>
                         ))}
                       </div>
-                      <div className="flex justify-between text-xs text-slate-500 border-t border-slate-100 pt-2 num">
-                        <span>Material {money(r.total.material_cost)} · Print {money(r.total.printing_cost)}</span>
-                      </div>
+                      {r.total.material_cost != null && (
+                        <div className="flex justify-between text-xs text-slate-500 border-t border-slate-100 pt-2 num">
+                          <span>Material {money(r.total.material_cost)} · Impresión {money(r.total.printing_cost)}</span>
+                        </div>
+                      )}
                       <div className="flex items-baseline justify-between mt-2">
-                        <span className="num text-2xl font-black text-[#2495D3]">{money(r.total.selling_price)}</span>
-                        <span className="text-xs text-slate-500 num">Wholesale {money(r.total.wholesale_price)}</span>
+                        <span className="num text-2xl font-black text-[#2495D3]">{money(r.total.selling_price ?? r.total.wholesale_price)}</span>
+                        {r.total.selling_price != null && r.total.wholesale_price != null && (
+                          <span className="text-xs text-slate-500 num">Wholesale {money(r.total.wholesale_price)}</span>
+                        )}
                       </div>
+                      {idx === 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
+                          <SaveQuoteBar module="Gran Formato" title={`${r.material.name} · ${res.mode}`} summary={r} />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -166,10 +178,10 @@ export default function LargeFormat() {
           </TabsContent>
 
           <TabsContent value="materials" className="mt-6">
-            <CrudManager endpoint="roll-materials" fields={matFields} columns={matCols} prefix="material" />
+            {isAdmin && <CrudManager endpoint="roll-materials" fields={matFields} columns={matCols} prefix="material" />}
           </TabsContent>
           <TabsContent value="presets" className="mt-6">
-            <CrudManager endpoint="size-presets" fields={presetFields} columns={presetCols} prefix="preset" onChange={setPresets} />
+            {isAdmin && <CrudManager endpoint="size-presets" fields={presetFields} columns={presetCols} prefix="preset" onChange={setPresets} />}
           </TabsContent>
         </Tabs>
       </div>

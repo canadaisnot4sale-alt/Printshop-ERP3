@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import api, { apiErr } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
+import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -40,6 +42,8 @@ const prodCols = [
 ];
 
 export default function PaperPrinting() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [products, setProducts] = useState([]);
   const [productId, setProductId] = useState("");
   const [sheet, setSheet] = useState("13x19");
@@ -69,9 +73,9 @@ export default function PaperPrinting() {
       <div className="p-8">
         <Tabs defaultValue="calc">
           <TabsList className="rounded-sm">
-            <TabsTrigger value="calc" data-testid="tab-calc">Calculator</TabsTrigger>
-            <TabsTrigger value="stocks" data-testid="tab-stocks">Paper Stocks</TabsTrigger>
-            <TabsTrigger value="products" data-testid="tab-products">Products</TabsTrigger>
+            <TabsTrigger value="calc" data-testid="tab-calc">Calculadora</TabsTrigger>
+            {isAdmin && <TabsTrigger value="stocks" data-testid="tab-stocks">Paper Stocks</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="products" data-testid="tab-products">Productos</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="calc" className="mt-6">
@@ -113,19 +117,18 @@ export default function PaperPrinting() {
                             {r.stock.name}
                             {idx === 0 && <span className="ml-2 text-[10px] font-mono uppercase bg-[#2495D3] text-white px-2 py-0.5 rounded-sm">Best Price</span>}
                           </div>
-                          <div className="text-xs font-mono text-slate-500">{r.quote.n_up}-up · {r.quote.sheet}" · {money(r.quote.cost_per_sheet)}/sheet</div>
+                          <div className="text-xs font-mono text-slate-500">{r.quote.n_up}-up · {r.quote.sheet}"{r.quote.cost_per_sheet != null ? ` · ${money(r.quote.cost_per_sheet)}/hoja` : ""}</div>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm num tabular">
                             <thead>
                               <tr className="text-xs font-mono uppercase tracking-wider text-slate-500 border-b border-slate-200">
                                 <th className="text-right px-3 py-2">Qty</th>
-                                <th className="text-right px-3 py-2">Sheets</th>
-                                <th className="text-right px-3 py-2">Material</th>
-                                <th className="text-right px-3 py-2">4/0</th>
-                                <th className="text-right px-3 py-2">4/4</th>
-                                <th className="text-right px-3 py-2 text-[#2495D3]">Cust 4/4</th>
-                                <th className="text-right px-3 py-2">Wholesale</th>
+                                <th className="text-right px-3 py-2">Hojas</th>
+                                {r.quote.rows[0]?.material_cost != null && <th className="text-right px-3 py-2">Material</th>}
+                                {r.quote.rows[0]?.customer_price_4_0 != null && <th className="text-right px-3 py-2">4/0</th>}
+                                {r.quote.rows[0]?.customer_price_4_4 != null && <th className="text-right px-3 py-2 text-[#2495D3]">Retail 4/4</th>}
+                                {r.quote.rows[0]?.wholesale_price_4_4 != null && <th className="text-right px-3 py-2 text-[#2495D3]">Wholesale 4/4</th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -133,16 +136,20 @@ export default function PaperPrinting() {
                                 <tr key={row.qty} className="border-b border-slate-100 hover:bg-slate-50">
                                   <td className="text-right px-3 py-2 font-semibold">{row.qty}</td>
                                   <td className="text-right px-3 py-2 text-slate-500">{row.sheets}</td>
-                                  <td className="text-right px-3 py-2">{money(row.material_cost)}</td>
-                                  <td className="text-right px-3 py-2">{money(row.customer_price_4_0)}</td>
-                                  <td className="text-right px-3 py-2">{money(row.customer_price_4_4)}</td>
-                                  <td className="text-right px-3 py-2 text-[#2495D3] font-semibold">{money(row.customer_price_4_4)}</td>
-                                  <td className="text-right px-3 py-2 text-slate-500">{money(row.wholesale_price_4_4)}</td>
+                                  {row.material_cost != null && <td className="text-right px-3 py-2">{money(row.material_cost)}</td>}
+                                  {row.customer_price_4_0 != null && <td className="text-right px-3 py-2">{money(row.customer_price_4_0)}</td>}
+                                  {row.customer_price_4_4 != null && <td className="text-right px-3 py-2 text-[#2495D3] font-semibold">{money(row.customer_price_4_4)}</td>}
+                                  {row.wholesale_price_4_4 != null && <td className="text-right px-3 py-2 text-[#2495D3] font-semibold">{money(row.wholesale_price_4_4)}</td>}
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
+                        {idx === 0 && (
+                          <div className="px-5 py-3 border-t border-slate-200 flex justify-end">
+                            <SaveQuoteBar module="Papel" title={`${result.product?.name} · ${r.stock.name}`} summary={{ product: result.product, stock: r.stock, quote: r.quote }} />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -152,10 +159,10 @@ export default function PaperPrinting() {
           </TabsContent>
 
           <TabsContent value="stocks" className="mt-6">
-            <CrudManager endpoint="paper-stocks" fields={stockFields} columns={stockCols} prefix="stock" />
+            {isAdmin && <CrudManager endpoint="paper-stocks" fields={stockFields} columns={stockCols} prefix="stock" />}
           </TabsContent>
           <TabsContent value="products" className="mt-6">
-            <CrudManager endpoint="products" fields={prodFields} columns={prodCols} prefix="product" onChange={setProducts} />
+            {isAdmin && <CrudManager endpoint="products" fields={prodFields} columns={prodCols} prefix="product" onChange={setProducts} />}
           </TabsContent>
         </Tabs>
       </div>

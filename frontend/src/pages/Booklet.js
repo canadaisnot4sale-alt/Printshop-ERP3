@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money } from "@/lib/format";
+import { SaveQuoteBar } from "@/components/SaveQuote";
 import { toast } from "sonner";
 import { Calculator } from "lucide-react";
 
@@ -97,16 +98,19 @@ export default function Booklet() {
               <>
                 <Row label={`Cover sheets`} val={res.cover_sheets} />
                 <Row label={`Inside sheets`} val={res.inside_sheets} />
-                <Row label="Cover cost" val={money(res.cover_cost)} />
-                <Row label="Inside cost" val={money(res.inside_cost)} />
-                <Row label="Printing" val={money(res.print_cost)} />
-                <Row label="Lamination" val={money(res.lamination)} />
-                <Row label="Binding" val={money(res.binding_cost)} />
-                <Row label="Total production cost" val={money(res.total_cost)} />
+                {res.cover_cost != null && <Row label="Cover cost" val={money(res.cover_cost)} />}
+                {res.inside_cost != null && <Row label="Inside cost" val={money(res.inside_cost)} />}
+                {res.print_cost != null && <Row label="Printing" val={money(res.print_cost)} />}
+                {res.lamination != null && <Row label="Lamination" val={money(res.lamination)} />}
+                {res.binding_cost != null && <Row label="Binding" val={money(res.binding_cost)} />}
+                {res.total_cost != null && <Row label="Total production cost" val={money(res.total_cost)} />}
                 <div className="mt-4 pt-4 border-t border-slate-200">
-                  <div className="text-xs font-mono uppercase tracking-widest text-slate-500">Customer Price</div>
-                  <div className="num text-4xl font-black text-[#2495D3] mt-1">{money(res.customer_price)}</div>
-                  <div className="text-xs text-slate-500 mt-1 num">{money(res.unit_price)} / unit · Wholesale {money(res.wholesale_price)}</div>
+                  <div className="text-xs font-mono uppercase tracking-widest text-slate-500">{res.customer_price != null ? "Customer Price" : "Wholesale Price"}</div>
+                  <div className="num text-4xl font-black text-[#2495D3] mt-1">{money(res.customer_price ?? res.wholesale_price)}</div>
+                  {res.unit_price != null && <div className="text-xs text-slate-500 mt-1 num">{money(res.unit_price)} / unidad{res.wholesale_price != null ? ` · Wholesale ${money(res.wholesale_price)}` : ""}</div>}
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <SaveQuoteBar module="Booklet" title={`Booklet ${res.cover?.name || ""} x${f.quantity}`} summary={res} />
                 </div>
               </>
             )}

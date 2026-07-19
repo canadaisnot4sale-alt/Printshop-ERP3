@@ -58,11 +58,14 @@ export default function Stickers() {
                     <div className="font-head font-bold">{r.material}</div>
                     {idx === 0 && <span className="text-[10px] font-mono uppercase bg-[#2495D3] text-white px-2 py-0.5 rounded-sm">Best</span>}
                   </div>
-                  <div className="num text-3xl font-black text-[#2495D3] mt-3">{money(r.selling_price)}</div>
-                  <div className="text-xs text-slate-500 num mt-1">{money(r.unit_price)} / sticker · {r.billed_sqft} sqft</div>
-                  <div className="text-xs text-slate-500 num mt-2 border-t border-slate-100 pt-2">
-                    Material {money(r.material_cost)} · Wholesale {money(r.wholesale_price)}
-                  </div>
+                  <div className="num text-3xl font-black text-[#2495D3] mt-3">{money(r.selling_price ?? r.wholesale_price)}</div>
+                  <div className="text-xs text-slate-500 num mt-1">{r.unit_price != null ? `${money(r.unit_price)} / sticker · ` : ""}{r.billed_sqft} sqft</div>
+                  {(r.material_cost != null || (r.selling_price != null && r.wholesale_price != null)) && (
+                    <div className="text-xs text-slate-500 num mt-2 border-t border-slate-100 pt-2">
+                      {r.material_cost != null ? `Material ${money(r.material_cost)}` : ""}
+                      {r.selling_price != null && r.wholesale_price != null ? ` · Wholesale ${money(r.wholesale_price)}` : ""}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -11,11 +11,19 @@ import LargeFormat from "@/pages/LargeFormat";
 import Stickers from "@/pages/Stickers";
 import Equipment from "@/pages/Equipment";
 import Settings from "@/pages/Settings";
+import DTF from "@/pages/DTF";
+import Embroidery from "@/pages/Embroidery";
+import Laser from "@/pages/Laser";
+import DirectPrint from "@/pages/DirectPrint";
+import ChannelLetters from "@/pages/ChannelLetters";
+import Users from "@/pages/Users";
+import Quotes from "@/pages/Quotes";
 
-function Protected({ children }) {
+function Protected({ children, adminOnly }) {
   const { user, ready } = useAuth();
-  if (!ready) return <div className="p-10 font-mono text-sm">Loading…</div>;
+  if (!ready) return <div className="p-10 font-mono text-sm">Cargando…</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -31,8 +39,15 @@ function App() {
             <Route path="/booklet" element={<Protected><Booklet /></Protected>} />
             <Route path="/large-format" element={<Protected><LargeFormat /></Protected>} />
             <Route path="/stickers" element={<Protected><Stickers /></Protected>} />
-            <Route path="/equipment" element={<Protected><Equipment /></Protected>} />
-            <Route path="/settings" element={<Protected><Settings /></Protected>} />
+            <Route path="/dtf" element={<Protected><DTF /></Protected>} />
+            <Route path="/embroidery" element={<Protected><Embroidery /></Protected>} />
+            <Route path="/laser" element={<Protected><Laser /></Protected>} />
+            <Route path="/direct-print" element={<Protected><DirectPrint /></Protected>} />
+            <Route path="/channel-letters" element={<Protected><ChannelLetters /></Protected>} />
+            <Route path="/quotes" element={<Protected><Quotes /></Protected>} />
+            <Route path="/equipment" element={<Protected adminOnly><Equipment /></Protected>} />
+            <Route path="/users" element={<Protected adminOnly><Users /></Protected>} />
+            <Route path="/settings" element={<Protected adminOnly><Settings /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

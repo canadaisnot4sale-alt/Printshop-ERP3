@@ -1,0 +1,32 @@
+{
+  "summary": "Full RBAC + 5 new module regression. 31/31 new backend tests pass (roles, admin gates, field scrubbing for DTF/Embroidery/Laser/DirectPrint/ChannelLetters/Paper, user mgmt self-guards, save-quote CRUD). Frontend E2E verified admin (all nav + retail+wholesale+cost), reseller (wholesale-only, admin nav hidden, /users redirects), fresh self-registered client (retail-only, no admin nav, /settings redirects, save-quote works, own quotes only).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_rbac_and_modules.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/rbac_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py grew to 913 lines (from 567); consider splitting auth/models/calc/routers into modules.",
+    "JWT stored in localStorage 'pns_token' AND set as httpOnly cookie 'access_token' — pick one strategy; current dual approach makes the httpOnly cookie effectively unused and adds XSS surface.",
+    "No brute-force lockout on /api/auth/login (playbook recommends 5-fail lockout). Not required by product spec but flagged from playbook.",
+    "/api/quotes list endpoint returns quotes including all fields — for role-scoped clients this is fine, but summary blobs are stored as-received from the calculator (already role-scrubbed at save time). If an admin saves a quote then a client later views the same quote via admin view it retains scrubbed shape — non-issue but worth documenting.",
+    "Direct-print + channel-letters use sheet_area_sqft * price_per_sqft (whole sheet) so material cost = full-sheet cost regardless of n_up; already documented as full-sheet costing but flag for clarity."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_rbac_and_modules.py (new)"
+  ],
+  "success_rate": { "backend": "100% (31/31 RBAC + 18/18 existing)", "frontend": "100% — admin/reseller/client role gating, all 5 new calculators (DTF, Embroidery, Laser, DirectPrint, ChannelLetters) render results, save-quote persists and lists correctly, admin routes redirect for non-admin" },
+  "test_credentials": "Admin: admin@printandsave.ca / admin123. Reseller: cliente1@test.com / test123. Client: fresh self-registration each run defaults to role 'client'.",
+  "seed_data_creation": "Admin + demo paper stocks/products/roll materials/equipment/size presets/garments/laser materials/sheet materials auto-seeded on backend startup. No manual seed required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Backend URL from /app/frontend/.env REACT_APP_BACKEND_URL. JWT in localStorage 'pns_token'. Field scrubbing: admin sees all cost+retail+wholesale, client sees retail_total/unit_price/customer_price only, reseller sees wholesale_total/wholesale_unit/wholesale_price only. RBAC is enforced server-side via scrub() in server.py + require_admin dependency; UI just renders whatever fields are present. Save Quote persists per user_id; admin sees all quotes, others only their own.",
+  "rca of the issue": "N/A — no bugs found. Initial 'admin saw 0 saved quotes' in playwright was a timing artifact when clicking the first save button on channel-letters results before results row fully attached; re-verified independently on DTF with request/response sniffing showing POST /api/quotes -> 200 and GET /api/quotes returning the new quote."
+}
