@@ -11,15 +11,16 @@ import { Save, Printer } from "lucide-react";
 export function SaveQuoteBar({ module, title, summary, disabled }) {
   const [open, setOpen] = useState(false);
   const [customer, setCustomer] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     setSaving(true);
     try {
-      await api.post("/quotes", { module, title, summary, customer_name: customer, notes });
+      await api.post("/quotes", { module, title, summary, customer_name: customer, customer_email: customerEmail, notes });
       toast.success("Quote saved");
-      setOpen(false); setCustomer(""); setNotes("");
+      setOpen(false); setCustomer(""); setCustomerEmail(""); setNotes("");
     } catch (e) {
       toast.error(apiErr(e.response?.data?.detail));
     } finally { setSaving(false); }
@@ -41,6 +42,10 @@ export function SaveQuoteBar({ module, title, summary, disabled }) {
             <div>
               <Label className="text-xs">Customer name</Label>
               <Input data-testid="quote-customer" value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="e.g. John's Signs Inc." className="rounded-sm mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">Customer email (optional — to email the quote later)</Label>
+              <Input data-testid="quote-customer-email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="customer@email.com" className="rounded-sm mt-1" />
             </div>
             <div>
               <Label className="text-xs">Notes</Label>

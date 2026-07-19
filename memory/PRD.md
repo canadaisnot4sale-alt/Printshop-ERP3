@@ -42,6 +42,7 @@ Excel-style ERP/estimating system for a print shop automating pricing, material 
 Note: Direct Print & Channel Letters use full-sheet material costing (whole sheet billed regardless of n-up) — standard for sign shops buying full sheets.
 
 ## Backlog (updated)
+- v4 EMAIL + English + nesting + presets shipped (2026-07-19).
 - P1: PDF quote as branded document (currently browser print); email quote.
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.

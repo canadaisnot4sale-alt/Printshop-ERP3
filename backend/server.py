@@ -17,6 +17,9 @@ import math
 import jwt
 import bcrypt
 import secrets
+import httpx
+
+EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 
 # ---------------- DB ----------------
 mongo_url = os.environ['MONGO_URL']
@@ -912,12 +915,13 @@ class QuoteIn(BaseModel):
     title: str
     summary: dict
     customer_name: str = ""
+    customer_email: str = ""
     notes: str = ""
 
 @api_router.post("/quotes")
 async def save_quote(body: QuoteIn, user=Depends(get_current_user)):
     doc = {"module": body.module, "title": body.title, "summary": body.summary,
-           "customer_name": body.customer_name, "notes": body.notes,
+           "customer_name": body.customer_name, "customer_email": body.customer_email, "notes": body.notes,
            "user_id": user["id"], "user_email": user["email"], "created_at": now_iso()}
     res = await db.quotes.insert_one(doc)
     doc["_id"] = res.inserted_id
@@ -936,6 +940,92 @@ async def delete_quote(quote_id: str, user=Depends(get_current_user)):
         q["user_id"] = user["id"]
     await db.quotes.delete_one(q)
     return {"ok": True}
+
+def _fmt(v):
+    try:
+        return f"${float(v):,.2f} CAD"
+    except Exception:
+        return str(v)
+
+def build_quote_html(quote: dict, role: str) -> str:
+    s = quote.get("summary", {}) or {}
+    def pick(*keys):
+        for k in keys:
+            if s.get(k) is not None:
+                return s[k]
+        for coll in (s.get("results") or []):
+            for k in keys:
+                if coll.get(k) is not None:
+                    return coll[k]
+        t = s.get("total") or {}
+        for k in keys:
+            if t.get(k) is not None:
+                return t[k]
+        return None
+    retail = pick("retail_total", "customer_price", "selling_price")
+    wholesale = pick("wholesale_total", "wholesale_price")
+    rows = ""
+    if retail is not None:
+        rows += f'<tr><td style="padding:8px 0;color:#334155;">Retail price</td><td style="padding:8px 0;text-align:right;font-weight:700;color:#2495D3;">{_fmt(retail)}</td></tr>'
+    if wholesale is not None:
+        rows += f'<tr><td style="padding:8px 0;color:#334155;">Wholesale price</td><td style="padding:8px 0;text-align:right;font-weight:700;color:#2495D3;">{_fmt(wholesale)}</td></tr>'
+    notes = f'<p style="color:#64748b;font-size:13px;margin-top:16px;">{quote.get("notes")}</p>' if quote.get("notes") else ""
+    cust = quote.get("customer_name") or "Customer"
+    return f"""
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-bottom:3px solid #2495D3;">
+        <tr><td style="padding:20px 24px;">
+          <div style="font-size:22px;font-weight:800;color:#0a0a0a;">Print <span style="color:#2495D3;">and</span> Save</div>
+          <div style="font-size:11px;letter-spacing:2px;color:#64748b;text-transform:uppercase;">Your Brand in Focus</div>
+        </td></tr>
+      </table>
+      <div style="padding:24px;">
+        <p style="color:#0a0a0a;font-size:15px;margin:0 0 4px;">Hi {cust},</p>
+        <p style="color:#334155;font-size:14px;margin:0 0 18px;">Here is your quote from Print and Save.</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
+          <tr><td style="padding:8px 0;color:#334155;">Service</td><td style="padding:8px 0;text-align:right;">{quote.get("module","")}</td></tr>
+          <tr><td style="padding:8px 0;color:#334155;">Description</td><td style="padding:8px 0;text-align:right;">{quote.get("title","")}</td></tr>
+          {rows}
+        </table>
+        {notes}
+        <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Prices in CAD. This quote is an estimate and may vary. Reply to this email to place your order.</p>
+      </div>
+    </div>
+    """
+
+class QuoteEmailIn(BaseModel):
+    recipient_email: EmailStr
+
+@api_router.post("/quotes/{quote_id}/email")
+async def email_quote(quote_id: str, body: QuoteEmailIn, user=Depends(get_current_user)):
+    q = {"_id": ObjectId(quote_id)}
+    if user.get("role") != "admin":
+        q["user_id"] = user["id"]
+    quote = await db.quotes.find_one(q)
+    if not quote:
+        raise HTTPException(404, "Quote not found")
+    quote = clean(quote)
+    html = build_quote_html(quote, user.get("role"))
+    payload = {
+        "to": [body.recipient_email],
+        "subject": f"Your quote from Print and Save — {quote.get('title','')}",
+        "html": html,
+        "from_name": os.environ["EMAIL_FROM_NAME"],
+        "contact_email": user["email"],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
+                                     headers={"X-Email-Key": os.environ["EMERGENT_EMAIL_KEY"]}, json=payload)
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Email send failed: {e.response.status_code} {e.response.text}")
+        raise HTTPException(status_code=502, detail="Failed to send email")
+    except Exception as e:
+        logger.error(f"Email send error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send email")
+    await db.quotes.update_one({"_id": ObjectId(quote_id)}, {"$set": {"emailed_to": body.recipient_email, "emailed_at": now_iso()}})
+    return {"status": "success", "message": f"Quote emailed to {body.recipient_email}"}
 
 @api_router.get("/dashboard")
 async def dashboard(user=Depends(get_current_user)):
