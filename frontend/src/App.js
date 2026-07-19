@@ -21,7 +21,7 @@ import Quotes from "@/pages/Quotes";
 
 function Protected({ children, adminOnly }) {
   const { user, ready } = useAuth();
-  if (!ready) return <div className="p-10 font-mono text-sm">Cargando…</div>;
+  if (!ready) return <div className="p-10 font-mono text-sm">Loading…</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/" replace />;
   return <Layout>{children}</Layout>;

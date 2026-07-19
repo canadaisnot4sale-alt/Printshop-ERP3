@@ -59,7 +59,8 @@ def reseller_sess():
 @pytest.fixture(scope="module")
 def client_user():
     """Create a fresh client via self-registration."""
-    email = f"TEST_client_{int(time.time())}@test.com"
+    import uuid
+    email = f"TEST_client_{int(time.time())}_{uuid.uuid4().hex[:8]}@test.com"
     r = requests.post(f"{API}/auth/register", json={"email": email, "password": "test123", "name": "TEST Client"})
     assert r.status_code == 200, r.text
     data = r.json()

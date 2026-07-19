@@ -9,19 +9,19 @@ import {
 } from "lucide-react";
 
 const CARDS = [
-  { to: "/paper", label: "Impresión Papel", desc: "Stocks, productos, imposición y precios", icon: FileText },
-  { to: "/booklet", label: "Booklets", desc: "Portada + interiores, encuadernado", icon: BookOpen },
-  { to: "/large-format", label: "Gran Formato", desc: "Rollos, nesting y tiling", icon: Ruler },
-  { to: "/stickers", label: "Stickers", desc: "1\"–8\", comparación de materiales", icon: Sticker },
-  { to: "/dtf", label: "DTF / Playeras", desc: "Impresión DTF + prenda + mano de obra", icon: Shirt },
-  { to: "/embroidery", label: "Bordados", desc: "Por puntadas + digitizado", icon: Sparkles },
-  { to: "/laser", label: "Láser", desc: "Material + corte + grabado", icon: Scissors },
-  { to: "/direct-print", label: "Impresión Directa", desc: "UV en hojas 4x8 / 5x10 + CNC", icon: PanelTop },
-  { to: "/channel-letters", label: "Channel Letters", desc: "Letras 6\"–48\" auto-calculadas", icon: Type },
-  { to: "/quotes", label: "Cotizaciones", desc: "Cotizaciones guardadas", icon: FolderOpen },
-  { to: "/equipment", label: "Equipos", desc: "Tintas y costo real de producción", icon: Printer, admin: true },
-  { to: "/users", label: "Usuarios", desc: "Roles: admin, cliente, revendedor", icon: Users, admin: true },
-  { to: "/settings", label: "Configuración", desc: "Markups, cargos, precios", icon: Settings, admin: true },
+  { to: "/paper", label: "Paper Printing", desc: "Stocks, products, imposition & pricing", icon: FileText },
+  { to: "/booklet", label: "Booklets", desc: "Cover + inside paper, binding", icon: BookOpen },
+  { to: "/large-format", label: "Large Format", desc: "Roll media, nesting & tiling", icon: Ruler },
+  { to: "/stickers", label: "Stickers", desc: "1\"–8\", material comparison", icon: Sticker },
+  { to: "/dtf", label: "DTF / Apparel", desc: "DTF print + garment + labor", icon: Shirt },
+  { to: "/embroidery", label: "Embroidery", desc: "Per stitch + digitizing", icon: Sparkles },
+  { to: "/laser", label: "Laser", desc: "Material + cut + engraving", icon: Scissors },
+  { to: "/direct-print", label: "Direct Print", desc: "UV on 4x8 / 5x10 sheets + CNC", icon: PanelTop },
+  { to: "/channel-letters", label: "Channel Letters", desc: "Auto-nested letter faces", icon: Type },
+  { to: "/quotes", label: "Quotes", desc: "Saved quotes", icon: FolderOpen },
+  { to: "/equipment", label: "Equipment", desc: "Ink & true production cost", icon: Printer, admin: true },
+  { to: "/users", label: "Users", desc: "Roles: admin, client, reseller", icon: Users, admin: true },
+  { to: "/settings", label: "Settings", desc: "Markups, charges, pricing", icon: Settings, admin: true },
 ];
 
 export default function Dashboard() {
@@ -33,17 +33,17 @@ export default function Dashboard() {
   const metrics = isAdmin
     ? [
         { label: "Paper Stocks", value: stats.paper_stocks, cap: 100 },
-        { label: "Productos", value: stats.products, cap: 250 },
-        { label: "Rollos + Hojas", value: (stats.roll_materials || 0) + (stats.sheet_materials || 0) },
-        { label: "Cotizaciones", value: stats.quotes },
+        { label: "Products", value: stats.products, cap: 250 },
+        { label: "Rolls + Sheets", value: (stats.roll_materials || 0) + (stats.sheet_materials || 0) },
+        { label: "Quotes", value: stats.quotes },
       ]
     : [
-        { label: "Productos", value: stats.products },
-        { label: "Materiales Rollo", value: stats.roll_materials },
-        { label: "Mis Cotizaciones", value: stats.quotes },
+        { label: "Products", value: stats.products },
+        { label: "Roll Materials", value: stats.roll_materials },
+        { label: "My Quotes", value: stats.quotes },
       ];
 
-  const roleTag = { admin: "Administrador", client: "Cliente · precios retail", reseller: "Revendedor · precios wholesale" }[user?.role];
+  const roleTag = { admin: "Administrator", client: "Client · retail pricing", reseller: "Reseller · wholesale pricing" }[user?.role];
 
   return (
     <div data-testid="dashboard-page">
@@ -54,12 +54,12 @@ export default function Dashboard() {
             <div key={m.label} className="bg-white p-6">
               <div className="text-xs font-mono uppercase tracking-widest text-slate-500">{m.label}</div>
               <div className="num text-4xl font-black text-[#2495D3] mt-2 tabular">{m.value ?? 0}</div>
-              {m.cap && <div className="text-xs text-slate-400 mt-1 font-mono">de {m.cap} máx</div>}
+              {m.cap && <div className="text-xs text-slate-400 mt-1 font-mono">of {m.cap} max</div>}
             </div>
           ))}
         </div>
 
-        <h2 className="font-head font-bold text-lg mb-4">Módulos</h2>
+        <h2 className="font-head font-bold text-lg mb-4">Modules</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {CARDS.filter((c) => !c.admin || isAdmin).map((c) => (
             <Link

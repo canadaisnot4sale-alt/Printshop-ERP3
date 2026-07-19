@@ -150,6 +150,21 @@ class SheetMaterial(BaseModel):
     cnc_capable: bool = True
     channel_capable: bool = False
 
+class JobPreset(BaseModel):
+    name: str
+    module: str = "generic"
+    sizes: List[dict] = []
+
+class LaserPreset(BaseModel):
+    name: str
+    material: str = ""
+    power: float = 100.0
+    speed: float = 100.0
+    time_min: float = 0.0
+    thickness: float = 0.125
+    passes: int = 1
+    sizes: List[dict] = []
+
 class Settings(BaseModel):
     retail_markup_pct: float = 200.0
     wholesale_markup_pct: float = 100.0
@@ -182,6 +197,17 @@ class Settings(BaseModel):
     channel_letter_width_ratio: float = 0.7
     channel_return_depth_in: float = 4.0
     channel_letter_labor: float = 12.0
+    channel_fixture_margin_in: float = 1.0
+    # Sticker finishing
+    sticker_laminate_per_sqft: float = 0.75
+    sticker_kisscut_per_sqft: float = 0.40
+    sticker_diecut_per_sqft: float = 0.90
+    sticker_individual_cut_per_piece: float = 0.10
+    # DTF apparel roll
+    dtf_roll_width: float = 12.0
+    dtf_gutter_in: float = 0.25
+    # Embroidery digitizing (1-3 logos, optional)
+    embroidery_digitizing_1_3: float = 69.0
     currency: str = "CAD"
 
 SHEET_SIZES = {
@@ -255,6 +281,34 @@ def scrub(data, role):
             return [walk(x) for x in o]
         return o
     return walk(data)
+
+def nest_pieces(items, bin_width, max_rects=400):
+    """Shelf (next-fit-decreasing) nesting on a strip of given width.
+    items: [{w,h,qty,label}]. Returns (placements, used_length, area_sqft)."""
+    rects = []
+    for it in items:
+        w = float(it.get("w", 0)); h = float(it.get("h", 0))
+        qty = int(it.get("qty", 1) or 1)
+        label = it.get("label", "")
+        for _ in range(qty):
+            rects.append({"w": w, "h": h, "label": label})
+            if len(rects) >= max_rects:
+                break
+    # orient each piece so it fits within bin_width when possible
+    for r in rects:
+        if r["w"] > bin_width and r["h"] <= bin_width:
+            r["w"], r["h"] = r["h"], r["w"]
+    rects.sort(key=lambda r: -r["h"])
+    placed = []
+    x = 0.0; y = 0.0; shelf_h = 0.0
+    for r in rects:
+        if x + r["w"] > bin_width + 1e-6 and x > 0:
+            y += shelf_h; x = 0.0; shelf_h = 0.0
+        placed.append({"x": round(x, 2), "y": round(y, 2), "w": round(r["w"], 2), "h": round(r["h"], 2), "label": r["label"]})
+        x += r["w"]; shelf_h = max(shelf_h, r["h"])
+    used_length = round(y + shelf_h, 2)
+    area_sqft = round(bin_width * used_length / 144.0, 3)
+    return placed, used_length, area_sqft
 
 def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19"):
     sw, sh = SHEET_SIZES.get(sheet_key, (13, 19))
@@ -417,6 +471,32 @@ register_crud("garments", Garment, "garments")
 register_crud("laser-materials", LaserMaterial, "laser_materials")
 register_crud("sheet-materials", SheetMaterial, "sheet_materials")
 
+# Presets are per-user convenience (any authenticated user manages their own)
+def register_user_crud(path, model, collection):
+    coll = db[collection]
+
+    @api_router.get(f"/{path}")
+    async def _list(user=Depends(get_current_user)):
+        items = await coll.find({"user_id": user["id"]}).sort("created_at", -1).to_list(500)
+        return [clean(i) for i in items]
+
+    @api_router.post(f"/{path}")
+    async def _create(body: model, user=Depends(get_current_user)):
+        doc = body.model_dump()
+        doc["user_id"] = user["id"]
+        doc["created_at"] = now_iso()
+        res = await coll.insert_one(doc)
+        doc["_id"] = res.inserted_id
+        return clean(doc)
+
+    @api_router.delete(f"/{path}/{{item_id}}")
+    async def _delete(item_id: str, user=Depends(get_current_user)):
+        await coll.delete_one({"_id": ObjectId(item_id), "user_id": user["id"]})
+        return {"ok": True}
+
+register_user_crud("job-presets", JobPreset, "job_presets")
+register_user_crud("laser-presets", LaserPreset, "laser_presets")
+
 # ---------------- User management (admin) ----------------
 ROLES = ["admin", "client", "reseller"]
 
@@ -563,7 +643,11 @@ async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
             for k in total:
                 total[k] += est[k]
         total = {k: round(v, 2) for k, v in total.items()}
-        results.append({"material": m, "sizes": size_rows, "total": total})
+        placed, used_len, area = nest_pieces(
+            [{"w": s.width, "h": s.height, "qty": s.qty, "label": f'{s.width}x{s.height}'} for s in body.sizes],
+            m["printable_width"])
+        layout = {"bin_width": m["printable_width"], "used_length": used_len, "placements": placed}
+        results.append({"material": m, "sizes": size_rows, "total": total, "layout": layout})
     results.sort(key=lambda r: r["total"]["selling_price"])
     return scrub({"results": results, "mode": body.mode}, user["role"])
 
@@ -571,6 +655,8 @@ class StickerCalcIn(BaseModel):
     width: float = 3.0
     height: float = 3.0
     qty: int = 100
+    finishing: str = "kisscut"  # kisscut | diecut | individual
+    laminate: bool = False
 
 @api_router.post("/calc/sticker")
 async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
@@ -578,14 +664,36 @@ async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
     mats = [clean(m) for m in await db.roll_materials.find({"sticker_compatible": True}).to_list(200)]
     results = []
     for m in mats:
-        est = lf_estimate(m, settings, body.width, body.height, body.qty, "print_diecut", False)
-        est["width"] = body.width
-        est["height"] = body.height
-        est["qty"] = body.qty
-        est["unit_price"] = round(est["selling_price"] / body.qty, 3) if body.qty else 0
-        results.append(est)
-    results.sort(key=lambda r: r["selling_price"])
-    return scrub({"results": results}, user["role"])
+        printable = m["printable_width"]
+        placed, used_len, area = nest_pieces([{"w": body.width, "h": body.height, "qty": body.qty, "label": "sticker"}], printable)
+        min_area = (printable * m["min_linear_feet"] * 12.0) / 144.0
+        billed_area = max(area, min_area)
+        material_cost = billed_area * m["price_per_sqft"]
+        printing_cost = billed_area * settings["lf_print_per_sqft"]
+        finishing_cost = 0.0
+        if body.finishing == "kisscut":
+            finishing_cost = billed_area * settings["sticker_kisscut_per_sqft"]
+        elif body.finishing == "diecut":
+            finishing_cost = billed_area * settings["sticker_diecut_per_sqft"]
+        elif body.finishing == "individual":
+            finishing_cost = body.qty * settings["sticker_individual_cut_per_piece"]
+        lam_cost = billed_area * settings["sticker_laminate_per_sqft"] if body.laminate else 0.0
+        base = material_cost + printing_cost + finishing_cost + lam_cost
+        results.append(scrub({
+            "material": m.get("name"), "material_id": m.get("id"),
+            "width": body.width, "height": body.height, "qty": body.qty,
+            "finishing": body.finishing, "laminate": body.laminate,
+            "billed_sqft": round(billed_area, 3),
+            "material_cost": round(material_cost, 2), "printing_cost": round(printing_cost, 2),
+            "extra_cost": round(finishing_cost + lam_cost, 2),
+            "selling_price": markup_price(base, settings["retail_markup_pct"]),
+            "wholesale_price": markup_price(base, settings["wholesale_markup_pct"]),
+            "unit_price": round(markup_price(base, settings["retail_markup_pct"]) / body.qty, 3) if body.qty else 0,
+            "wholesale_unit": round(markup_price(base, settings["wholesale_markup_pct"]) / body.qty, 3) if body.qty else 0,
+            "layout": {"bin_width": printable, "used_length": used_len, "placements": placed},
+        }, user["role"]))
+    results.sort(key=lambda r: r.get("selling_price", r.get("wholesale_price", 0)))
+    return {"results": results}
 
 @api_router.get("/calc/equipment/{eq_id}")
 async def calc_equipment(eq_id: str, user=Depends(require_admin)):
@@ -596,10 +704,14 @@ async def calc_equipment(eq_id: str, user=Depends(require_admin)):
     return {"equipment": eq, "cost": equipment_cost(eq)}
 
 # ---------------- New module calc engines ----------------
+class Placement(BaseModel):
+    label: str = ""
+    w: float = 0
+    h: float = 0
+
 class DTFCalcIn(BaseModel):
     garment_id: Optional[str] = None
-    print_width: float = 10.0
-    print_height: float = 12.0
+    placements: List[Placement] = []
     quantity: int = 12
 
 @api_router.post("/calc/dtf")
@@ -612,25 +724,34 @@ async def calc_dtf(body: DTFCalcIn, user=Depends(get_current_user)):
         if g:
             garment = clean(g)
             g_cost = garment["cost_each"]
-    area_sqft = (body.print_width * body.print_height) / 144.0
-    dtf_cost = area_sqft * s["dtf_per_sqft"]
+    roll_w = s["dtf_roll_width"]
+    items = [{"w": p.w, "h": p.h, "qty": 1, "label": p.label} for p in body.placements if p.w > 0 and p.h > 0]
+    placed, used_len, area_per_garment = nest_pieces(items, roll_w)
+    dtf_cost = area_per_garment * s["dtf_per_sqft"]
     labor = s["dtf_labor_per_shirt"]
     unit_base = g_cost + dtf_cost + labor
     base = unit_base * body.quantity
     return scrub({
-        "garment": garment, "print_area_sqft": round(area_sqft, 3), "quantity": body.quantity,
+        "garment": garment, "roll_width": roll_w, "section_length": used_len,
+        "area_per_garment_sqft": area_per_garment, "quantity": body.quantity,
         "garment_cost": round(g_cost, 2), "dtf_cost": round(dtf_cost, 2), "labor": round(labor, 2),
         "base_cost": round(base, 2),
         "retail_total": markup_price(base, s["retail_markup_pct"]),
         "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
         "unit_price": round(markup_price(base, s["retail_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
         "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+        "layout": {"bin_width": roll_w, "used_length": used_len, "placements": placed},
     }, user["role"])
+
+class EmbPlacement(BaseModel):
+    label: str = ""
+    stitch_count: int = 0
 
 class EmbroideryCalcIn(BaseModel):
     garment_id: Optional[str] = None
-    stitch_count: int = 8000
+    placements: List[EmbPlacement] = []
     quantity: int = 12
+    digitizing: bool = False
 
 @api_router.post("/calc/embroidery")
 async def calc_embroidery(body: EmbroideryCalcIn, user=Depends(get_current_user)):
@@ -642,12 +763,14 @@ async def calc_embroidery(body: EmbroideryCalcIn, user=Depends(get_current_user)
         if g:
             garment = clean(g)
             g_cost = garment["cost_each"]
-    emb = (body.stitch_count / 1000.0) * s["embroidery_per_1000_stitches"]
-    setup = s["embroidery_digitizing_setup"]
+    total_stitches = sum(max(p.stitch_count, 0) for p in body.placements)
+    emb = (total_stitches / 1000.0) * s["embroidery_per_1000_stitches"]
+    setup = s["embroidery_digitizing_1_3"] if body.digitizing else 0.0
     unit_base = g_cost + emb
     base = unit_base * body.quantity + setup
     return scrub({
-        "garment": garment, "stitch_count": body.stitch_count, "quantity": body.quantity,
+        "garment": garment, "total_stitches": total_stitches, "logos": len(body.placements),
+        "quantity": body.quantity, "digitizing": body.digitizing,
         "garment_cost": round(g_cost, 2), "embroidery_cost": round(emb, 2), "setup": round(setup, 2),
         "base_cost": round(base, 2),
         "retail_total": markup_price(base, s["retail_markup_pct"]),
@@ -656,44 +779,48 @@ async def calc_embroidery(body: EmbroideryCalcIn, user=Depends(get_current_user)
         "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
     }, user["role"])
 
+class JobSize(BaseModel):
+    label: str = ""
+    w: float = 0
+    h: float = 0
+    qty: int = 1
+
 class LaserCalcIn(BaseModel):
     material_id: Optional[str] = None
-    piece_width: float = 6.0
-    piece_height: float = 6.0
+    sizes: List[JobSize] = []
     cut_length_in: float = 24.0
     engrave_area_sqin: float = 4.0
-    quantity: int = 10
 
 @api_router.post("/calc/laser")
 async def calc_laser(body: LaserCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
     q = {"_id": {"$in": [ObjectId(body.material_id)]}} if body.material_id else {}
     mats = [clean(m) for m in await db.laser_materials.find(q).to_list(200)]
+    total_qty = sum(int(z.qty) for z in body.sizes) or 1
+    items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
     results = []
     for m in mats:
-        n_up = pieces_per_sheet(m["sheet_width"], m["sheet_height"], body.piece_width, body.piece_height)
-        n_up = max(n_up, 1)
-        sheets = math.ceil(body.quantity / n_up)
+        placed, used_len, _ = nest_pieces(items, m["sheet_width"])
+        sheets = max(math.ceil(used_len / m["sheet_height"]), 1) if used_len else 1
         sheet_cost = sheets * m["cost_per_sheet"]
-        cut_cost = (body.cut_length_in / 12.0) * s["laser_cut_per_linear_ft"] * body.quantity
-        engrave_cost = body.engrave_area_sqin * s["laser_engraving_per_sqin"] * body.quantity
+        cut_cost = (body.cut_length_in / 12.0) * s["laser_cut_per_linear_ft"]
+        engrave_cost = body.engrave_area_sqin * s["laser_engraving_per_sqin"]
         setup = s["laser_setup"]
         base = sheet_cost + cut_cost + engrave_cost + setup
         results.append(scrub({
-            "material": m, "n_up": n_up, "sheets": sheets, "quantity": body.quantity,
+            "material": m, "sheets": sheets, "quantity": total_qty,
             "sheet_cost": round(sheet_cost, 2), "cut_cost": round(cut_cost, 2),
             "engrave_cost": round(engrave_cost, 2), "setup": round(setup, 2), "base_cost": round(base, 2),
             "retail_total": markup_price(base, s["retail_markup_pct"]),
             "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+            "layout": {"bin_width": m["sheet_width"], "sheet_height": m["sheet_height"], "used_length": used_len, "placements": placed},
         }, user["role"]))
     return {"results": results}
 
 class DirectPrintCalcIn(BaseModel):
     material_ids: Optional[List[str]] = None
     sheet_size: str = "4x8"
-    piece_width: float = 24.0
-    piece_height: float = 18.0
-    quantity: int = 1
+    sizes: List[JobSize] = []
     cnc: bool = False
     cnc_cut_length_in: float = 0.0
 
@@ -703,35 +830,42 @@ async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_use
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
     q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
     mats = [clean(m) for m in await db.sheet_materials.find(q).to_list(200)]
+    items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
+    total_qty = sum(int(z.qty) for z in body.sizes) or 1
+    print_area = sum((z.w * z.h) / 144.0 * int(z.qty) for z in body.sizes)
     results = []
     sheet_area_sqft = (sw * sh) / 144.0
     for m in mats:
-        n_up = pieces_per_sheet(sw, sh, body.piece_width, body.piece_height)
-        n_up = max(n_up, 1)
-        sheets = math.ceil(body.quantity / n_up)
+        placed, used_len, _ = nest_pieces(items, sw)
+        sheets = max(math.ceil(used_len / sh), 1) if used_len else 1
         sheet_cost = sheets * sheet_area_sqft * m["price_per_sqft"]
-        print_area = (body.piece_width * body.piece_height) / 144.0 * body.quantity
         print_cost = print_area * s["directprint_per_sqft"]
         cnc_cost = 0.0
         if body.cnc and m.get("cnc_capable"):
-            cnc_cost = (body.cnc_cut_length_in / 12.0) * s["cnc_cut_per_linear_ft"] * body.quantity
+            cnc_cost = (body.cnc_cut_length_in / 12.0) * s["cnc_cut_per_linear_ft"]
         base = sheet_cost + print_cost + cnc_cost
         results.append(scrub({
-            "material": m, "sheet_size": body.sheet_size, "n_up": n_up, "sheets": sheets,
-            "quantity": body.quantity, "print_sqft": round(print_area, 2),
+            "material": m, "sheet_size": body.sheet_size, "sheets": sheets, "quantity": total_qty,
+            "print_sqft": round(print_area, 2),
             "sheet_cost": round(sheet_cost, 2), "print_cost": round(print_cost, 2),
             "cnc_cost": round(cnc_cost, 2), "base_cost": round(base, 2),
             "retail_total": markup_price(base, s["retail_markup_pct"]),
             "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+            "layout": {"bin_width": sw, "sheet_height": sh, "used_length": used_len, "placements": placed},
         }, user["role"]))
     results.sort(key=lambda r: r.get("retail_total", r.get("wholesale_total", 0)))
     return {"results": results, "sheet_size": body.sheet_size}
 
+class Letter(BaseModel):
+    width: float = 12.0
+    height: float = 12.0
+    qty: int = 1
+    label: str = ""
+
 class ChannelCalcIn(BaseModel):
     material_ids: Optional[List[str]] = None
     sheet_size: str = "4x8"
-    letter_height: float = 24.0
-    quantity: int = 10
+    letters: List[Letter] = []
 
 @api_router.post("/calc/channelletters")
 async def calc_channel(body: ChannelCalcIn, user=Depends(get_current_user)):
@@ -739,45 +873,51 @@ async def calc_channel(body: ChannelCalcIn, user=Depends(get_current_user)):
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
     q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
     mats = [clean(m) for m in await db.sheet_materials.find({**q, "channel_capable": True}).to_list(200)]
-    lh = body.letter_height
-    lw = lh * s["channel_letter_width_ratio"]
+    margin = s["channel_fixture_margin_in"]
     ret_depth = s["channel_return_depth_in"]
-    perimeter = 2 * (lh + lw)
+    # rectangle with fixture margin on every side
+    items = [{"w": l.width + 2 * margin, "h": l.height + 2 * margin, "qty": l.qty,
+              "label": l.label or f'{l.width}x{l.height}'} for l in body.letters if l.width > 0 and l.height > 0]
+    total_letters = sum(int(l.qty) for l in body.letters) or 0
+    perimeter_total = sum(2 * (l.width + l.height) * int(l.qty) for l in body.letters)
     results = []
     sheet_area_sqft = (sw * sh) / 144.0
     for m in mats:
-        faces_per_sheet = max(pieces_per_sheet(sw, sh, lw, lh), 1)
-        face_sheets = math.ceil(body.quantity / faces_per_sheet)
-        # returns: strips of ret_depth width along the sheet; approximate linear inches per sheet
-        return_linear_per_sheet = (sw // ret_depth) * sh
-        return_needed = perimeter * body.quantity
-        return_sheets = math.ceil(return_needed / return_linear_per_sheet) if return_linear_per_sheet else 0
+        placed, used_len, _ = nest_pieces(items, sw)
+        face_sheets = max(math.ceil(used_len / sh), 1) if used_len else 0
+        return_linear_per_sheet = (sw // ret_depth) * sh if ret_depth else 0
+        return_sheets = math.ceil(perimeter_total / return_linear_per_sheet) if return_linear_per_sheet else 0
         face_cost = face_sheets * sheet_area_sqft * m["price_per_sqft"]
         return_cost = return_sheets * sheet_area_sqft * m["price_per_sqft"]
-        labor = s["channel_letter_labor"] * body.quantity
+        labor = s["channel_letter_labor"] * total_letters
         base = face_cost + return_cost + labor
         results.append(scrub({
-            "material": m, "letter_height": lh, "letter_width": round(lw, 1), "quantity": body.quantity,
-            "faces_per_sheet": faces_per_sheet, "face_sheets": face_sheets, "return_sheets": return_sheets,
+            "material": m, "quantity": total_letters, "fixture_margin": margin,
+            "face_sheets": face_sheets, "return_sheets": return_sheets,
             "face_cost": round(face_cost, 2), "return_cost": round(return_cost, 2), "labor": round(labor, 2),
             "base_cost": round(base, 2),
             "retail_total": markup_price(base, s["retail_markup_pct"]),
             "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
-            "unit_price": round(markup_price(base, s["retail_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
-            "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / body.quantity, 2) if body.quantity else 0,
+            "unit_price": round(markup_price(base, s["retail_markup_pct"]) / total_letters, 2) if total_letters else 0,
+            "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / total_letters, 2) if total_letters else 0,
+            "layout": {"bin_width": sw, "sheet_height": sh, "used_length": used_len, "placements": placed},
         }, user["role"]))
     results.sort(key=lambda r: r.get("retail_total", r.get("wholesale_total", 0)))
     return {"results": results, "sheet_size": body.sheet_size, "heights": CHANNEL_HEIGHTS}
+
 
 # ---------------- Saved quotes ----------------
 class QuoteIn(BaseModel):
     module: str
     title: str
     summary: dict
+    customer_name: str = ""
+    notes: str = ""
 
 @api_router.post("/quotes")
 async def save_quote(body: QuoteIn, user=Depends(get_current_user)):
     doc = {"module": body.module, "title": body.title, "summary": body.summary,
+           "customer_name": body.customer_name, "notes": body.notes,
            "user_id": user["id"], "user_email": user["email"], "created_at": now_iso()}
     res = await db.quotes.insert_one(doc)
     doc["_id"] = res.inserted_id

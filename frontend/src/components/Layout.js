@@ -7,24 +7,24 @@ import {
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutGrid, testid: "nav-dashboard" },
-  { section: "Estimación" },
-  { to: "/paper", label: "Impresión Papel", icon: FileText, testid: "nav-paper" },
+  { section: "Estimating" },
+  { to: "/paper", label: "Paper Printing", icon: FileText, testid: "nav-paper" },
   { to: "/booklet", label: "Booklets", icon: BookOpen, testid: "nav-booklet" },
-  { to: "/large-format", label: "Gran Formato", icon: Ruler, testid: "nav-large-format" },
+  { to: "/large-format", label: "Large Format", icon: Ruler, testid: "nav-large-format" },
   { to: "/stickers", label: "Stickers", icon: Sticker, testid: "nav-stickers" },
-  { to: "/dtf", label: "DTF / Playeras", icon: Shirt, testid: "nav-dtf" },
-  { to: "/embroidery", label: "Bordados", icon: Sparkles, testid: "nav-embroidery" },
-  { to: "/laser", label: "Láser", icon: Scissors, testid: "nav-laser" },
-  { to: "/direct-print", label: "Impresión Directa", icon: PanelTop, testid: "nav-direct-print" },
+  { to: "/dtf", label: "DTF / Apparel", icon: Shirt, testid: "nav-dtf" },
+  { to: "/embroidery", label: "Embroidery", icon: Sparkles, testid: "nav-embroidery" },
+  { to: "/laser", label: "Laser", icon: Scissors, testid: "nav-laser" },
+  { to: "/direct-print", label: "Direct Print", icon: PanelTop, testid: "nav-direct-print" },
   { to: "/channel-letters", label: "Channel Letters", icon: Type, testid: "nav-channel-letters" },
-  { to: "/quotes", label: "Mis Cotizaciones", icon: FolderOpen, testid: "nav-quotes" },
-  { section: "Administración", admin: true },
-  { to: "/equipment", label: "Equipos", icon: Printer, testid: "nav-equipment", admin: true },
-  { to: "/users", label: "Usuarios", icon: UsersIcon, testid: "nav-users", admin: true },
-  { to: "/settings", label: "Configuración", icon: Cog, testid: "nav-settings", admin: true },
+  { to: "/quotes", label: "My Quotes", icon: FolderOpen, testid: "nav-quotes" },
+  { section: "Administration", admin: true },
+  { to: "/equipment", label: "Equipment", icon: Printer, testid: "nav-equipment", admin: true },
+  { to: "/users", label: "Users", icon: UsersIcon, testid: "nav-users", admin: true },
+  { to: "/settings", label: "Settings", icon: Cog, testid: "nav-settings", admin: true },
 ];
 
-const ROLE_LABEL = { admin: "Administrador", client: "Cliente (Retail)", reseller: "Revendedor (Wholesale)" };
+const ROLE_LABEL = { admin: "Administrator", client: "Client (Retail)", reseller: "Reseller (Wholesale)" };
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -73,11 +73,21 @@ export default function Layout({ children }) {
             onClick={async () => { await logout(); nav("/login"); }}
             className="flex items-center gap-2 text-sm text-slate-600 hover:text-red-500 transition-colors"
           >
-            <LogOut size={15} /> Cerrar sesión
+            <LogOut size={15} /> Sign out
           </button>
         </div>
       </aside>
-      <main className="flex-1 ml-60 min-h-screen print:ml-0">{children}</main>
+      <main className="flex-1 ml-60 min-h-screen print:ml-0">
+        <div className="hidden print:flex items-center gap-3 px-8 py-4 border-b-2 border-[#2495D3] mb-2">
+          <img src="/logo.webp" alt="Print and Save" className="w-12 h-12 object-contain" />
+          <div>
+            <div className="font-head font-black text-xl">Print and Save</div>
+            <div className="text-xs text-slate-500 font-mono tracking-widest uppercase">Your Brand in Focus</div>
+          </div>
+          <div className="ml-auto text-xs text-slate-500 font-mono">Quote · {new Date().toLocaleDateString()}</div>
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

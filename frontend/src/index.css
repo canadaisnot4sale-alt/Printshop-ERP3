@@ -46,3 +46,9 @@ h1,h2,h3,h4,.font-head { font-family: 'Chivo', sans-serif; }
 
 .tabular { font-variant-numeric: tabular-nums; }
 ::selection { background: #2495D3; color: #fff; }
+
+@media print {
+  body { background: #fff !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sticky { position: static !important; }
+}

@@ -43,40 +43,50 @@ const GROUPS = [
     ],
   },
   {
-    title: "DTF / Playeras",
+    title: "DTF / Apparel",
     fields: [
       { name: "dtf_per_sqft", label: "DTF / ft² (CAD)" },
-      { name: "dtf_labor_per_shirt", label: "Mano de obra / playera (CAD)" },
+      { name: "dtf_labor_per_shirt", label: "Labor / shirt (CAD)" },
+      { name: "dtf_roll_width", label: "DTF roll width (in)" },
     ],
   },
   {
-    title: "Bordados",
+    title: "Embroidery",
     fields: [
-      { name: "embroidery_per_1000_stitches", label: "Precio / 1,000 puntadas (CAD)" },
-      { name: "embroidery_digitizing_setup", label: "Digitizado / Setup (CAD)" },
+      { name: "embroidery_per_1000_stitches", label: "Per 1,000 stitches (CAD)" },
+      { name: "embroidery_digitizing_1_3", label: "Digitizing (1–3 logos) (CAD)" },
     ],
   },
   {
-    title: "Láser",
+    title: "Laser",
     fields: [
-      { name: "laser_cut_per_linear_ft", label: "Corte / pie lineal (CAD)" },
-      { name: "laser_engraving_per_sqin", label: "Grabado / in² (CAD)" },
-      { name: "laser_setup", label: "Setup láser (CAD)" },
+      { name: "laser_cut_per_linear_ft", label: "Cut / linear ft (CAD)" },
+      { name: "laser_engraving_per_sqin", label: "Engraving / in² (CAD)" },
+      { name: "laser_setup", label: "Laser setup (CAD)" },
     ],
   },
   {
-    title: "Impresión Directa y CNC",
+    title: "Direct Print & CNC",
     fields: [
-      { name: "directprint_per_sqft", label: "Impresión UV / ft² (CAD)" },
-      { name: "cnc_cut_per_linear_ft", label: "Corte CNC / pie lineal (CAD)" },
+      { name: "directprint_per_sqft", label: "UV print / ft² (CAD)" },
+      { name: "cnc_cut_per_linear_ft", label: "CNC cut / linear ft (CAD)" },
     ],
   },
   {
     title: "Channel Letters",
     fields: [
-      { name: "channel_letter_width_ratio", label: "Relación ancho/alto letra" },
-      { name: "channel_return_depth_in", label: "Profundidad retorno (in)" },
-      { name: "channel_letter_labor", label: "Mano de obra / letra (CAD)" },
+      { name: "channel_return_depth_in", label: "Return depth (in)" },
+      { name: "channel_fixture_margin_in", label: "Fixture margin per side (in)" },
+      { name: "channel_letter_labor", label: "Labor / letter (CAD)" },
+    ],
+  },
+  {
+    title: "Sticker Finishing",
+    fields: [
+      { name: "sticker_kisscut_per_sqft", label: "Kiss-cut / ft² (CAD)" },
+      { name: "sticker_diecut_per_sqft", label: "Die-cut / ft² (CAD)" },
+      { name: "sticker_individual_cut_per_piece", label: "Individual cut / piece (CAD)" },
+      { name: "sticker_laminate_per_sqft", label: "Lamination / ft² (CAD)" },
     ],
   },
 ];

@@ -3,6 +3,7 @@ import api, { apiErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
+import NestingCanvas from "@/components/NestingCanvas";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -82,9 +83,9 @@ export default function LargeFormat() {
       <div className="p-8">
         <Tabs defaultValue="estimate">
           <TabsList className="rounded-sm">
-            <TabsTrigger value="estimate" data-testid="tab-estimate">Estimación</TabsTrigger>
-            {isAdmin && <TabsTrigger value="materials" data-testid="tab-materials">Materiales Rollo</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="presets" data-testid="tab-presets">Presets de Tamaño</TabsTrigger>}
+            <TabsTrigger value="estimate" data-testid="tab-estimate">Estimating</TabsTrigger>
+            {isAdmin && <TabsTrigger value="materials" data-testid="tab-materials">Roll Materials</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="presets" data-testid="tab-presets">Size Presets</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="estimate" className="mt-6 grid lg:grid-cols-12 gap-6">
@@ -154,6 +155,7 @@ export default function LargeFormat() {
                           </div>
                         ))}
                       </div>
+                      {r.layout && <NestingCanvas layout={r.layout} />}
                       {r.total.material_cost != null && (
                         <div className="flex justify-between text-xs text-slate-500 border-t border-slate-100 pt-2 num">
                           <span>Material {money(r.total.material_cost)} · Impresión {money(r.total.printing_cost)}</span>

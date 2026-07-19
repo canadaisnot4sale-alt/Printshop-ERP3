@@ -8,9 +8,9 @@ import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
 const ROLES = [
-  { v: "admin", l: "Administrador" },
-  { v: "client", l: "Cliente (Retail)" },
-  { v: "reseller", l: "Revendedor (Wholesale)" },
+  { v: "admin", l: "Administrator" },
+  { v: "client", l: "Client (Retail)" },
+  { v: "reseller", l: "Reseller (Wholesale)" },
 ];
 
 export default function Users() {
@@ -21,25 +21,25 @@ export default function Users() {
   useEffect(() => { load(); }, []);
 
   const changeRole = async (id, role) => {
-    try { await api.put(`/users/${id}/role`, { role }); toast.success("Rol actualizado"); load(); }
+    try { await api.put(`/users/${id}/role`, { role }); toast.success("Role updated"); load(); }
     catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
   const remove = async (id) => {
-    try { await api.delete(`/users/${id}`); toast.success("Usuario eliminado"); load(); }
+    try { await api.delete(`/users/${id}`); toast.success("User deleted"); load(); }
     catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
   return (
     <div data-testid="users-page">
-      <PageHeader title="Usuarios" subtitle="Asigna roles: Administrador, Cliente (retail) o Revendedor (wholesale)" />
+      <PageHeader title="Users" subtitle="Assign roles: Administrator, Client (retail) or Reseller (wholesale)" />
       <div className="p-8">
         <div className="border border-slate-200 rounded-sm overflow-hidden bg-white">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="text-left px-4 py-2.5 text-xs font-mono uppercase tracking-widest text-slate-500">Nombre</th>
+                <th className="text-left px-4 py-2.5 text-xs font-mono uppercase tracking-widest text-slate-500">Name</th>
                 <th className="text-left px-4 py-2.5 text-xs font-mono uppercase tracking-widest text-slate-500">Email</th>
-                <th className="text-left px-4 py-2.5 text-xs font-mono uppercase tracking-widest text-slate-500">Rol</th>
+                <th className="text-left px-4 py-2.5 text-xs font-mono uppercase tracking-widest text-slate-500">Role</th>
                 <th className="w-16"></th>
               </tr>
             </thead>
@@ -50,7 +50,7 @@ export default function Users() {
                   <td className="px-4 py-2.5 text-slate-600">{u.email}</td>
                   <td className="px-4 py-2.5">
                     {u.id === user.id ? (
-                      <Badge className="bg-[#2495D3] rounded-sm">Tú (Admin)</Badge>
+                      <Badge className="bg-[#2495D3] rounded-sm">You (Admin)</Badge>
                     ) : (
                       <Select value={u.role} onValueChange={(v) => changeRole(u.id, v)}>
                         <SelectTrigger data-testid={`role-select-${u.email}`} className="rounded-sm w-52 h-9"><SelectValue /></SelectTrigger>
