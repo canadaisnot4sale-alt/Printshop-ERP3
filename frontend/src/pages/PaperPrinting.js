@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money, num } from "@/lib/format";
+import { PricingPanel } from "@/components/Metric";
 import { toast } from "sonner";
 import { Calculator, Layers, FileStack, DollarSign, Tag } from "lucide-react";
 
@@ -168,19 +169,14 @@ export default function PaperPrinting() {
                     <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col">
                       <div className="text-xs font-mono uppercase tracking-widest text-slate-500">Selected Paper</div>
                       <div className="font-head font-bold text-lg mt-1">{selectedStock.stock.name}</div>
-                      <div className="mt-auto pt-4 space-y-2">
-                        {retailOf(focusRow) != null && (
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-xs text-slate-500">Retail ({focusQty} · {side.replace("_", "/")})</span>
-                            <span className="num text-2xl font-black text-[#2495D3]">{money(retailOf(focusRow))}</span>
-                          </div>
-                        )}
-                        {wholesaleOf(focusRow) != null && (
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-xs text-slate-500">Wholesale</span>
-                            <span className="num text-lg font-bold text-slate-700">{money(wholesaleOf(focusRow))}</span>
-                          </div>
-                        )}
+                      <div className="mt-auto pt-4">
+                        <PricingPanel r={{
+                          base_cost: focusRow?.[`base_cost_${side}`],
+                          retail_total: focusRow?.[`customer_price_${side}`],
+                          wholesale_total: focusRow?.[`wholesale_price_${side}`],
+                          unit_price: focusRow?.[`retail_unit_${side}`],
+                          wholesale_unit: focusRow?.[`wholesale_unit_${side}`],
+                        }} />
                       </div>
                       <div className="mt-4"><SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} /></div>
                     </div>

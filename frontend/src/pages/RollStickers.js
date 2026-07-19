@@ -3,8 +3,8 @@ import api, { apiErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
-import { TotalsBlock, CostRow } from "@/components/Totals";
-import { Metric, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
+import { CostRow } from "@/components/Totals";
+import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -91,7 +91,7 @@ export default function RollStickers() {
                     <CostRow label="Material (rolls)" value={res.material_cost} />
                     <CostRow label="Ink + cleaning" value={res.ink_cost} />
                     <CostRow label="Labor" value={res.labor} />
-                    <TotalsBlock r={res} />
+                    <PricingPanel r={res} className="mt-3" />
                     <div className="mt-3 flex justify-end"><SaveQuoteBar module="Roll Stickers" title={`Roll Stickers ${res.material.name} x${res.quantity}`} summary={res} /></div>
                   </div>
                 </div>

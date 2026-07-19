@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import api, { apiErr } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
-import { Metric, ConfigCard, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
-import { CostRow, TotalsBlock } from "@/components/Totals";
+import { Metric, ConfigCard, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
+import { CostRow } from "@/components/Totals";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -112,7 +112,7 @@ export default function Booklet() {
                 </div>
                 <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col">
                   <SectionLabel>{res.cover?.name} · {res.inside?.name}</SectionLabel>
-                  <div className="mt-auto"><TotalsBlock r={res} /></div>
+                  <div className="mt-auto"><PricingPanel r={res} /></div>
                   <div className="mt-4 flex justify-end">
                     <SaveQuoteBar module="Booklet" title={`Booklet ${res.cover?.name || ""} x${f.quantity}`} summary={res} />
                   </div>

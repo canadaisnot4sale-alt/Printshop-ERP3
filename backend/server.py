@@ -403,6 +403,7 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
             "qty": q, "sheets": sheets, "n_up": n_up,
             "material_cost": material, "cost_4_0": cost_40, "cost_4_4": cost_44,
             "lamination": lam,
+            "base_cost_4_0": round(base_40, 2), "base_cost_4_4": round(base_44, 2),
             "unit_cost_4_0": round(base_40 / q, 4) if q else 0,
             "unit_cost_4_4": round(base_44 / q, 4) if q else 0,
             "customer_price_4_0": markup_price(base_40, retail_pct),
@@ -705,14 +706,18 @@ async def calc_booklet(body: BookletCalcIn, user=Depends(get_current_user)):
                     "wireo": settings["binding_wireo"], "perfect": settings["binding_perfect"]}.get(body.binding, 0)
     binding_cost = body.quantity * (binding_flat + body.page_count * settings["binding_per_page"])
     base = cover_cost + inside_cost + print_cost + lam + binding_cost
+    retail = markup_price(base, settings["retail_markup_pct"])
+    wholesale = markup_price(base, settings["wholesale_markup_pct"])
     return scrub({
         "cover": cover, "inside": inside, "cover_sheets": cover_sheets, "inside_sheets": inside_sheets,
         "cover_cost": round(cover_cost, 2), "inside_cost": round(inside_cost, 2),
         "print_cost": round(print_cost, 2), "lamination": round(lam, 2),
-        "binding_cost": round(binding_cost, 2), "total_cost": round(base, 2),
-        "customer_price": markup_price(base, settings["retail_markup_pct"]),
-        "wholesale_price": markup_price(base, settings["wholesale_markup_pct"]),
-        "unit_price": round(markup_price(base, settings["retail_markup_pct"]) / body.quantity, 2),
+        "binding_cost": round(binding_cost, 2), "total_cost": round(base, 2), "base_cost": round(base, 2),
+        "quantity": body.quantity,
+        "customer_price": retail, "retail_total": retail,
+        "wholesale_price": wholesale, "wholesale_total": wholesale,
+        "unit_price": round(retail / body.quantity, 2) if body.quantity else 0,
+        "wholesale_unit": round(wholesale / body.quantity, 2) if body.quantity else 0,
     }, user["role"])
 
 class LFSize(BaseModel):
@@ -744,6 +749,11 @@ async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
             for k in total:
                 total[k] += est[k]
         total = {k: round(v, 2) for k, v in total.items()}
+        total["base_cost"] = round(total["material_cost"] + total["printing_cost"] + total["extra_cost"], 2)
+        _tq = sum(int(s.qty) for s in body.sizes) or 1
+        total["quantity"] = _tq
+        total["unit_price"] = round(total["selling_price"] / _tq, 2)
+        total["wholesale_unit"] = round(total["wholesale_price"] / _tq, 2)
         placed, used_len, area = nest_pieces(
             [{"w": s.width, "h": s.height, "qty": s.qty, "label": f'{s.width}x{s.height}'} for s in body.sizes],
             m["printable_width"])
@@ -786,7 +796,7 @@ async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
             "finishing": body.finishing, "laminate": body.laminate,
             "billed_sqft": round(billed_area, 3),
             "material_cost": round(material_cost, 2), "printing_cost": round(printing_cost, 2),
-            "extra_cost": round(finishing_cost + lam_cost, 2),
+            "extra_cost": round(finishing_cost + lam_cost, 2), "base_cost": round(base, 2),
             "selling_price": markup_price(base, settings["retail_markup_pct"]),
             "wholesale_price": markup_price(base, settings["wholesale_markup_pct"]),
             "unit_price": round(markup_price(base, settings["retail_markup_pct"]) / body.qty, 3) if body.qty else 0,
@@ -914,6 +924,8 @@ async def calc_laser(body: LaserCalcIn, user=Depends(get_current_user)):
             "engrave_cost": round(engrave_cost, 2), "setup": round(setup, 2), "base_cost": round(base, 2),
             "retail_total": markup_price(base, s["retail_markup_pct"]),
             "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+            "unit_price": round(markup_price(base, s["retail_markup_pct"]) / total_qty, 2) if total_qty else 0,
+            "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / total_qty, 2) if total_qty else 0,
             "layout": {"bin_width": m["sheet_width"], "sheet_height": m["sheet_height"], "used_length": used_len, "placements": placed},
         }, user["role"]))
     return {"results": results}
@@ -952,6 +964,8 @@ async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_use
             "cnc_cost": round(cnc_cost, 2), "base_cost": round(base, 2),
             "retail_total": markup_price(base, s["retail_markup_pct"]),
             "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
+            "unit_price": round(markup_price(base, s["retail_markup_pct"]) / total_qty, 2) if total_qty else 0,
+            "wholesale_unit": round(markup_price(base, s["wholesale_markup_pct"]) / total_qty, 2) if total_qty else 0,
             "layout": {"bin_width": sw, "sheet_height": sh, "used_length": used_len, "placements": placed},
         }, user["role"]))
     results.sort(key=lambda r: r.get("retail_total", r.get("wholesale_total", 0)))

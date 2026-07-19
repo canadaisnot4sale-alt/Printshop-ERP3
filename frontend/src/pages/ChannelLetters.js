@@ -3,8 +3,8 @@ import api, { apiErr } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import SizesEditor from "@/components/SizesEditor";
 import NestingCanvas from "@/components/NestingCanvas";
-import { TotalsBlock, CostRow } from "@/components/Totals";
-import { Metric, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
+import { CostRow } from "@/components/Totals";
+import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -72,7 +72,7 @@ export default function ChannelLetters() {
                   <CostRow label="Returns" value={sel.return_cost} />
                   <CostRow label="Labor" value={sel.labor} />
                 </div>
-                <TotalsBlock r={sel} />
+                <PricingPanel r={sel} className="mt-3" />
                 <div className="mt-3 flex justify-end"><SaveQuoteBar module="Channel Letters" title={`Channel x${sel.quantity} ${sel.material.name}`} summary={sel} /></div>
               </div>
               <div>

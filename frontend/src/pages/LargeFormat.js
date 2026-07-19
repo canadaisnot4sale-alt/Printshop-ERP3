@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
 import NestingCanvas from "@/components/NestingCanvas";
-import { Metric, EmptyState, SectionLabel } from "@/components/Metric";
+import { Metric, EmptyState, SectionLabel, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -161,6 +161,7 @@ export default function LargeFormat() {
                       ))}
                     </div>
                     {sel.layout && <NestingCanvas layout={sel.layout} />}
+                    <PricingPanel r={sel.total} className="mt-3" />
                     <div className="mt-3 flex justify-end">
                       <SaveQuoteBar module="Gran Formato" title={`${sel.material.name} · ${res.mode}`} summary={sel} />
                     </div>

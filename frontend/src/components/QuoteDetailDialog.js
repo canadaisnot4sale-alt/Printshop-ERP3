@@ -1,8 +1,11 @@
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import NestingCanvas from "@/components/NestingCanvas";
-import { SectionLabel } from "@/components/Metric";
+import { SectionLabel, PricingPanel, priceOf } from "@/components/Metric";
 import { money } from "@/lib/format";
+import { Copy } from "lucide-react";
 
 const MONEY_RE = /(cost|price|total|unit|charge|labor)/i;
 const SKIP_RE = /(_id$|^id$|layout|placements|rows|qtys|results|role|markup|created_at|user_email|emailed)/i;
@@ -35,17 +38,24 @@ function findLayout(obj, depth = 0) {
   return null;
 }
 
-const priceOf = (s) =>
-  s?.retail_total ?? s?.customer_price ?? s?.wholesale_total ?? s?.wholesale_price ??
-  s?.results?.[0]?.retail_total ?? s?.total?.selling_price ?? s?.total?.wholesale_price ?? s?.selling_price;
+const MODULE_ROUTES = {
+  "Paper": "/paper", "Booklet": "/booklet", "Gran Formato": "/large-format",
+  "Large Format": "/large-format", "Stickers": "/stickers", "DTF": "/dtf",
+  "Embroidery": "/embroidery", "Laser": "/laser", "Direct Print": "/direct-print",
+  "Channel Letters": "/channel-letters", "Sublimation": "/sublimation", "Roll Stickers": "/roll-stickers",
+};
 
 export default function QuoteDetailDialog({ quote, open, onOpenChange }) {
+  const navigate = useNavigate();
   const rows = useMemo(() => (quote ? flatten(quote.summary, [], 0) : []), [quote]);
   const layout = useMemo(() => (quote ? findLayout(quote.summary) : null), [quote]);
   if (!quote) return null;
+  const pricing = quote.summary?.total || quote.summary;
   const price = priceOf(quote.summary);
   const specs = rows.filter((r) => !r.money);
   const costs = rows.filter((r) => r.money);
+  const route = MODULE_ROUTES[quote.module];
+  const requote = () => { onOpenChange(false); if (route) navigate(route); };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -54,18 +64,20 @@ export default function QuoteDetailDialog({ quote, open, onOpenChange }) {
           <DialogTitle className="font-head text-xl">{quote.title || "Quote"}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-mono uppercase bg-[#2495D3]/10 text-[#2495D3] px-2 py-0.5 rounded-full">{quote.module}</span>
-          {quote.customer_name && <span className="text-slate-500">· {quote.customer_name}</span>}
-          {quote.created_at && <span className="text-slate-400 num">· {new Date(quote.created_at).toLocaleDateString()}</span>}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-mono uppercase bg-[#2495D3]/10 text-[#2495D3] px-2 py-0.5 rounded-full">{quote.module}</span>
+            {quote.customer_name && <span className="text-slate-500">· {quote.customer_name}</span>}
+            {quote.created_at && <span className="text-slate-400 num">· {new Date(quote.created_at).toLocaleDateString()}</span>}
+          </div>
+          {route && (
+            <Button data-testid="requote-button" onClick={requote} size="sm" variant="outline" className="rounded-lg">
+              <Copy size={14} className="mr-1.5" /> Re-quote
+            </Button>
+          )}
         </div>
 
-        {price != null && (
-          <div className="rounded-xl bg-[#2495D3] text-white p-5 mt-2">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-white/80">Quoted Price</div>
-            <div className="num text-4xl font-black mt-1">{money(price)}</div>
-          </div>
-        )}
+        {price != null && <PricingPanel r={pricing} className="mt-2" />}
 
         <div className="grid sm:grid-cols-2 gap-6 mt-2">
           {specs.length > 0 && (

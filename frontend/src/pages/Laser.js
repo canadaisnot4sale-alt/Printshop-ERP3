@@ -5,8 +5,8 @@ import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
 import SizesEditor from "@/components/SizesEditor";
 import NestingCanvas from "@/components/NestingCanvas";
-import { TotalsBlock, CostRow } from "@/components/Totals";
-import { Metric, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
+import { CostRow } from "@/components/Totals";
+import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -133,7 +133,7 @@ export default function Laser() {
                       <CostRow label="Engrave" value={sel.engrave_cost} />
                       <CostRow label="Setup" value={sel.setup} />
                     </div>
-                    <TotalsBlock r={sel} />
+                    <PricingPanel r={sel} className="mt-3" />
                     <div className="mt-3 flex justify-end"><SaveQuoteBar module="Laser" title={`Laser ${sel.material.name}`} summary={sel} /></div>
                   </div>
                   <div>

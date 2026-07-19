@@ -2,7 +2,7 @@ import { useState } from "react";
 import api, { apiErr } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import NestingCanvas from "@/components/NestingCanvas";
-import { Metric, ConfigCard, EmptyState, SectionLabel } from "@/components/Metric";
+import { Metric, ConfigCard, EmptyState, SectionLabel, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +90,7 @@ export default function Stickers() {
               <div className="bg-white border border-slate-200 rounded-xl p-5">
                 <SectionLabel>{sel.material} · Layout</SectionLabel>
                 {sel.layout && <NestingCanvas layout={sel.layout} />}
+                <PricingPanel r={sel} className="mt-3" />
                 <div className="mt-3 flex justify-end">
                   <SaveQuoteBar module="Stickers" title={`Sticker ${w}x${h} x${qty} · ${sel.material}`} summary={sel} />
                 </div>

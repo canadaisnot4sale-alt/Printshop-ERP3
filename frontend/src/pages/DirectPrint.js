@@ -5,8 +5,8 @@ import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
 import SizesEditor from "@/components/SizesEditor";
 import NestingCanvas from "@/components/NestingCanvas";
-import { TotalsBlock, CostRow } from "@/components/Totals";
-import { Metric, EmptyState, SectionLabel, priceOf } from "@/components/Metric";
+import { CostRow } from "@/components/Totals";
+import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -113,7 +113,7 @@ export default function DirectPrint() {
                       <CostRow label="UV print" value={sel.print_cost} />
                       <CostRow label="CNC cut" value={sel.cnc_cost} />
                     </div>
-                    <TotalsBlock r={sel} />
+                    <PricingPanel r={sel} className="mt-3" />
                     <div className="mt-3 flex justify-end"><SaveQuoteBar module="Direct Print" title={`Direct ${sel.material.name} ${sheetSize}`} summary={sel} /></div>
                   </div>
                   <div>

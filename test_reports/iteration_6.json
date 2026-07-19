@@ -1,0 +1,33 @@
+{
+  "summary": "Focused frontend test on new PricingPanel (4-row breakdown) across all 11 calculators + Re-quote button in QuoteDetailDialog. Login (admin@printandsave.ca) OK. All 11 calculators (Paper, Booklet, Stickers, Large Format, Laser, Direct Print, Channel Letters, DTF, Embroidery, Sublimation, Roll Stickers) after Calculate show pricing-panel with all four rows (price-production, price-retail, price-wholesale, price-order-total). My Quotes: clicking quote-row opens quote-detail-dialog with all 4 pricing rows + requote-button; email-quote click does NOT open the detail dialog (row-click isolation working). Catalog: clicking catalog-row opens dialog with pricing-panel + requote-button and Re-quote navigates to the matching module route AND closes the dialog. Only defect: catalog dialog's PricingPanel only shows Retail + Order Total rows (missing Production Cost and Wholesale Price) because Catalog quote summaries do not carry base_cost / wholesale_total.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/catalog/* (or wherever catalog quote summaries originate)", "issue": "Catalog quote summary is missing base_cost and wholesale_total, so admin sees only 2 of the 4 required rows (Retail + Order Total) in the catalog detail dialog. Spec requires all 4 rows visible for admin."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "QuoteDetailDialog (opened from Price Catalog)", "issue": "PricingPanel is missing price-production and price-wholesale rows for catalog entries. Root cause is upstream data (quote.summary.total lacks base_cost/wholesale_total). PricingPanel itself renders correctly when data is present (confirmed via My Quotes).", "selector": "[data-testid='quote-detail-dialog'] [data-testid='pricing-panel']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Populate catalog quote.summary (or quote.summary.total) with base_cost and wholesale_total (and unit_price/wholesale_unit) so admin sees the full 4-row breakdown in the catalog detail dialog. Either enrich catalog docs at seed/build time or have backend project full pricing fields when returning catalog rows."
+  ],
+  "critical_code_review_comments": [
+    "PricingPanel gates rows on `!= null`; that's correct — the missing rows for catalog are strictly a data issue, not a UI bug.",
+    "QuoteDetailDialog uses `quote.summary?.total || quote.summary` for pricing; consistent, no change needed.",
+    "Re-quote navigation uses MODULE_ROUTES map keyed by human module labels; covers all 11 modules present in seed data."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested this run)", "frontend": "11/11 calculators + Quotes dialog fully pass; Catalog dialog partially passes (2/4 rows) => ~95%"},
+  "test_credentials": "admin@printandsave.ca / admin123 (from problem statement, works)",
+  "seed_data_creation": "None (used existing seed).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 11 calculator modules and My Quotes flow are 100% verified for the new PricingPanel + Re-quote. Only remaining item: catalog quote summaries lack base_cost & wholesale_total so admin only sees Retail + Order Total in the catalog detail dialog. After main agent enriches catalog data, retest only /catalog -> click catalog-row -> confirm all 4 price rows visible; other flows already good.",
+  "rca of the issue": "PricingPanel conditionally renders each row using `!= null` on r.base_cost / r.wholesale_total. For catalog entries (`/catalog` -> catalog-row click -> QuoteDetailDialog), `quote.summary.total` (or `quote.summary`) only contains retail_total (and hence order total falls back to retail). Neither base_cost nor wholesale_total is stored in the catalog documents, so those rows are simply not rendered. My Quotes rows include the full fields (confirmed: all 4 rows visible), so the divergence is data-only. Fix: enrich catalog quote summaries with base_cost, wholesale_total, unit_price, wholesale_unit at seed/build time or projection layer."
+}
