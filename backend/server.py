@@ -110,6 +110,10 @@ class Product(BaseModel):
     finished_h: float
     bleed_w: Optional[float] = None
     bleed_h: Optional[float] = None
+    gutter: float = 0.0
+    retail_markup_pct: Optional[float] = None
+    wholesale_markup_pct: Optional[float] = None
+    notes: str = ""
 
 class RollMaterial(BaseModel):
     name: str
@@ -315,14 +319,15 @@ WHOLESALE_FIELDS = {
 def scrub(data, role):
     if role == "admin":
         return data
-    remove = set(COST_FIELDS)
-    if role == "reseller":
-        remove |= RETAIL_FIELDS
-    else:  # client and anything else -> retail only
-        remove |= WHOLESALE_FIELDS
+    def strip(key):
+        if key in COST_FIELDS or "cost" in key:
+            return True
+        if role == "reseller":
+            return "retail" in key or "customer" in key or key in ("selling_price", "unit_price")
+        return "wholesale" in key
     def walk(o):
         if isinstance(o, dict):
-            return {k: walk(v) for k, v in o.items() if k not in remove}
+            return {k: walk(v) for k, v in o.items() if not strip(k)}
         if isinstance(o, list):
             return [walk(x) for x in o]
         return o
@@ -356,11 +361,32 @@ def nest_pieces(items, bin_width, max_rects=400):
     area_sqft = round(bin_width * used_length / 144.0, 3)
     return placed, used_length, area_sqft
 
+def grid_layout(SW, SH, w, h, gutter=0.0):
+    best = None
+    for pw, ph, rot in [(w, h, False), (h, w, True)]:
+        cols = int((SW + gutter) // (pw + gutter)) if (pw + gutter) > 0 else 0
+        rows = int((SH + gutter) // (ph + gutter)) if (ph + gutter) > 0 else 0
+        n = cols * rows
+        if best is None or n > best["n"]:
+            placements = []
+            for r in range(rows):
+                for c in range(cols):
+                    placements.append({"x": round(c * (pw + gutter), 2), "y": round(r * (ph + gutter), 2),
+                                       "w": round(pw, 2), "h": round(ph, 2)})
+            best = {"n": n, "cols": cols, "rows": rows, "rotated": rot, "pw": pw, "ph": ph, "placements": placements}
+    return best
+
 def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19"):
     sw, sh = SHEET_SIZES.get(sheet_key, (13, 19))
     pw = product.get("bleed_w") or product["finished_w"]
     ph = product.get("bleed_h") or product["finished_h"]
-    n_up = pieces_per_sheet(sw, sh, pw, ph)
+    gutter = product.get("gutter") or 0.0
+    gl = grid_layout(sw, sh, pw, ph, gutter)
+    n_up = gl["n"]
+    retail_pct = product.get("retail_markup_pct")
+    retail_pct = retail_pct if retail_pct not in (None, "") else settings["retail_markup_pct"]
+    whole_pct = product.get("wholesale_markup_pct")
+    whole_pct = whole_pct if whole_pct not in (None, "") else settings["wholesale_markup_pct"]
     cps = stock.get("cost_per_sheet")
     if cps is None:
         cps = (stock["cost_per_box"] / stock["sheets_per_box"]) if stock.get("sheets_per_box") else 0
@@ -377,12 +403,20 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
             "qty": q, "sheets": sheets, "n_up": n_up,
             "material_cost": material, "cost_4_0": cost_40, "cost_4_4": cost_44,
             "lamination": lam,
-            "customer_price_4_0": markup_price(base_40, settings["retail_markup_pct"]),
-            "customer_price_4_4": markup_price(base_44, settings["retail_markup_pct"]),
-            "wholesale_price_4_0": markup_price(base_40, settings["wholesale_markup_pct"]),
-            "wholesale_price_4_4": markup_price(base_44, settings["wholesale_markup_pct"]),
+            "unit_cost_4_0": round(base_40 / q, 4) if q else 0,
+            "unit_cost_4_4": round(base_44 / q, 4) if q else 0,
+            "customer_price_4_0": markup_price(base_40, retail_pct),
+            "customer_price_4_4": markup_price(base_44, retail_pct),
+            "wholesale_price_4_0": markup_price(base_40, whole_pct),
+            "wholesale_price_4_4": markup_price(base_44, whole_pct),
+            "retail_unit_4_0": round(markup_price(base_40, retail_pct) / q, 4) if q else 0,
+            "retail_unit_4_4": round(markup_price(base_44, retail_pct) / q, 4) if q else 0,
+            "wholesale_unit_4_0": round(markup_price(base_40, whole_pct) / q, 4) if q else 0,
+            "wholesale_unit_4_4": round(markup_price(base_44, whole_pct) / q, 4) if q else 0,
         })
-    return {"n_up": n_up, "sheet": sheet_key, "cost_per_sheet": round(cps, 4), "rows": rows}
+    layout = {"bin_width": sw, "used_length": sh, "placements": gl["placements"], "rotated": gl["rotated"], "gutter": gutter}
+    return {"n_up": n_up, "sheet": sheet_key, "cost_per_sheet": round(cps, 4), "rows": rows, "layout": layout,
+            "rotated": gl["rotated"], "piece_w": round(gl["pw"], 2), "piece_h": round(gl["ph"], 2)}
 
 def lf_estimate(material, settings, w, h, qty=1, mode="print", laminate=False):
     """w,h in inches. Returns per-material estimate incl nesting/tiling."""

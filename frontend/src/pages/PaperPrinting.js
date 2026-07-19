@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api, { apiErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
+import NestingCanvas from "@/components/NestingCanvas";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money, num } from "@/lib/format";
 import { toast } from "sonner";
-import { Calculator } from "lucide-react";
+import { Calculator, Layers, FileStack, DollarSign, Tag } from "lucide-react";
 
 const SHEETS = ["8.5x11", "8.5x14", "11x17", "12x18", "13x19"];
 
@@ -22,8 +23,7 @@ const stockFields = [
   { name: "cost_per_box", label: "Cost / Box (CAD)", type: "number" },
 ];
 const stockCols = [
-  { name: "name", label: "Name" },
-  { name: "size", label: "Size", mono: true },
+  { name: "name", label: "Name" }, { name: "size", label: "Size", mono: true },
   { name: "sheets_per_box", label: "Sheets/Box", mono: true },
   { name: "cost_per_box", label: "Cost/Box", mono: true, render: (i) => money(i.cost_per_box) },
   { name: "cost_per_sheet", label: "Cost/Sheet", mono: true, render: (i) => money(i.cost_per_sheet) },
@@ -34,12 +34,27 @@ const prodFields = [
   { name: "finished_h", label: "Finished H (in)", type: "number", default: 2 },
   { name: "bleed_w", label: "Bleed W (in)", type: "number", default: 3.75 },
   { name: "bleed_h", label: "Bleed H (in)", type: "number", default: 2.25 },
+  { name: "gutter", label: "Gutter (in)", type: "number", default: 0 },
+  { name: "retail_markup_pct", label: "Retail Markup % (override)", type: "number" },
+  { name: "wholesale_markup_pct", label: "Wholesale Markup % (override)", type: "number" },
 ];
 const prodCols = [
   { name: "name", label: "Product" },
   { name: "finished", label: "Finished", mono: true, render: (i) => `${num(i.finished_w)} × ${num(i.finished_h)}"` },
   { name: "bleed", label: "With Bleed", mono: true, render: (i) => `${num(i.bleed_w || i.finished_w)} × ${num(i.bleed_h || i.finished_h)}"` },
+  { name: "gutter", label: "Gutter", mono: true, render: (i) => `${num(i.gutter || 0)}"` },
 ];
+
+function Metric({ icon: Icon, label, value, accent }) {
+  return (
+    <div className={`rounded-lg border p-4 ${accent ? "bg-[#2495D3] border-[#2495D3] text-white" : "bg-white border-slate-200"}`}>
+      <div className={`flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest ${accent ? "text-white/80" : "text-slate-500"}`}>
+        <Icon size={13} /> {label}
+      </div>
+      <div className={`num text-2xl font-black mt-1.5 ${accent ? "text-white" : "text-slate-900"}`}>{value}</div>
+    </div>
+  );
+}
 
 export default function PaperPrinting() {
   const { user } = useAuth();
@@ -48,13 +63,13 @@ export default function PaperPrinting() {
   const [productId, setProductId] = useState("");
   const [sheet, setSheet] = useState("13x19");
   const [laminate, setLaminate] = useState(false);
+  const [side, setSide] = useState("4_4");
+  const [focusQty, setFocusQty] = useState(500);
+  const [selectedStock, setSelectedStock] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const loadProducts = () => api.get("/products").then((r) => {
-    setProducts(r.data);
-    if (!productId && r.data[0]) setProductId(r.data[0].id);
-  });
+  const loadProducts = () => api.get("/products").then((r) => { setProducts(r.data); if (!productId && r.data[0]) setProductId(r.data[0].id); });
   useEffect(() => { loadProducts(); /* eslint-disable-next-line */ }, []);
 
   const calc = async () => {
@@ -63,98 +78,142 @@ export default function PaperPrinting() {
     try {
       const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate });
       setResult(data);
+      setSelectedStock(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
     finally { setLoading(false); }
   };
 
+  const qtys = result?.qtys || [];
+  const rowFor = (r, qty) => r?.quote.rows.find((x) => x.qty === qty);
+  const retailOf = (row) => row?.[`customer_price_${side}`];
+  const wholesaleOf = (row) => row?.[`wholesale_price_${side}`];
+  const bestVal = (r) => { const row = rowFor(r, focusQty); return retailOf(row) ?? wholesaleOf(row) ?? Infinity; };
+
+  const focusRow = useMemo(() => selectedStock && rowFor(selectedStock, focusQty), [selectedStock, focusQty]);
+
   return (
     <div data-testid="paper-page">
-      <PageHeader title="Paper Printing" subtitle="Stocks · Products · Imposition & pricing" />
+      <PageHeader title="Paper Printing" subtitle="Imposition, cost comparison & instant pricing" testid="paper-header" eyebrow="Live Pricing" />
       <div className="p-8">
         <Tabs defaultValue="calc">
-          <TabsList className="rounded-sm">
-            <TabsTrigger value="calc" data-testid="tab-calc">Calculadora</TabsTrigger>
-            {isAdmin && <TabsTrigger value="stocks" data-testid="tab-stocks">Paper Stocks</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="products" data-testid="tab-products">Productos</TabsTrigger>}
+          <TabsList className="rounded-full bg-slate-100 p-1">
+            <TabsTrigger value="calc" data-testid="tab-calc" className="rounded-full">Calculator</TabsTrigger>
+            {isAdmin && <TabsTrigger value="stocks" data-testid="tab-stocks" className="rounded-full">Paper Stocks</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="products" data-testid="tab-products" className="rounded-full">Products</TabsTrigger>}
           </TabsList>
 
-          <TabsContent value="calc" className="mt-6">
-            <div className="grid lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-4 bg-white border border-slate-200 rounded-sm p-6 h-fit">
-                <h3 className="font-head font-bold mb-4">Job Setup</h3>
-                <Label className="text-xs">Product</Label>
-                <Select value={productId} onValueChange={setProductId}>
-                  <SelectTrigger data-testid="product-select" className="rounded-sm mt-1 mb-4"><SelectValue placeholder="Choose product" /></SelectTrigger>
-                  <SelectContent>
-                    {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Label className="text-xs">Sheet Size</Label>
-                <Select value={sheet} onValueChange={setSheet}>
-                  <SelectTrigger data-testid="sheet-select" className="rounded-sm mt-1 mb-4"><SelectValue /></SelectTrigger>
-                  <SelectContent>{SHEETS.map((s) => <SelectItem key={s} value={s}>{s}"</SelectItem>)}</SelectContent>
-                </Select>
-                <div className="flex items-center justify-between py-2 mb-4">
-                  <Label className="text-xs">Lamination</Label>
-                  <Switch data-testid="laminate-switch" checked={laminate} onCheckedChange={setLaminate} />
-                </div>
-                <Button data-testid="calc-paper-button" onClick={calc} disabled={loading} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
-                  <Calculator size={16} className="mr-2" />{loading ? "Calculating…" : "Compare Stocks"}
-                </Button>
+          <TabsContent value="calc" className="mt-6 grid lg:grid-cols-12 gap-6">
+            {/* Config */}
+            <div className="lg:col-span-4 bg-white border border-slate-200 rounded-xl p-6 h-fit">
+              <h3 className="font-head font-bold mb-4">Quote Setup</h3>
+              <Label className="text-xs">Product</Label>
+              <Select value={productId} onValueChange={setProductId}>
+                <SelectTrigger data-testid="product-select" className="rounded-lg mt-1 mb-4"><SelectValue placeholder="Choose product" /></SelectTrigger>
+                <SelectContent>{products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <Label className="text-xs">Sheet Size</Label>
+              <Select value={sheet} onValueChange={setSheet}>
+                <SelectTrigger data-testid="sheet-select" className="rounded-lg mt-1 mb-4"><SelectValue /></SelectTrigger>
+                <SelectContent>{SHEETS.map((s) => <SelectItem key={s} value={s}>{s}"</SelectItem>)}</SelectContent>
+              </Select>
+
+              <Label className="text-xs">Print Side</Label>
+              <div className="grid grid-cols-2 gap-2 mt-1 mb-4">
+                {[["4_0", "4/0 (One side)"], ["4_4", "4/4 (Both sides)"]].map(([v, l]) => (
+                  <button key={v} data-testid={`side-${v}`} onClick={() => setSide(v)}
+                    className={`rounded-lg border py-2 text-sm font-semibold transition-colors ${side === v ? "bg-[#2495D3] border-[#2495D3] text-white" : "border-slate-200 text-slate-600 hover:border-[#2495D3]"}`}>{l}</button>
+                ))}
               </div>
 
-              <div className="lg:col-span-8">
-                {!result ? (
-                  <div className="bg-white border border-slate-200 rounded-sm p-12 text-center text-slate-400">
-                    Configure a job and compare pricing across all paper stocks.
+              <Label className="text-xs">Focus Quantity</Label>
+              <div className="flex flex-wrap gap-1.5 mt-1 mb-4">
+                {(qtys.length ? qtys : [25, 50, 100, 250, 500, 1000, 2500, 5000]).map((q) => (
+                  <button key={q} data-testid={`focus-qty-${q}`} onClick={() => setFocusQty(q)}
+                    className={`num text-xs rounded-full px-3 py-1 border transition-colors ${focusQty === q ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200 text-slate-600 hover:border-slate-400"}`}>{q}</button>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between py-2 mb-4">
+                <Label className="text-xs">Lamination</Label>
+                <Switch data-testid="laminate-switch" checked={laminate} onCheckedChange={setLaminate} />
+              </div>
+              <Button data-testid="calc-paper-button" onClick={calc} disabled={loading} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
+                <Calculator size={16} className="mr-2" />{loading ? "Calculating…" : "Generate Quote"}
+              </Button>
+            </div>
+
+            {/* Results */}
+            <div className="lg:col-span-8">
+              {!result || !selectedStock ? (
+                <div className="bg-white border border-slate-200 rounded-xl p-16 text-center text-slate-400">Configure a job and generate an instant quote across every paper stock.</div>
+              ) : (
+                <div className="space-y-6" data-testid="paper-results">
+                  {/* metric cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Metric icon={Layers} label="Pieces / Sheet" value={`${selectedStock.quote.n_up}${selectedStock.quote.rotated ? " ↻" : ""}`} />
+                    <Metric icon={FileStack} label="Sheets Needed" value={focusRow?.sheets ?? "—"} />
+                    {retailOf(focusRow) != null && <Metric icon={Tag} label={`Retail · ${focusQty}`} value={money(retailOf(focusRow))} accent />}
+                    {retailOf(focusRow) != null
+                      ? <Metric icon={DollarSign} label="Retail / Unit" value={money(focusRow[`retail_unit_${side}`])} />
+                      : <Metric icon={Tag} label={`Wholesale · ${focusQty}`} value={money(wholesaleOf(focusRow))} accent />}
                   </div>
-                ) : (
-                  <div className="space-y-6" data-testid="paper-results">
-                    {result.results.map((r, idx) => (
-                      <div key={r.stock.id} className="bg-white border border-slate-200 rounded-sm overflow-hidden">
-                        <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
-                          <div className="font-head font-bold">
-                            {r.stock.name}
-                            {idx === 0 && <span className="ml-2 text-[10px] font-mono uppercase bg-[#2495D3] text-white px-2 py-0.5 rounded-sm">Best Price</span>}
+
+                  {/* nesting + selected paper */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="bg-white border border-slate-200 rounded-xl p-5">
+                      <div className="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">Sheet Layout · {selectedStock.quote.sheet}"</div>
+                      <NestingCanvas layout={selectedStock.quote.layout} />
+                      <div className="text-xs text-slate-500 num mt-1">{selectedStock.quote.piece_w}×{selectedStock.quote.piece_h}" per piece{selectedStock.quote.rotated ? " (rotated)" : ""}</div>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col">
+                      <div className="text-xs font-mono uppercase tracking-widest text-slate-500">Selected Paper</div>
+                      <div className="font-head font-bold text-lg mt-1">{selectedStock.stock.name}</div>
+                      <div className="mt-auto pt-4 space-y-2">
+                        {retailOf(focusRow) != null && (
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-xs text-slate-500">Retail ({focusQty} · {side.replace("_", "/")})</span>
+                            <span className="num text-2xl font-black text-[#2495D3]">{money(retailOf(focusRow))}</span>
                           </div>
-                          <div className="text-xs font-mono text-slate-500">{r.quote.n_up}-up · {r.quote.sheet}"{r.quote.cost_per_sheet != null ? ` · ${money(r.quote.cost_per_sheet)}/hoja` : ""}</div>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm num tabular">
-                            <thead>
-                              <tr className="text-xs font-mono uppercase tracking-wider text-slate-500 border-b border-slate-200">
-                                <th className="text-right px-3 py-2">Qty</th>
-                                <th className="text-right px-3 py-2">Hojas</th>
-                                {r.quote.rows[0]?.material_cost != null && <th className="text-right px-3 py-2">Material</th>}
-                                {r.quote.rows[0]?.customer_price_4_0 != null && <th className="text-right px-3 py-2">4/0</th>}
-                                {r.quote.rows[0]?.customer_price_4_4 != null && <th className="text-right px-3 py-2 text-[#2495D3]">Retail 4/4</th>}
-                                {r.quote.rows[0]?.wholesale_price_4_4 != null && <th className="text-right px-3 py-2 text-[#2495D3]">Wholesale 4/4</th>}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {r.quote.rows.map((row) => (
-                                <tr key={row.qty} className="border-b border-slate-100 hover:bg-slate-50">
-                                  <td className="text-right px-3 py-2 font-semibold">{row.qty}</td>
-                                  <td className="text-right px-3 py-2 text-slate-500">{row.sheets}</td>
-                                  {row.material_cost != null && <td className="text-right px-3 py-2">{money(row.material_cost)}</td>}
-                                  {row.customer_price_4_0 != null && <td className="text-right px-3 py-2">{money(row.customer_price_4_0)}</td>}
-                                  {row.customer_price_4_4 != null && <td className="text-right px-3 py-2 text-[#2495D3] font-semibold">{money(row.customer_price_4_4)}</td>}
-                                  {row.wholesale_price_4_4 != null && <td className="text-right px-3 py-2 text-[#2495D3] font-semibold">{money(row.wholesale_price_4_4)}</td>}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {idx === 0 && (
-                          <div className="px-5 py-3 border-t border-slate-200 flex justify-end">
-                            <SaveQuoteBar module="Papel" title={`${result.product?.name} · ${r.stock.name}`} summary={{ product: result.product, stock: r.stock, quote: r.quote }} />
+                        )}
+                        {wholesaleOf(focusRow) != null && (
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-xs text-slate-500">Wholesale</span>
+                            <span className="num text-lg font-bold text-slate-700">{money(wholesaleOf(focusRow))}</span>
                           </div>
                         )}
                       </div>
-                    ))}
+                      <div className="mt-4"><SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} /></div>
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  {/* comparison across papers */}
+                  <div>
+                    <div className="text-xs font-mono uppercase tracking-widest text-slate-500 mb-2">Compare Papers · {focusQty} pcs · {side.replace("_", "/")}</div>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {[...result.results].sort((a, b) => bestVal(a) - bestVal(b)).map((r, idx) => {
+                        const row = rowFor(r, focusQty);
+                        const isSel = selectedStock.stock.id === r.stock.id;
+                        return (
+                          <button key={r.stock.id} data-testid="paper-compare-row" onClick={() => setSelectedStock(r)}
+                            className={`text-left rounded-xl border p-4 transition-all ${isSel ? "border-[#2495D3] ring-1 ring-[#2495D3]" : "border-slate-200 hover:border-slate-300"}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="font-head font-bold text-sm">{r.stock.name}</div>
+                              {idx === 0 && <span className="text-[10px] font-mono uppercase bg-emerald-500 text-white px-2 py-0.5 rounded-full">Best Value</span>}
+                            </div>
+                            <div className="text-[11px] font-mono text-slate-400 mt-0.5">{r.quote.n_up}-up · {row?.sheets} sheets</div>
+                            <div className="num text-xl font-black text-[#2495D3] mt-2">{money(retailOf(row) ?? wholesaleOf(row))}</div>
+                            <div className="text-[11px] text-slate-500 num">
+                              {retailOf(row) != null && `${money(row[`retail_unit_${side}`])}/unit`}
+                              {wholesaleOf(row) != null && retailOf(row) != null && ` · WS ${money(wholesaleOf(row))}`}
+                              {wholesaleOf(row) != null && retailOf(row) == null && `${money(row[`wholesale_unit_${side}`])}/unit`}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </TabsContent>
 
