@@ -65,6 +65,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 
 ### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).
 
+## Implemented (2026-06) — v22.1 Payment confirmation email
+- On payment success (`_mark_paid`, triggered by both the Stripe webhook and the status-polling endpoint), the order transitions to paid ONCE and a branded **payment confirmation email** is sent to the customer via Resend (reuses existing EMERGENT_EMAIL_KEY integration). Email lists line items + total paid. Verified: Resend returned 202 Accepted.
+
 - **Multi-module quote (cart)**: SaveQuoteBar gained an **"Add to quote"** button in every calculator → adds item to a localStorage cart (one cart). Sidebar **Quote Builder** nav shows a live cart badge. QuoteBuilder page (/quote-builder): editable qty, combined total, Save (multi quote: quote_type='multi', items[]) / Print. Multi quotes render an items table in the email HTML.
 - **Quote→Product**: admin-only "Convert to product" on My Quotes → dialog (name, editable category w/ suggestions, price prefilled, publish toggle) → POST /api/quotes/{id}/to-product (carries module + specs snapshot).
 - **Product Catalog** (/products-catalog, admin nav "Products"): products grouped by **category (A-Z within)**, publish toggle, full CRUD. Categories = predefined editable list (PRODUCT_CATEGORIES via /api/config, datalist input). Non-admin GET /catalog-products returns only published (ready for P2 storefront).

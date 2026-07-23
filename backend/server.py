@@ -2255,6 +2255,44 @@ async def create_checkout(body: CheckoutIn, user=Depends(get_current_user)):
         "payment_status": "pending", "created_at": now_iso(), "updated_at": now_iso()})
     return {"checkout_url": session.url, "session_id": session.id}
 
+async def _send_order_paid_email(order: dict):
+    to_email = order.get("user_email")
+    if not to_email:
+        return
+    rows = "".join(
+        f"<tr><td style='padding:6px 0;border-bottom:1px solid #eee'>{i.get('name','')}</td>"
+        f"<td style='padding:6px 0;border-bottom:1px solid #eee;text-align:right'>{i.get('qty')}</td>"
+        f"<td style='padding:6px 0;border-bottom:1px solid #eee;text-align:right'>{_fmt(i.get('line_total'))}</td></tr>"
+        for i in (order.get("items") or [])
+    )
+    html = f"""
+    <div style='font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a'>
+      <h2 style='color:#2495D3;margin-bottom:4px'>Payment received — thank you!</h2>
+      <p style='color:#64748b;font-size:14px'>Hi {order.get('customer_name','')}, we've received your payment. Your order is confirmed.</p>
+      <table style='width:100%;border-collapse:collapse;font-size:14px;margin-top:12px'>
+        <thead><tr style='text-align:left;color:#94a3b8;font-size:11px;text-transform:uppercase'>
+          <th style='padding-bottom:6px'>Product</th><th style='text-align:right'>Qty</th><th style='text-align:right'>Total</th>
+        </tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+      <p style='text-align:right;font-weight:bold;font-size:16px;margin-top:12px'>Total paid: {_fmt(order.get('total'))}</p>
+      <p style='color:#94a3b8;font-size:12px;margin-top:24px'>Print and Save — Your Brand in Focus</p>
+    </div>"""
+    payload = {
+        "to": [to_email],
+        "subject": "Your Print and Save order is paid ✓",
+        "html": html,
+        "from_name": os.environ["EMAIL_FROM_NAME"],
+        "contact_email": to_email,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
+                                     headers={"X-Email-Key": os.environ["EMERGENT_EMAIL_KEY"]}, json=payload)
+        resp.raise_for_status()
+    except Exception as e:
+        logger.error(f"Order paid email error: {e}")
+
 async def _mark_paid(session_id, order_id=None):
     await db.payment_transactions.update_one(
         {"session_id": session_id, "payment_status": {"$ne": "paid"}},
@@ -2263,7 +2301,10 @@ async def _mark_paid(session_id, order_id=None):
         tx = await db.payment_transactions.find_one({"session_id": session_id})
         order_id = tx.get("order_id") if tx else None
     if order_id:
-        await db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": {"status": "paid"}})
+        order = await db.orders.find_one({"_id": ObjectId(order_id)})
+        if order and order.get("status") != "paid":
+            await db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": {"status": "paid"}})
+            await _send_order_paid_email(order)
 
 @api_router.get("/payments/status/{session_id}")
 async def payment_status(session_id: str):
