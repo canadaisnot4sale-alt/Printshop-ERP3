@@ -48,7 +48,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
-## Implemented (2026-07-23) — v17 P0 Paso 1: Profitability panel (true cost + margin) in all modules
+## Implemented (2026-07-23) — v18 Profit & Loss dashboard
+- NEW admin-only **Profit & Loss** page (/profit-dashboard, nav "Profit & Loss"): monthly **quoted revenue** (from quotes) vs **purchases** (pre-tax = subtotal+shipping) vs **fixed monthly overhead** (fixed costs + machines) → **net profit**.
+- KPIs (revenue, purchases, overhead, net profit red/green) + recharts **ComposedChart** (bars: quoted revenue & total cost; line: net profit) + monthly table. Range selector 6/12 months. Endpoint GET /api/finance/profit-dashboard?months=N (require_admin).
+- NOTE: "revenue" = QUOTED this month (estimates), not confirmed sales — confirmed sales arrive with the e-commerce/orders phase (P2). Verified iteration_14 = 100% backend + frontend, admin-gated.
+
+
 - NEW admin-only **Profitability panel** rendered by the shared PricingPanel (Metric.js) → appears in ALL 11 calculators AND the quote-detail dialog, WITHOUT changing any quoted price (visibility-only, per user choice).
 - Shows: Base production cost + **Labor** (editable, auto-estimated **Production time (h)** × **shop rate**) = **True manufacturing cost**, vs the quoted retail price → **Margin ($ and %)** with a red **Loss / below-cost alert** when negative.
 - **Shop rate = business overhead hourly ($101.20 = $19,025/mo ÷ 188h) + optional selected machine hourly** (depreciation/lease + maintenance ÷ hours). Machine picker in the panel; defaults to "Shop rate only".
