@@ -48,7 +48,13 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
-## Implemented (2026-07-23) — v18 Profit & Loss dashboard
+## Implemented (2026-07-23) — v19 P0 Paso 2: Modules ↔ unified Materials DB (link approach)
+- Each per-module material (paper_stocks, roll_materials, sheet_materials, laser_materials, roll_sticker_materials) has an optional **linked_material_id**. When linked to a unified Material, its cost field (cost_per_sheet / price_per_sqft / roll_cost) is **overridden on read** by that material's live unit_cost — kept current by PDF purchase imports. Unlinked = works exactly as before (non-breaking).
+- Backend: `LINK_COST_FIELD` map + `apply_links()` helper (DRY), applied in register_crud list + all calc endpoints (paper, booklet, largeformat, stickers, laser, directprint, channel, rollstickers). Cost now flows from purchases → materials → module quotes.
+- Frontend: `CrudManager` gained a **material-link** field type (dropdown of unified materials w/ unit cost + "Not linked"); added to all 5 module material CRUDs + a "Linked" column.
+- Verified iteration_15 = backend override/unlink/calc/regression + frontend link UI in all 5 modules. Fixed post-test bug: RollStickerMaterial model was missing linked_material_id (re-added + curl-verified).
+
+
 - NEW admin-only **Profit & Loss** page (/profit-dashboard, nav "Profit & Loss"): monthly **quoted revenue** (from quotes) vs **purchases** (pre-tax = subtotal+shipping) vs **fixed monthly overhead** (fixed costs + machines) → **net profit**.
 - KPIs (revenue, purchases, overhead, net profit red/green) + recharts **ComposedChart** (bars: quoted revenue & total cost; line: net profit) + monthly table. Range selector 6/12 months. Endpoint GET /api/finance/profit-dashboard?months=N (require_admin).
 - NOTE: "revenue" = QUOTED this month (estimates), not confirmed sales — confirmed sales arrive with the e-commerce/orders phase (P2). Verified iteration_14 = 100% backend + frontend, admin-gated.

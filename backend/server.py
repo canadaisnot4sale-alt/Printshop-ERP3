@@ -165,6 +165,7 @@ class RollStickerMaterial(BaseModel):
     roll_width: float = 4.0
     sticker_w: float = 3.0
     sticker_h: float = 3.0
+    linked_material_id: Optional[str] = None
 
 class SizePreset(BaseModel):
     name: str
