@@ -48,7 +48,14 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
-## Implemented (2026-07-23) — v19 P0 Paso 2: Modules ↔ unified Materials DB (link approach)
+## Implemented (2026-07-23) — v20 P1: Multi-module quotes + Quote→Product + Product Catalog
+- **Multi-module quote (cart)**: SaveQuoteBar gained an **"Add to quote"** button in every calculator → adds item to a localStorage cart (one cart). Sidebar **Quote Builder** nav shows a live cart badge. QuoteBuilder page (/quote-builder): editable qty, combined total, Save (multi quote: quote_type='multi', items[]) / Print. Multi quotes render an items table in the email HTML.
+- **Quote→Product**: admin-only "Convert to product" on My Quotes → dialog (name, editable category w/ suggestions, price prefilled, publish toggle) → POST /api/quotes/{id}/to-product (carries module + specs snapshot).
+- **Product Catalog** (/products-catalog, admin nav "Products"): products grouped by **category (A-Z within)**, publish toggle, full CRUD. Categories = predefined editable list (PRODUCT_CATEGORIES via /api/config, datalist input). Non-admin GET /catalog-products returns only published (ready for P2 storefront).
+- Backend: CatalogProduct model + /api/catalog-products CRUD; QuoteIn extended (quote_type, items). CartContext provider wraps App.
+- Verified iteration_16 = 6/6 backend + 100% frontend + RBAC. (Testing agent re-added 2 missing App.js imports that had been dropped during edits — now present, compiles clean.)
+
+
 - Each per-module material (paper_stocks, roll_materials, sheet_materials, laser_materials, roll_sticker_materials) has an optional **linked_material_id**. When linked to a unified Material, its cost field (cost_per_sheet / price_per_sqft / roll_cost) is **overridden on read** by that material's live unit_cost — kept current by PDF purchase imports. Unlinked = works exactly as before (non-breaking).
 - Backend: `LINK_COST_FIELD` map + `apply_links()` helper (DRY), applied in register_crud list + all calc endpoints (paper, booklet, largeformat, stickers, laser, directprint, channel, rollstickers). Cost now flows from purchases → materials → module quotes.
 - Frontend: `CrudManager` gained a **material-link** field type (dropdown of unified materials w/ unit cost + "Not linked"); added to all 5 module material CRUDs + a "Linked" column.
