@@ -65,6 +65,16 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 
 ### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).
 
+## Implemented (2026-06) — v23 UNIFIED MATERIALS (single source of truth)
+- **Central Materials DB is now the ONLY place to create/edit materials.** Each material is assigned to one or more modules; every calculator reads its materials directly from the central `materials` collection (filtered by assigned modules). Editing a material's unit_cost/specs flows automatically to all modules, quotes and inventory. "Do the work once."
+- **Material model extended** with optional module-specific specs shown conditionally in the central editor: sheet_width/height + sheets_per_box (paper/laser), roll_width/printable_width/min_linear_feet/material_type/sticker_compatible (large-format/stickers), cnc_capable/channel_capable (direct-print/channel-letters), pieces_per_roll/sticker_w/h (roll-stickers). Nickname (name) + unit_cost + price_override already existed.
+- **Backend**: COLLECTION_MODULES + map_material() map central materials into each legacy per-module shape; register_material_view() makes the 5 per-module endpoints (paper-stocks, roll-materials, laser-materials, sheet-materials, roll-sticker-materials) READ-ONLY (GET reads central; POST/PUT/DELETE → 400 "managed centrally"). All 8 calc endpoints rewritten to read central. apply_links/LINK_COST_FIELD removed. unify_materials_clean() migration drops legacy per-module collections + resets materials for a clean start. 6 complete demo materials seeded.
+- **Frontend**: per-module material tabs are now read-only reference views (CrudManager `readOnly` prop → no Add/edit/delete, shows "Manage in Materials →" link + note). Central Materials page gained the conditional "Module specs" section.
+- Verified iteration_19 = backend 29/29 (calc from central, write-block 400s) + frontend 100% (central editor with module specs, all 5 tabs read-only, calculators compute from central). No bugs.
+- NOTE: DTF/Embroidery (garments) and Sublimation (blanks) remain their own small editable catalogs — they are finished blanks/garments, not raw sheet/roll materials.
+
+### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).
+
 ## Implemented (2026-06) — v22.1 Payment confirmation email
 - On payment success (`_mark_paid`, triggered by both the Stripe webhook and the status-polling endpoint), the order transitions to paid ONCE and a branded **payment confirmation email** is sent to the customer via Resend (reuses existing EMERGENT_EMAIL_KEY integration). Email lists line items + total paid. Verified: Resend returned 202 Accepted.
 
