@@ -225,6 +225,7 @@ class Material(BaseModel):
     stock_qty: float = 0.0
     reorder_point: float = 0.0
     reorder_target: float = 0.0
+    waste_per_order: float = 0.0                  # stock wasted once per order this material is used in
     notes: str = ""
 
 class StockAdjust(BaseModel):
@@ -1217,7 +1218,7 @@ async def profit_dashboard(months: int = 6, user=Depends(require_admin)):
         if mo == 0:
             mo = 12; y -= 1
     keys = list(reversed(keys))
-    buckets = {k: {"month": k, "revenue": 0.0, "purchases": 0.0, "quotes": 0} for k in keys}
+    buckets = {k: {"month": k, "revenue": 0.0, "purchases": 0.0, "quotes": 0, "sales": 0.0} for k in keys}
 
     async for q in db.quotes.find():
         k = (q.get("created_at") or "")[:7]
@@ -1227,6 +1228,11 @@ async def profit_dashboard(months: int = 6, user=Depends(require_admin)):
                  or (summ.get("total") or {}).get("selling_price") or summ.get("selling_price") or 0)
             buckets[k]["revenue"] += p or 0
             buckets[k]["quotes"] += 1
+
+    async for o in db.orders.find({"status": {"$ne": "cancelled"}}):
+        k = (o.get("created_at") or "")[:7]
+        if k in buckets:
+            buckets[k]["sales"] += o.get("total") or 0
 
     async for pu in db.purchases.find():
         k = (pu.get("date") or "")[:7]
@@ -1238,10 +1244,13 @@ async def profit_dashboard(months: int = 6, user=Depends(require_admin)):
         b = buckets[k]
         rev = round(b["revenue"], 2)
         pur = round(b["purchases"], 2)
+        sales = round(b["sales"], 2)
+        tcost = round(pur + monthly_overhead, 2)
         net = round(rev - pur - monthly_overhead, 2)
-        series.append({"month": k, "revenue": rev, "purchases": pur,
-                       "overhead": monthly_overhead, "total_cost": round(pur + monthly_overhead, 2),
-                       "net_profit": net, "quotes": b["quotes"]})
+        series.append({"month": k, "revenue": rev, "purchases": pur, "sales": sales,
+                       "overhead": monthly_overhead, "total_cost": tcost,
+                       "net_profit": net, "net_real": round(sales - tcost, 2),
+                       "quotes": b["quotes"]})
     return {"monthly_overhead": monthly_overhead, "series": series,
             "break_even_revenue": break_even_revenue,
             "gross_margin_pct": round(margin * 100, 1),
@@ -2054,17 +2063,30 @@ class CatalogProduct(BaseModel):
     name: str
     category: str = "Other"
     module: str = ""
-    price: float = 0.0
+    price: float = 0.0                 # retail price
+    wholesale_price: float = 0.0
     description: str = ""
+    image_url: str = ""
     published: bool = False
     source_quote_id: Optional[str] = None
     specs: dict = {}
+    bom: List[dict] = []               # [{material_id, material_name, qty_per_unit}]
 
 @api_router.get("/catalog-products")
 async def list_catalog_products(user=Depends(get_current_user)):
-    q = {} if user.get("role") == "admin" else {"published": True}
-    items = await db.catalog_products.find(q).sort("name", 1).to_list(2000)
-    return [clean(i) for i in items]
+    role = user.get("role")
+    q = {} if role == "admin" else {"published": True}
+    items = [clean(i) for i in await db.catalog_products.find(q).sort("name", 1).to_list(2000)]
+    for p in items:
+        retail = p.get("price") or 0
+        wholesale = p.get("wholesale_price") or retail
+        p["your_price"] = wholesale if role == "reseller" else retail
+        if role not in ("admin",):
+            # clients never see wholesale; resellers never see retail-only cost internals
+            if role == "client":
+                p.pop("wholesale_price", None)
+            p.pop("bom", None)
+    return items
 
 @api_router.post("/catalog-products")
 async def create_catalog_product(body: CatalogProduct, user=Depends(require_admin)):
@@ -2088,6 +2110,7 @@ class ToProductIn(BaseModel):
     name: str
     category: str = "Other"
     price: float = 0.0
+    wholesale_price: float = 0.0
     description: str = ""
     published: bool = False
 
@@ -2097,12 +2120,101 @@ async def quote_to_product(quote_id: str, body: ToProductIn, user=Depends(requir
     if not q:
         raise HTTPException(404, "Quote not found")
     doc = body.model_dump()
-    doc.update({"module": q.get("module", ""), "source_quote_id": quote_id,
+    doc.update({"module": q.get("module", ""), "source_quote_id": quote_id, "bom": [],
                 "specs": {"summary": q.get("summary", {}), "inputs": q.get("inputs", {})},
                 "created_at": now_iso()})
     res = await db.catalog_products.insert_one(doc)
     doc["_id"] = res.inserted_id
     return clean(doc)
+
+# ---------------- Orders (storefront) + inventory deduction ----------------
+async def deduct_inventory_for_order(enriched):
+    """enriched: [{product(dict), qty}]. Deduct BoM usage (qty_per_unit * qty) per material,
+    plus each used material's waste_per_order ONCE per order."""
+    used = {}
+    for it in enriched:
+        for b in (it["product"].get("bom") or []):
+            mid = b.get("material_id")
+            if not mid:
+                continue
+            used[mid] = used.get(mid, 0.0) + (b.get("qty_per_unit") or 0.0) * it["qty"]
+    deductions = []
+    for mid, usage in used.items():
+        try:
+            mat = await db.materials.find_one({"_id": ObjectId(mid)})
+        except Exception:
+            mat = None
+        if not mat:
+            continue
+        waste = mat.get("waste_per_order") or 0.0
+        total = round(usage + waste, 3)
+        new_stock = round((mat.get("stock_qty") or 0.0) - total, 3)
+        await db.materials.update_one({"_id": ObjectId(mid)}, {"$set": {"stock_qty": new_stock}})
+        deductions.append({"material_id": mid, "material_name": mat.get("name"),
+                           "unit": mat.get("unit"), "used": round(usage, 3), "waste": waste,
+                           "total": total, "new_stock": new_stock, "short": new_stock < 0})
+    return deductions
+
+class OrderItemIn(BaseModel):
+    product_id: str
+    qty: float = 1.0
+
+class OrderIn(BaseModel):
+    items: List[OrderItemIn]
+    notes: str = ""
+    customer_name: str = ""
+
+@api_router.post("/orders")
+async def create_order(body: OrderIn, user=Depends(get_current_user)):
+    role = user.get("role")
+    line_items, enriched, total = [], [], 0.0
+    for it in body.items:
+        try:
+            prod = await db.catalog_products.find_one({"_id": ObjectId(it.product_id)})
+        except Exception:
+            prod = None
+        if not prod or not prod.get("published"):
+            continue
+        p = clean(prod)
+        retail = p.get("price") or 0.0
+        wholesale = p.get("wholesale_price") or retail
+        price = wholesale if role == "reseller" else retail
+        lt = round(price * it.qty, 2)
+        total += lt
+        line_items.append({"product_id": it.product_id, "name": p.get("name"),
+                           "category": p.get("category"), "qty": it.qty,
+                           "unit_price": price, "line_total": lt})
+        enriched.append({"product": p, "qty": it.qty})
+    if not line_items:
+        raise HTTPException(400, "No valid published products in order")
+    deductions = await deduct_inventory_for_order(enriched)
+    doc = {"user_id": user["id"], "user_email": user["email"], "role": role,
+           "customer_name": body.customer_name or user["email"],
+           "items": line_items, "total": round(total, 2), "notes": body.notes,
+           "status": "pending", "inventory_deductions": deductions, "created_at": now_iso()}
+    res = await db.orders.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return clean(doc)
+
+@api_router.get("/orders")
+async def list_orders(user=Depends(get_current_user)):
+    q = {} if user.get("role") == "admin" else {"user_id": user["id"]}
+    items = await db.orders.find(q).sort("created_at", -1).to_list(2000)
+    out = []
+    for o in items:
+        c = clean(o)
+        if user.get("role") != "admin":
+            c.pop("inventory_deductions", None)
+        out.append(c)
+    return out
+
+class OrderStatusIn(BaseModel):
+    status: str
+
+@api_router.put("/orders/{oid}/status")
+async def update_order_status(oid: str, body: OrderStatusIn, user=Depends(require_admin)):
+    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"status": body.status}})
+    return clean(await db.orders.find_one({"_id": ObjectId(oid)}))
 
 def _fmt(v):
     try:

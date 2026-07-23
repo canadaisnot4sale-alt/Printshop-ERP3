@@ -34,7 +34,10 @@ export default function Quotes() {
   const remove = async (id) => { await api.delete(`/quotes/${id}`); toast.success("Deleted"); load(); };
 
   const openConvert = (q) => {
-    setConvForm({ quote_id: q.id, name: q.title || q.module, category: "Other", price: Number(priceOf(q.summary) || 0), description: q.notes || "", published: false });
+    const s = q.summary || {};
+    setConvForm({ quote_id: q.id, name: q.title || q.module, category: "Other",
+      price: Number(priceOf(s) || 0), wholesale_price: Number(s.wholesale_total ?? s.wholesale_price ?? 0),
+      description: q.notes || "", published: false });
     setConvOpen(true);
   };
   const convert = async () => {
@@ -42,6 +45,7 @@ export default function Quotes() {
     try {
       await api.post(`/quotes/${convForm.quote_id}/to-product`, {
         name: convForm.name, category: convForm.category, price: Number(convForm.price || 0),
+        wholesale_price: Number(convForm.wholesale_price || 0),
         description: convForm.description, published: convForm.published,
       });
       toast.success("Product created in catalog"); setConvOpen(false);
@@ -132,9 +136,11 @@ export default function Quotes() {
                 <Input data-testid="convert-category" list="conv-cats" value={convForm.category} onChange={(e) => setConvForm({ ...convForm, category: e.target.value })} className="rounded-lg mt-1" />
                 <datalist id="conv-cats">{cats.map((c) => <option key={c} value={c} />)}</datalist>
               </div>
-              <div><Label className="text-xs">Price ($)</Label>
+              <div><Label className="text-xs">Retail price ($)</Label>
                 <Input data-testid="convert-price" type="number" value={convForm.price} onChange={(e) => setConvForm({ ...convForm, price: e.target.value })} className="rounded-lg mt-1" /></div>
             </div>
+            <div><Label className="text-xs">Wholesale price ($) — resellers</Label>
+              <Input data-testid="convert-wholesale" type="number" value={convForm.wholesale_price || 0} onChange={(e) => setConvForm({ ...convForm, wholesale_price: e.target.value })} className="rounded-lg mt-1" /></div>
             <div className="flex items-center gap-3">
               <Switch data-testid="convert-published" checked={convForm.published} onCheckedChange={(v) => setConvForm({ ...convForm, published: v })} />
               <Label className="text-xs">Publish to storefront</Label>

@@ -41,14 +41,14 @@ export default function ProfitDashboard() {
 
       <div className="p-8 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Metric icon={FileText} label={`Quoted revenue · ${cur ? label(cur.month) : ""}`} value={money(cur?.revenue)} sub={`${cur?.quotes || 0} quotes`} />
-          <Metric icon={Receipt} label="Purchases (pre-tax)" value={money(cur?.purchases)} />
-          <Metric icon={Landmark} label="Monthly overhead" value={money(data?.monthly_overhead)} sub="fixed + machines" />
-          <div className={`rounded-xl border p-4 ${profit ? "bg-emerald-600 border-emerald-600" : "bg-red-600 border-red-600"} text-white`} data-testid="pnl-net-kpi">
+          <Metric icon={FileText} label={`Quoted · ${cur ? label(cur.month) : ""}`} value={money(cur?.revenue)} sub={`${cur?.quotes || 0} quotes`} />
+          <Metric icon={Receipt} label="Real sales (orders)" value={money(cur?.sales)} accent={(cur?.sales ?? 0) > 0} />
+          <Metric icon={Landmark} label="Purchases + overhead" value={money((cur?.purchases ?? 0) + (data?.monthly_overhead ?? 0))} />
+          <div className={`rounded-xl border p-4 ${(cur?.net_real ?? 0) >= 0 ? "bg-emerald-600 border-emerald-600" : "bg-red-600 border-red-600"} text-white`} data-testid="pnl-net-kpi">
             <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-white/80">
-              {profit ? <TrendingUp size={13} /> : <TrendingDown size={13} />} Net profit
+              {(cur?.net_real ?? 0) >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />} Net profit (real sales)
             </div>
-            <div className="num text-2xl font-black mt-1.5">{money(cur?.net_profit)}</div>
+            <div className="num text-2xl font-black mt-1.5">{money(cur?.net_real)}</div>
           </div>
         </div>
 
@@ -75,9 +75,9 @@ export default function ProfitDashboard() {
                 <ReferenceLine y={breakEven} stroke="#dc2626" strokeDasharray="5 4"
                   label={{ value: `Break-even ${money(breakEven)}`, position: "insideTopRight", fill: "#dc2626", fontSize: 11 }} />
               )}
-              <Bar dataKey="revenue" name="Quoted revenue" fill="#2495D3" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="total_cost" name="Total cost" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
-              <Line dataKey="net_profit" name="Net profit" stroke="#059669" strokeWidth={2.5} dot={{ r: 3 }} />
+              <Bar dataKey="revenue" name="Quoted" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="sales" name="Real sales" fill="#2495D3" radius={[4, 4, 0, 0]} />
+              <Line dataKey="net_real" name="Net profit (real)" stroke="#059669" strokeWidth={2.5} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

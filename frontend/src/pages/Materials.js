@@ -31,11 +31,11 @@ const BLANK = {
   unit_cost: 0, labor_minutes: 0, machine_id: "", ink_coverage_pct: 0,
   price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false,
-  stock_qty: 0, reorder_point: 0, reorder_target: 0, notes: "",
+  stock_qty: 0, reorder_point: 0, reorder_target: 0, waste_per_order: 0, notes: "",
 };
 
 const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct",
-  "stock_qty", "reorder_point", "reorder_target"];
+  "stock_qty", "reorder_point", "reorder_target", "waste_per_order"];
 const OPT_NUMS = ["price_override", "retail_markup_pct", "wholesale_markup_pct"];
 
 export default function Materials() {
@@ -272,6 +272,8 @@ export default function Materials() {
                   <Input data-testid="material-field-reorder_point" type="number" value={form.reorder_point} onChange={(e) => set("reorder_point", e.target.value)} className="rounded-lg mt-1" /></div>
                 <div><Label className="text-xs">Reorder target</Label>
                   <Input data-testid="material-field-reorder_target" type="number" value={form.reorder_target} onChange={(e) => set("reorder_target", e.target.value)} className="rounded-lg mt-1" /></div>
+                <div><Label className="text-xs">Waste per order ({form.unit})</Label>
+                  <Input data-testid="material-field-waste_per_order" type="number" step="0.1" value={form.waste_per_order} onChange={(e) => set("waste_per_order", e.target.value)} className="rounded-lg mt-1" /></div>
               </div>
             </div>
 

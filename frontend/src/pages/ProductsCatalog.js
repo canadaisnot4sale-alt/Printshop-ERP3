@@ -10,16 +10,20 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye } from "lucide-react";
 
-const BLANK = { name: "", category: "Other", price: 0, description: "", published: false };
+const BLANK = { name: "", category: "Other", price: 0, wholesale_price: 0, description: "", published: false, bom: [] };
 
 export default function ProductsCatalog() {
   const [items, setItems] = useState([]);
   const [cats, setCats] = useState([]);
+  const [materials, setMaterials] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
@@ -28,16 +32,27 @@ export default function ProductsCatalog() {
   useEffect(() => {
     load();
     api.get("/config").then(({ data }) => setCats(data.product_categories || [])).catch(() => {});
+    api.get("/materials").then(({ data }) => setMaterials(data)).catch(() => {});
   }, []);
 
   const openNew = () => { setForm(BLANK); setEditId(null); setOpen(true); };
   const openEdit = (p) => {
-    setForm({ name: p.name, category: p.category, price: p.price, description: p.description || "", published: !!p.published });
+    setForm({ name: p.name, category: p.category, price: p.price, wholesale_price: p.wholesale_price || 0, description: p.description || "", published: !!p.published, bom: p.bom || [] });
     setEditId(p.id); setOpen(true);
   };
+  const addBom = () => setForm((f) => ({ ...f, bom: [...f.bom, { material_id: "", material_name: "", qty_per_unit: 1 }] }));
+  const setBom = (i, k, v) => setForm((f) => {
+    const bom = [...f.bom];
+    bom[i] = { ...bom[i], [k]: v };
+    if (k === "material_id") { const m = materials.find((x) => x.id === v); bom[i].material_name = m?.name || ""; }
+    return { ...f, bom };
+  });
+  const rmBom = (i) => setForm((f) => ({ ...f, bom: f.bom.filter((_, idx) => idx !== i) }));
+
   const save = async () => {
     if (!form.name.trim()) return toast.error("Name required");
-    const payload = { ...form, price: Number(form.price || 0) };
+    const payload = { ...form, price: Number(form.price || 0), wholesale_price: Number(form.wholesale_price || 0),
+      bom: form.bom.filter((b) => b.material_id).map((b) => ({ ...b, qty_per_unit: Number(b.qty_per_unit || 0) })) };
     try {
       if (editId) await api.put(`/catalog-products/${editId}`, payload);
       else await api.post("/catalog-products", payload);
@@ -49,7 +64,7 @@ export default function ProductsCatalog() {
     await api.delete(`/catalog-products/${id}`); toast.success("Deleted"); load();
   };
   const togglePublish = async (p) => {
-    await api.put(`/catalog-products/${p.id}`, { name: p.name, category: p.category, price: p.price, description: p.description || "", published: !p.published, module: p.module, source_quote_id: p.source_quote_id, specs: p.specs || {} });
+    await api.put(`/catalog-products/${p.id}`, { name: p.name, category: p.category, price: p.price, wholesale_price: p.wholesale_price || 0, description: p.description || "", published: !p.published, module: p.module, source_quote_id: p.source_quote_id, specs: p.specs || {}, bom: p.bom || [] });
     load();
   };
 
@@ -130,11 +145,35 @@ export default function ProductsCatalog() {
                 <Input data-testid="product-field-category" list="product-cats" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="rounded-lg mt-1" />
                 <datalist id="product-cats">{cats.map((c) => <option key={c} value={c} />)}</datalist>
               </div>
-              <div><Label className="text-xs">Price ($)</Label>
+              <div><Label className="text-xs">Retail price ($)</Label>
                 <Input data-testid="product-field-price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="rounded-lg mt-1" /></div>
             </div>
+            <div><Label className="text-xs">Wholesale price ($) — resellers</Label>
+              <Input data-testid="product-field-wholesale" type="number" value={form.wholesale_price} onChange={(e) => setForm({ ...form, wholesale_price: e.target.value })} className="rounded-lg mt-1" /></div>
             <div><Label className="text-xs">Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="rounded-lg mt-1" /></div>
+
+            <div className="border-t border-slate-100 pt-3">
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs">Materials used (deducted from inventory on sale)</Label>
+                <Button type="button" size="sm" variant="outline" onClick={addBom} className="rounded-lg h-7" data-testid="bom-add">+ material</Button>
+              </div>
+              <div className="space-y-2">
+                {form.bom.map((b, i) => (
+                  <div key={i} className="flex gap-2 items-center" data-testid="bom-row">
+                    <Select value={b.material_id || ""} onValueChange={(v) => setBom(i, "material_id", v)}>
+                      <SelectTrigger className="rounded-lg h-8 text-xs flex-1" data-testid={`bom-material-${i}`}><SelectValue placeholder="Material" /></SelectTrigger>
+                      <SelectContent>
+                        {materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" value={b.qty_per_unit} onChange={(e) => setBom(i, "qty_per_unit", e.target.value)} className="rounded-lg h-8 w-24 text-xs num" placeholder="qty/unit" data-testid={`bom-qty-${i}`} />
+                    <button onClick={() => rmBom(i)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                  </div>
+                ))}
+                {form.bom.length === 0 && <div className="text-[11px] text-slate-400">No materials linked — this product won't deduct inventory.</div>}
+              </div>
+            </div>
             <div className="flex items-center gap-3">
               <Switch data-testid="product-field-published" checked={form.published} onCheckedChange={(v) => setForm({ ...form, published: v })} />
               <Label className="text-xs">Published (visible in future storefront)</Label>

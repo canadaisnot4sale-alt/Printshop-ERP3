@@ -5,7 +5,7 @@ import {
   LayoutGrid, FileText, BookOpen, Ruler, Sticker, Printer, Settings as Cog, LogOut,
   Shirt, Sparkles, Scissors, PanelTop, Type, Users as UsersIcon, FolderOpen,
   Coffee, Disc, BookMarked, Cpu, Receipt, LineChart, Droplet, Boxes, Truck, ReceiptText, PiggyBank,
-  ShoppingCart, Package,
+  ShoppingCart, Package, Store, ClipboardList,
 } from "lucide-react";
 
 const NAV = [
@@ -25,6 +25,8 @@ const NAV = [
   { to: "/catalog", label: "Price Catalog", icon: BookMarked, testid: "nav-catalog" },
   { to: "/quotes", label: "My Quotes", icon: FolderOpen, testid: "nav-quotes" },
   { to: "/quote-builder", label: "Quote Builder", icon: ShoppingCart, testid: "nav-quote-builder" },
+  { to: "/store", label: "Store", icon: Store, testid: "nav-store" },
+  { to: "/orders", label: "Orders", icon: ClipboardList, testid: "nav-orders" },
   { section: "Business", admin: true },
   { to: "/products-catalog", label: "Products", icon: Package, testid: "nav-products", admin: true },
   { to: "/financials", label: "Financials", icon: LineChart, testid: "nav-financials", admin: true },
