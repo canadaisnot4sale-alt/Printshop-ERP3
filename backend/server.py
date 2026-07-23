@@ -1545,6 +1545,23 @@ async def startup():
     await get_settings()
     await seed_demo()
     await backfill_quote_inputs()
+    await calibrate_default_ink()
+
+async def calibrate_default_ink():
+    # Realistic ink defaults derived from the user's real VersaWorks readings. Runs ONCE.
+    if await db.migrations.find_one({"_id": "ink_defaults_v1"}):
+        return
+    presets = [
+        (["VP-540i", "XR-640", "RE-640"], 0.80, 0.205),   # Roland eco-solvent (440ml @ $90)
+        (["UCJV300"], 1.00, 0.31),                          # Mimaki UV-LED roll (1L @ $310)
+        (["LEJ-640", "LEF2-200"], 1.60, 0.65),              # Roland UV flatbed (500ml @ $315)
+    ]
+    for names, mlpsf, cpm in presets:
+        for nm in names:
+            await db.machines.update_many(
+                {"name": {"$regex": nm}, "$or": [{"ink_samples": {"$exists": False}}, {"ink_samples": 0}]},
+                {"$set": {"ink_ml_per_sqft_full": mlpsf, "ink_cost_per_ml": cpm}})
+    await db.migrations.update_one({"_id": "ink_defaults_v1"}, {"$set": {"done": True}}, upsert=True)
 
 def _reconstruct_inputs(module, s):
     """Best-effort rebuild of calculator inputs from a saved quote summary.
