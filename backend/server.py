@@ -705,7 +705,15 @@ async def finance_summary(user=Depends(require_admin)):
 def analyze_ink_density(raw_bytes):
     import io
     from PIL import Image
-    img = Image.open(io.BytesIO(raw_bytes)).convert("CMYK")
+    if raw_bytes[:5] == b"%PDF-":
+        import pypdfium2 as pdfium
+        pdf = pdfium.PdfDocument(raw_bytes)
+        page = pdf[0]
+        bitmap = page.render(scale=1.5)
+        img = bitmap.to_pil().convert("CMYK")
+        pdf.close()
+    else:
+        img = Image.open(io.BytesIO(raw_bytes)).convert("CMYK")
     img.thumbnail((400, 400))
     px = list(img.getdata())
     n = len(px)
@@ -713,6 +721,12 @@ def analyze_ink_density(raw_bytes):
         return 0.0
     total = sum(c + m + y + k for (c, m, y, k) in px)
     return total / (n * 4 * 255.0)   # 0..1 average ink density
+
+def compute_ink(machine, area_sqft, coverage_pct):
+    frac = (coverage_pct if coverage_pct is not None else 100.0) / 100.0
+    ml = area_sqft * frac * (machine.get("ink_ml_per_sqft_full") or 10.0)
+    cost = ml * (machine.get("ink_cost_per_ml") or 0.25)
+    return round(ml, 2), round(cost, 2)
 
 @api_router.post("/ink/estimate")
 async def ink_estimate(
@@ -950,12 +964,18 @@ class LFCalcIn(BaseModel):
     mode: str = "print"
     laminate: bool = False
     material_ids: Optional[List[str]] = None
+    machine_id: Optional[str] = None
+    ink_coverage_pct: Optional[float] = None
 
 @api_router.post("/calc/largeformat")
 async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
     q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
     mats = [clean(m) for m in await db.roll_materials.find(q).to_list(200)]
+    machine = None
+    if body.machine_id:
+        machine = await db.machines.find_one({"_id": ObjectId(body.machine_id)})
+    lf_ink_area = sum((s.width * s.height * int(s.qty)) for s in body.sizes) / 144.0
     results = []
     for m in mats:
         size_rows = []
@@ -972,6 +992,15 @@ async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
         total["base_cost"] = round(total["material_cost"] + total["printing_cost"] + total["extra_cost"], 2)
         _tq = sum(int(s.qty) for s in body.sizes) or 1
         total["quantity"] = _tq
+        if machine:
+            ink_ml, ink_cost = compute_ink(clean(machine), lf_ink_area, body.ink_coverage_pct)
+            total["ink_ml"] = ink_ml
+            total["ink_cost"] = ink_cost
+            total["machine_name"] = machine.get("name")
+            new_base = round(total["base_cost"] + ink_cost, 2)
+            total["base_cost"] = new_base
+            total["selling_price"] = markup_price(new_base, settings["retail_markup_pct"])
+            total["wholesale_price"] = markup_price(new_base, settings["wholesale_markup_pct"])
         total["unit_price"] = round(total["selling_price"] / _tq, 2)
         total["wholesale_unit"] = round(total["wholesale_price"] / _tq, 2)
         placed, used_len, area = nest_pieces(
@@ -1156,6 +1185,8 @@ class DirectPrintCalcIn(BaseModel):
     sizes: List[JobSize] = []
     cnc: bool = False
     cnc_cut_length_in: float = 0.0
+    machine_id: Optional[str] = None
+    ink_coverage_pct: Optional[float] = None
 
 @api_router.post("/calc/directprint")
 async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_user)):
@@ -1166,6 +1197,9 @@ async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_use
     items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
     total_qty = sum(int(z.qty) for z in body.sizes) or 1
     print_area = sum((z.w * z.h) / 144.0 * int(z.qty) for z in body.sizes)
+    machine = None
+    if body.machine_id:
+        machine = await db.machines.find_one({"_id": ObjectId(body.machine_id)})
     results = []
     sheet_area_sqft = (sw * sh) / 144.0
     for m in mats:
@@ -1176,12 +1210,16 @@ async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_use
         cnc_cost = 0.0
         if body.cnc and m.get("cnc_capable"):
             cnc_cost = (body.cnc_cut_length_in / 12.0) * s["cnc_cut_per_linear_ft"]
-        base = sheet_cost + print_cost + cnc_cost
+        ink_ml, ink_cost = (0.0, 0.0)
+        if machine:
+            ink_ml, ink_cost = compute_ink(clean(machine), print_area, body.ink_coverage_pct)
+        base = sheet_cost + print_cost + cnc_cost + ink_cost
         results.append(scrub({
             "material": m, "sheet_size": body.sheet_size, "sheets": sheets, "quantity": total_qty,
             "print_sqft": round(print_area, 2),
             "sheet_cost": round(sheet_cost, 2), "print_cost": round(print_cost, 2),
-            "cnc_cost": round(cnc_cost, 2), "base_cost": round(base, 2),
+            "cnc_cost": round(cnc_cost, 2), "ink_cost": round(ink_cost, 2), "ink_ml": round(ink_ml, 2),
+            "machine_name": machine.get("name") if machine else None, "base_cost": round(base, 2),
             "retail_total": markup_price(base, s["retail_markup_pct"]),
             "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),
             "unit_price": round(markup_price(base, s["retail_markup_pct"]) / total_qty, 2) if total_qty else 0,

@@ -8,6 +8,7 @@ import NestingCanvas from "@/components/NestingCanvas";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { InkPicker } from "@/components/InkPicker";
 import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,8 @@ export default function DirectPrint() {
   const [sheetSize, setSheetSize] = useState("4x8");
   const [cnc, setCnc] = useState(false);
   const [cncLen, setCncLen] = useState(0);
+  const [machineId, setMachineId] = useState("none");
+  const [inkCoverage, setInkCoverage] = useState(100);
   const [res, setRes] = useState(null);
   const [sel, setSel] = useState(null);
 
@@ -54,6 +57,7 @@ export default function DirectPrint() {
       const body = {
         sheet_size: sheetSize, cnc, cnc_cut_length_in: +cncLen,
         sizes: sizes.map((s) => ({ label: s.label, w: +s.w, h: +s.h, qty: +s.qty })),
+        machine_id: machineId !== "none" ? machineId : null, ink_coverage_pct: inkCoverage,
       };
       const { data } = await api.post("/calc/directprint", body);
       if (!data.results.length) toast.info("Add sheet materials first.");
@@ -99,6 +103,7 @@ export default function DirectPrint() {
                   <div className="col-span-2"><Label className="text-xs">CNC cut length (in)</Label><Input data-testid="dp-cnc-len" type="number" value={cncLen} onChange={(e) => setCncLen(e.target.value)} className="rounded-lg mt-1 num" /></div>
                 )}
               </div>
+              {isAdmin && <InkPicker machineId={machineId} setMachineId={setMachineId} coverage={inkCoverage} setCoverage={setInkCoverage} categories={["directprint"]} />}
               <Button data-testid="calc-dp-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
                 <Calculator size={16} className="mr-2" />Compare Materials
               </Button>

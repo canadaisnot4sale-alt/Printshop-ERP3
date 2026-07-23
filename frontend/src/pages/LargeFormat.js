@@ -6,6 +6,7 @@ import CrudManager from "@/components/CrudManager";
 import NestingCanvas from "@/components/NestingCanvas";
 import { Metric, EmptyState, SectionLabel, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import { InkPicker } from "@/components/InkPicker";
 import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,8 @@ export default function LargeFormat() {
   const [sizes, setSizes] = useState([{ width: 24, height: 18, qty: 1 }]);
   const [mode, setMode] = useState("print");
   const [laminate, setLaminate] = useState(false);
+  const [machineId, setMachineId] = useState("none");
+  const [inkCoverage, setInkCoverage] = useState(100);
   const [presets, setPresets] = useState([]);
   const [res, setRes] = useState(null);
   const [sel, setSel] = useState(null);
@@ -76,7 +79,8 @@ export default function LargeFormat() {
 
   const calc = async () => {
     try {
-      const body = { sizes: sizes.map((s) => ({ width: +s.width, height: +s.height, qty: +s.qty })), mode, laminate };
+      const body = { sizes: sizes.map((s) => ({ width: +s.width, height: +s.height, qty: +s.qty })), mode, laminate,
+        machine_id: machineId !== "none" ? machineId : null, ink_coverage_pct: inkCoverage };
       const { data } = await api.post("/calc/largeformat", body);
       setRes(data);
       setSel(data.results[0] || null);
@@ -87,6 +91,8 @@ export default function LargeFormat() {
     if (Array.isArray(rq.sizes) && rq.sizes.length) setSizes(rq.sizes);
     if (rq.mode) setMode(rq.mode);
     if (rq.laminate != null) setLaminate(rq.laminate);
+    if (rq.machineId) setMachineId(rq.machineId);
+    if (rq.inkCoverage != null) setInkCoverage(rq.inkCoverage);
   }, calc);
 
   const totalPieces = sizes.reduce((a, s) => a + (+s.qty || 0), 0);
@@ -140,6 +146,7 @@ export default function LargeFormat() {
                   <Switch data-testid="lf-laminate" checked={laminate} onCheckedChange={setLaminate} />
                 </div>
               </div>
+              {isAdmin && <InkPicker machineId={machineId} setMachineId={setMachineId} coverage={inkCoverage} setCoverage={setInkCoverage} categories={["largeformat"]} />}
               <Button data-testid="calc-lf-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
                 <Calculator size={16} className="mr-2" />Compare Materials
               </Button>
@@ -167,10 +174,16 @@ export default function LargeFormat() {
                         </div>
                       ))}
                     </div>
+                    {sel.total.machine_name && (
+                      <div className="flex justify-between text-xs num text-[#2495D3] pb-2 mb-1 border-b border-slate-100" data-testid="lf-ink-line">
+                        <span>Ink · {sel.total.machine_name} · {sel.total.ink_ml} ml</span>
+                        <span>{money(sel.total.ink_cost)}</span>
+                      </div>
+                    )}
                     {sel.layout && <NestingCanvas layout={sel.layout} />}
                     <PricingPanel r={sel.total} className="mt-3" />
                     <div className="mt-3 flex justify-end">
-                      <SaveQuoteBar module="Gran Formato" title={`${sel.material.name} · ${res.mode}`} inputs={{ sizes, mode, laminate }} summary={sel} />
+                      <SaveQuoteBar module="Gran Formato" title={`${sel.material.name} · ${res.mode}`} inputs={{ sizes, mode, laminate, machineId, inkCoverage }} summary={sel} />
                     </div>
                   </div>
 

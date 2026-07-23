@@ -93,8 +93,8 @@ export default function InkEstimator() {
               <Label className="text-xs">Or analyze the artwork file (auto coverage)</Label>
               <label className="mt-1 flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-3 py-3 cursor-pointer hover:border-[#2495D3]" data-testid="ink-file-label">
                 <Upload size={16} className="text-slate-400" />
-                <span className="text-sm text-slate-500 truncate">{file ? file.name : "Upload PNG / JPG / TIFF"}</span>
-                <input data-testid="ink-file-input" type="file" accept="image/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                <span className="text-sm text-slate-500 truncate">{file ? file.name : "Upload PDF / PNG / JPG / TIFF"}</span>
+                <input data-testid="ink-file-input" type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
               </label>
               {file && <button onClick={() => setFile(null)} className="text-xs text-slate-400 mt-1 hover:text-red-500">Clear file</button>}
             </div>

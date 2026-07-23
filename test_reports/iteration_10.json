@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend verification of InkPicker integration in LF/DP calculators and PDF support in Ink Estimator. All primary flows pass with expected values.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Direct Print cost breakdown", "issues": ["Ink cost row is labeled generically as 'UV print $30.00' with no machine name. LF shows explicit 'Ink · <machine> · <ml> ml · $cost' line, DP does not include the selected machine name in the breakdown. Retail is correct ($232.80 w/ LEJ-640FT @100%), but the review request mentioned an 'Ink (<machine>)' row for DP — the machine name is absent. Minor UX inconsistency between LF and DP."]}
+    ]
+  },
+  "verification_results": {
+    "LF_no_machine_retail": "$158.40 (baseline, matches expected)",
+    "LF_Mimaki_50pct": "Retail $278.40, ink line 'Ink · Mimaki UCJV300-160 · 160 ml' = $40.00 — MATCHES EXPECTED",
+    "DP_LEJ640FT_100pct": "Retail $232.80, UV print $30.00 — matches expected retail; ink cost flowing into total",
+    "InkEstimator_PDF_label": "Label reads 'Upload PDF / PNG / JPG / TIFF'; accept='application/pdf,image/*' — PASS",
+    "non_admin_gating_cliente1": "InkPicker not rendered on /large-format nor /direct-print for cliente1@test.com (isAdmin gate works). Pages remained reachable but picker hidden as designed."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: For DP, consider showing 'Ink (<machine>) · <ml> ml' as its own CostRow (like LF) so admins can see how much of the print_cost is ink vs base print. Currently the machine name is absent from the DP breakdown."
+  ],
+  "critical_code_review_comments": [
+    "InkPicker uses value='none' for the sentinel but consumers compare with `machineId !== 'none'`. Works, but a magic string; consider constant.",
+    "InkPicker fetches /machines silently swallows errors (.catch(() => {})) — no user feedback if admin has network issue."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100%"},
+  "test_credentials": "admin@printandsave.ca/admin123 (works); cliente1@test.com/test123 (works, non-admin gating verified)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 10 verified InkPicker in LF+DP and PDF label in Ink Estimator. Numbers match backend curl expectations exactly. Only minor observation: DP breakdown doesn't show machine name in ink row (LF does)."
+}
