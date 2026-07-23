@@ -73,6 +73,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - Verified iteration_19 = backend 29/29 (calc from central, write-block 400s) + frontend 100% (central editor with module specs, all 5 tabs read-only, calculators compute from central). No bugs.
 - NOTE: DTF/Embroidery (garments) and Sublimation (blanks) remain their own small editable catalogs — they are finished blanks/garments, not raw sheet/roll materials.
 
+## Implemented (2026-06) — v24 Per-module default material + dynamic product pricing + per-product waste
+- **Default material PER MODULE**: Material gained `default_modules[]`. In the central Materials editor, for each assigned module you can toggle "Default for this module" (Star). Opening a module's calculator pre-selects that module's default material (backend marks is_default + sorts default-first per `?module=`; calculators' setSel prefers `is_default`). Only one default per module (`_apply_default_modules`).
+- **Dynamic product pricing from BoM**: CatalogProduct gained optional retail/wholesale markup overrides. `compute_product_pricing()` computes unit cost = Σ(material.unit_cost × qty_per_unit) and derives retail/wholesale from markups. list_catalog_products + create_order use it → changing a material cost re-prices every product built from it automatically. Products without a BoM keep manual price.
+- **Per-PRODUCT waste**: each BoM line has `waste_per_order` (once per order) + `waste_per_unit` (× qty), used by deduct_inventory_for_order. Smart SUGGESTION: GET /api/products/waste-suggestion averages waste from similar products (same category/module) and pre-fills the BoM row on material pick.
+- Verified iteration_20 = backend 7/7 + frontend 100%. No bugs.
+
 ### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).
 
 ## Implemented (2026-06) — v22.1 Payment confirmation email
