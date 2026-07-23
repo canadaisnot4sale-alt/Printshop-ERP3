@@ -48,6 +48,20 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
+## Implemented (2026-07-19) — v11 Business Control · Phase 1
+- NEW admin-only "Business" area: **Machinery/Assets DB**, **Fixed Costs**, **Financial Control dashboard**.
+- Machine model: owned (straight-line depreciation over useful life) or leased (lease + 2%/yr maintenance) → computed monthly_cost & hourly_cost (monthly ÷ productive hours, per-machine or shop default 188 h/mo). Seeded 12 real machines.
+- Fixed Costs (rent, payroll, utilities, misc) seeded to $19,025/mo overhead. Business hourly rate = overhead ÷ 188 = $101.20.
+- /finance/summary: overhead $19,025, machines $5,612.94, total monthly nut $24,637.94, break-even revenue $36,956.91 (@66.7% gross margin from retail markup), equipment investment $184,500, GST 5% + PST 7% (BC). Break-even progress bar vs quoted-this-month.
+- Endpoints require_admin; routes gated via <Protected adminOnly>. Verified iteration_8 = 100% backend+frontend + reseller gating (403 / redirect).
+- Assumptions locked: BC taxes 5/7, payroll 4.33 wk/mo ($11,700), combination cost model (shop hourly + per-machine), maintenance default 2%/yr, base hours = 188 open h/mo. LEJ-640 purchase price pending (seeded 0).
+
+### Remaining Business-Control roadmap (P0 → down)
+- Phase 2: True manufacturing cost integrated into calculators + Materials overhaul (nickname + supplier info, inventory + reorder alerts, reorder center with 1-click supplier email, cross-module usage, DEFAULT material, auto unit/finish cost, price override, below-cost warning).
+- Phase 3: Multi-module quotes + per-line Quote→Product conversion + Products catalog (A–Z, categories).
+- Phase 4: Client/Reseller e-commerce storefront (browse/buy/orders/invoice/history) + inventory & material deduction on purchase.
+- Phase 5: Business valuation / projections / franchise readiness.
+
 ## Implemented (2026-07-19) — v10 Email from detail dialog
 - Added a "Email" button inside the quote-detail dialog (Catalog + My Quotes) with an inline recipient field, reusing POST /quotes/{id}/email (Resend). Verified end-to-end: 200 + "Quote emailed" (sent to admin during test). Lets you send/re-send a branded quote right after viewing or Re-quoting.
 
