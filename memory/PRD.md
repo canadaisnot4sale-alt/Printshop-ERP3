@@ -48,7 +48,16 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
-## Implemented (2026-07-23) — v16 Phase 2.1: Purchases — PDF invoice import + tax history
+## Implemented (2026-07-23) — v17 P0 Paso 1: Profitability panel (true cost + margin) in all modules
+- NEW admin-only **Profitability panel** rendered by the shared PricingPanel (Metric.js) → appears in ALL 11 calculators AND the quote-detail dialog, WITHOUT changing any quoted price (visibility-only, per user choice).
+- Shows: Base production cost + **Labor** (editable, auto-estimated **Production time (h)** × **shop rate**) = **True manufacturing cost**, vs the quoted retail price → **Margin ($ and %)** with a red **Loss / below-cost alert** when negative.
+- **Shop rate = business overhead hourly ($101.20 = $19,025/mo ÷ 188h) + optional selected machine hourly** (depreciation/lease + maintenance ÷ hours). Machine picker in the panel; defaults to "Shop rate only".
+- Production time auto-estimated (area/40 or qty/1000 heuristic, min 0.25h) and editable. Debounced 300ms recompute via POST /api/calc/profitability (require_admin, RBAC verified). Component: ProfitabilityPanel.js.
+- Verified iteration_13 = 5/5 backend + 100% frontend (Stickers, Paper, reseller-hidden, below-cost alert, no regression).
+- **P0 Paso 2 (pending, own phase)**: connect the 11 modules' material sources to the unified Materials DB so material cost/inventory flow from purchases.
+- **Approved next after P0**: Profitability Dashboard (quote revenue vs purchases/overhead → net profit per month).
+
+
 - **Import supplier invoice from PDF**: admin uploads a supplier invoice/PO PDF → backend extracts text (pypdfium2) and parses it with **GPT-4o** (emergentintegrations, EMERGENT_LLM_KEY) into structured JSON (supplier, invoice #, date, line items [code/desc/qty/unit/unit_price/total], subtotal/GST/PST/shipping/total). Shows an **editable preview** before saving. Endpoint POST /api/purchases/parse (multipart, no save).
 - **On confirm** (POST /api/purchases): saves a Purchase record (tax history) AND upserts Materials/Inventory when update_inventory=on — match by code (case-insensitive): if found, update unit_cost + **add** qty to stock + union modules; if not found, **create** the material. Supplier→module rule preselected & editable: Alfa→paper, Spicers/Grimco→large-format+direct-print (also sets a default category).
 - **Purchase History** page (/purchases, admin): metrics (total spend, GST paid, PST paid), supplier + date-range filters, per-row delete, and **CSV export** (GET /api/purchases/export.csv) for taxes.
