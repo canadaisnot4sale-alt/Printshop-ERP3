@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only verification of profit-margin feature in Product Catalog (/products-catalog). Created 3 test products via API (healthy-margin w/ BoM, below-cost w/ negative retail_markup_pct + BoM, manual no-BoM), then loaded the admin UI and validated all data-testids and visual states. All checks passed. Test products cleaned up.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend catalog endpoint is /api/catalog-products (hyphen). Note for future consistency: rest of API uses /api/catalog/{resource}-style paths in some places; consider unifying.",
+    "For below-cost product the row shows '(-100%)' which is mathematically correct given price=$21.25, cost=$42.50 (margin/price = -100%). If desired, consider using cost as denominator or capping display for negative margins for clarity.",
+    "The manual-price row shows only 'manual price' with no cost indication — acceptable but consider a subtle icon/tooltip for admins to explain that dynamic pricing is disabled."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (all 4 requested UI checks pass)"},
+  "test_credentials": "admin@printandsave.ca / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Temporarily created 3 TEST_* catalog products; all deleted at end of test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Product Catalog margin feature verified. Key testids: product-row, product-margin, product-belowcost-badge. Backend endpoint for catalog CRUD is /api/catalog-products (not /catalog/products). Below-cost condition = computed_cost != null && (price - computed_cost) < 0. KPI 'Below cost' counts such rows. To force below-cost via API set retail_markup_pct to a negative number with a BoM in place (price is dynamically recomputed by backend).",
+  "verified_scenarios": [
+    "Healthy margin: green text 'cost $8.50 · $17.00 (67%)' rendered inside data-testid=product-margin",
+    "Below cost: red row tint (bg-red-50/60), red BELOW COST badge (data-testid=product-belowcost-badge), red margin text 'cost $42.50 · -$21.25 (-100%)'",
+    "Manual (no BoM): shows 'manual price' with no data-testid=product-margin node and no belowcost badge",
+    "Below cost KPI on metrics row shows count = 1 when a single below-cost product exists"
+  ]
+}

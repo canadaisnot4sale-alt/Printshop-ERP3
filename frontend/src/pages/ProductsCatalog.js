@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye, AlertTriangle } from "lucide-react";
 
 const BLANK = { name: "", category: "Other", price: 0, wholesale_price: 0, description: "", published: false, bom: [] };
 
@@ -84,6 +84,7 @@ export default function ProductsCatalog() {
   items.forEach((p) => { (groups[p.category || "Other"] = groups[p.category || "Other"] || []).push(p); });
   Object.values(groups).forEach((arr) => arr.sort((a, b) => a.name.localeCompare(b.name)));
   const published = items.filter((p) => p.published).length;
+  const belowCost = items.filter((p) => p.computed_cost != null && p.price - p.computed_cost < 0).length;
 
   return (
     <div data-testid="products-catalog-page">
@@ -95,10 +96,11 @@ export default function ProductsCatalog() {
       </PageHeader>
 
       <div className="p-8 space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Metric icon={Package} label="Products" value={items.length} />
           <Metric icon={CheckCircle2} label="Published" value={published} accent={published > 0} />
           <Metric icon={Eye} label="Categories" value={Object.keys(groups).length} />
+          <Metric icon={AlertTriangle} label="Below cost" value={belowCost} accent={belowCost > 0} />
         </div>
 
         {items.length === 0 && (
@@ -115,16 +117,27 @@ export default function ProductsCatalog() {
             <table className="w-full text-sm">
               <tbody>
                 {groups[cat].map((p) => (
-                  <tr key={p.id} data-testid="product-row" className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                  <tr key={p.id} data-testid="product-row" className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${p.computed_cost != null && p.price - p.computed_cost < 0 ? "bg-red-50/60" : ""}`}>
                     <td className="px-5 py-3">
                       <div className="font-medium flex items-center gap-2">
                         {p.name}
                         {p.published && <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px]" data-testid="product-published-badge">PUBLISHED</Badge>}
+                        {p.computed_cost != null && p.price - p.computed_cost < 0 && <Badge className="bg-red-100 text-red-700 border-0 text-[10px]" data-testid="product-belowcost-badge">BELOW COST</Badge>}
                       </div>
                       {p.description && <div className="text-[11px] text-slate-400">{p.description}</div>}
                       {p.module && <div className="text-[10px] font-mono uppercase text-slate-400">{p.module}</div>}
                     </td>
-                    <td className="px-5 py-3 text-right num font-semibold text-[#2495D3] w-28">{money(p.price)}</td>
+                    <td className="px-5 py-3 text-right w-40">
+                      <div className="num font-semibold text-[#2495D3]">{money(p.price)}</div>
+                      {p.computed_cost != null ? (
+                        <div className="text-[11px] num" data-testid="product-margin">
+                          <span className="text-slate-400">cost {money(p.computed_cost)} · </span>
+                          <span className={p.price - p.computed_cost < 0 ? "text-red-600 font-semibold" : "text-emerald-600 font-semibold"}>
+                            {money(p.price - p.computed_cost)} ({p.price ? Math.round(((p.price - p.computed_cost) / p.price) * 100) : 0}%)
+                          </span>
+                        </div>
+                      ) : <div className="text-[10px] text-slate-300">manual price</div>}
+                    </td>
                     <td className="px-5 py-3 w-40">
                       <div className="flex items-center gap-2 justify-end">
                         <div className="flex items-center gap-1.5">
