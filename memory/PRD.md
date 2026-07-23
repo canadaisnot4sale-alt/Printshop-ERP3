@@ -78,6 +78,7 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Dynamic product pricing from BoM**: CatalogProduct gained optional retail/wholesale markup overrides. `compute_product_pricing()` computes unit cost = Σ(material.unit_cost × qty_per_unit) and derives retail/wholesale from markups. list_catalog_products + create_order use it → changing a material cost re-prices every product built from it automatically. Products without a BoM keep manual price.
 - **Per-PRODUCT waste**: each BoM line has `waste_per_order` (once per order) + `waste_per_unit` (× qty), used by deduct_inventory_for_order. Smart SUGGESTION: GET /api/products/waste-suggestion averages waste from similar products (same category/module) and pre-fills the BoM row on material pick.
 - Verified iteration_20 = backend 7/7 + frontend 100%. No bugs.
+- **Profit margin per product** in Product Catalog: each BoM product row shows `cost · margin ($ and %)` (green positive / red negative), a red "BELOW COST" badge + tinted row when price < material cost, and a "Below cost" KPI. Products without a BoM show "manual price". Verified iteration_21 = frontend 100%.
 
 ### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).
 
