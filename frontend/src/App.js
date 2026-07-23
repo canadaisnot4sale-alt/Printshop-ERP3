@@ -21,6 +21,9 @@ import RollStickers from "@/pages/RollStickers";
 import Catalog from "@/pages/Catalog";
 import Users from "@/pages/Users";
 import Quotes from "@/pages/Quotes";
+import Machinery from "@/pages/Machinery";
+import FixedCosts from "@/pages/FixedCosts";
+import Financials from "@/pages/Financials";
 
 function Protected({ children, adminOnly }) {
   const { user, ready } = useAuth();
@@ -52,6 +55,9 @@ function App() {
             <Route path="/catalog" element={<Protected><Catalog /></Protected>} />
             <Route path="/quotes" element={<Protected><Quotes /></Protected>} />
             <Route path="/equipment" element={<Protected adminOnly><Equipment /></Protected>} />
+            <Route path="/machinery" element={<Protected adminOnly><Machinery /></Protected>} />
+            <Route path="/fixed-costs" element={<Protected adminOnly><FixedCosts /></Protected>} />
+            <Route path="/financials" element={<Protected adminOnly><Financials /></Protected>} />
             <Route path="/users" element={<Protected adminOnly><Users /></Protected>} />
             <Route path="/settings" element={<Protected adminOnly><Settings /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />

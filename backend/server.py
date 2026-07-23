@@ -203,6 +203,26 @@ class LaserPreset(BaseModel):
     passes: int = 1
     sizes: List[dict] = []
 
+class Machine(BaseModel):
+    name: str
+    category: str = "largeformat"   # largeformat, directprint, laser, laserprint, finishing, other
+    acquisition: str = "owned"      # owned | leased
+    purchase_price: float = 0.0
+    lease_monthly: float = 0.0
+    lease_term_months: float = 48.0
+    useful_life_years: float = 7.0
+    maintenance_pct_year: float = 2.0
+    productive_hours_month: float = 0.0   # 0 => use settings.open_hours_per_month
+    ink_config: str = ""
+    ink_details: str = ""
+    notes: str = ""
+
+class FixedCost(BaseModel):
+    label: str
+    category: str = "overhead"      # rent, payroll, utilities, misc, overhead
+    amount: float = 0.0             # per month
+    notes: str = ""
+
 class Settings(BaseModel):
     retail_markup_pct: float = 200.0
     wholesale_markup_pct: float = 100.0
@@ -259,6 +279,12 @@ class Settings(BaseModel):
     rollsticker_labor: float = 5.0
     rollsticker_stickers_per_min: float = 30.0
     currency: str = "CAD"
+    # Business finance (BC, Canada)
+    gst_pct: float = 5.0
+    pst_pct: float = 7.0
+    open_hours_per_month: float = 188.0
+    default_maintenance_pct_year: float = 2.0
+    owner_salary_monthly: float = 0.0
 
 SHEET_SIZES = {
     "8.5x11": (8.5, 11), "8.5x14": (8.5, 14), "11x17": (11, 17),
@@ -553,6 +579,124 @@ register_crud("laser-materials", LaserMaterial, "laser_materials")
 register_crud("sheet-materials", SheetMaterial, "sheet_materials")
 register_crud("sublimation-products", SublimationProduct, "sublimation_products")
 register_crud("roll-sticker-materials", RollStickerMaterial, "roll_sticker_materials")
+
+# ---------------- Business finance: machines + fixed costs + summary ----------------
+def machine_computed(m, open_hours):
+    owned = m.get("acquisition") == "owned"
+    value = (m.get("purchase_price") or 0) or ((m.get("lease_monthly") or 0) * (m.get("lease_term_months") or 0))
+    maint_m = value * ((m.get("maintenance_pct_year") or 0) / 100.0) / 12.0
+    life_m = max((m.get("useful_life_years") or 0) * 12.0, 1)
+    if owned:
+        recurring = (m.get("purchase_price") or 0) / life_m
+    else:
+        recurring = m.get("lease_monthly") or 0
+    monthly = recurring + maint_m
+    hrs = (m.get("productive_hours_month") or 0) or open_hours or 1
+    return {
+        "value": round(value, 2),
+        "maintenance_monthly": round(maint_m, 2),
+        "recurring_monthly": round(recurring, 2),
+        "monthly_cost": round(monthly, 2),
+        "hourly_cost": round(monthly / hrs, 2),
+        "productive_hours": round(hrs, 1),
+    }
+
+@api_router.get("/machines")
+async def list_machines(user=Depends(require_admin)):
+    s = await get_settings()
+    oh = s.get("open_hours_per_month", 188) or 188
+    items = await db.machines.find().sort("created_at", -1).to_list(500)
+    out = []
+    for m in items:
+        c = clean(m)
+        c.update(machine_computed(c, oh))
+        out.append(c)
+    return out
+
+@api_router.post("/machines")
+async def create_machine(body: Machine, user=Depends(require_admin)):
+    doc = body.model_dump(); doc["created_at"] = now_iso()
+    res = await db.machines.insert_one(doc); doc["_id"] = res.inserted_id
+    return clean(doc)
+
+@api_router.put("/machines/{mid}")
+async def update_machine(mid: str, body: Machine, user=Depends(require_admin)):
+    await db.machines.update_one({"_id": ObjectId(mid)}, {"$set": body.model_dump()})
+    return clean(await db.machines.find_one({"_id": ObjectId(mid)}))
+
+@api_router.delete("/machines/{mid}")
+async def delete_machine(mid: str, user=Depends(require_admin)):
+    await db.machines.delete_one({"_id": ObjectId(mid)})
+    return {"ok": True}
+
+@api_router.get("/fixed-costs")
+async def list_fixed_costs(user=Depends(require_admin)):
+    items = await db.fixed_costs.find().sort("created_at", -1).to_list(500)
+    return [clean(i) for i in items]
+
+@api_router.post("/fixed-costs")
+async def create_fixed_cost(body: FixedCost, user=Depends(require_admin)):
+    doc = body.model_dump(); doc["created_at"] = now_iso()
+    res = await db.fixed_costs.insert_one(doc); doc["_id"] = res.inserted_id
+    return clean(doc)
+
+@api_router.put("/fixed-costs/{fid}")
+async def update_fixed_cost(fid: str, body: FixedCost, user=Depends(require_admin)):
+    await db.fixed_costs.update_one({"_id": ObjectId(fid)}, {"$set": body.model_dump()})
+    return clean(await db.fixed_costs.find_one({"_id": ObjectId(fid)}))
+
+@api_router.delete("/fixed-costs/{fid}")
+async def delete_fixed_cost(fid: str, user=Depends(require_admin)):
+    await db.fixed_costs.delete_one({"_id": ObjectId(fid)})
+    return {"ok": True}
+
+@api_router.get("/finance/summary")
+async def finance_summary(user=Depends(require_admin)):
+    from datetime import datetime, timezone
+    s = await get_settings()
+    oh_hours = s.get("open_hours_per_month", 188) or 188
+    fixed = await db.fixed_costs.find().to_list(500)
+    overhead = sum((f.get("amount") or 0) for f in fixed)
+    machines = await db.machines.find().to_list(500)
+    mc = []
+    for m in machines:
+        c = clean(m)
+        c.update(machine_computed(c, oh_hours))
+        mc.append(c)
+    machines_monthly = sum(x["monthly_cost"] for x in mc)
+    total_monthly = overhead + machines_monthly
+    business_hourly = round(overhead / oh_hours, 2) if oh_hours else 0
+    mk = s.get("retail_markup_pct", 200) or 0
+    margin = mk / (100 + mk) if (100 + mk) else 0
+    break_even_rev = round(total_monthly / margin, 2) if margin else 0
+    month_prefix = datetime.now(timezone.utc).strftime("%Y-%m")
+    quoted = 0.0; qcount = 0
+    async for q in db.quotes.find({"created_at": {"$regex": f"^{month_prefix}"}}):
+        summ = q.get("summary") or {}
+        p = (summ.get("retail_total") or summ.get("customer_price")
+             or (summ.get("total") or {}).get("selling_price") or summ.get("selling_price") or 0)
+        quoted += p or 0; qcount += 1
+    total_investment = sum((m.get("purchase_price") or 0) for m in machines)
+    lease_oblig = sum((m.get("lease_monthly") or 0) for m in machines if m.get("acquisition") == "leased")
+    return {
+        "overhead_monthly": round(overhead, 2),
+        "machines_monthly": round(machines_monthly, 2),
+        "total_monthly_cost": round(total_monthly, 2),
+        "business_hourly_rate": business_hourly,
+        "open_hours_per_month": oh_hours,
+        "gross_margin_pct": round(margin * 100, 1),
+        "break_even_revenue_monthly": break_even_rev,
+        "quoted_this_month": round(quoted, 2),
+        "quotes_this_month": qcount,
+        "total_equipment_investment": round(total_investment, 2),
+        "monthly_lease_obligations": round(lease_oblig, 2),
+        "gst_pct": s.get("gst_pct", 5.0),
+        "pst_pct": s.get("pst_pct", 7.0),
+        "machine_count": len(machines),
+        "fixed_cost_count": len(fixed),
+        "machines": sorted(mc, key=lambda x: -x["monthly_cost"]),
+        "fixed_costs": sorted([clean(f) for f in fixed], key=lambda x: -(x.get("amount") or 0)),
+    }
 
 # ---------------- Equipment supplies (admin) ----------------
 @api_router.get("/equipment/{equipment_id}/supplies")
@@ -1367,6 +1511,34 @@ async def seed_demo():
             {"name": "Coroplast 4mm White", "code": "CORO-4", "price_per_sqft": 0.55, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": False, "created_at": now_iso()},
             {"name": "ACM / Dibond 3mm", "code": "ACM-3", "price_per_sqft": 2.20, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": True, "created_at": now_iso()},
             {"name": "PVC 6mm", "code": "PVC-6", "price_per_sqft": 1.60, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": True, "created_at": now_iso()},
+        ])
+    if await db.fixed_costs.count_documents({}) == 0:
+        await db.fixed_costs.insert_many([
+            {"label": "Rent", "category": "rent", "amount": 6500.0, "notes": "", "created_at": now_iso()},
+            {"label": "Payroll (3 full-time)", "category": "payroll", "amount": 11700.0, "notes": "3 x $22.5/h x 8h x 5d x 4.33 wk", "created_at": now_iso()},
+            {"label": "Electricity", "category": "utilities", "amount": 160.0, "notes": "", "created_at": now_iso()},
+            {"label": "Internet & Phone", "category": "utilities", "amount": 165.0, "notes": "", "created_at": now_iso()},
+            {"label": "Miscellaneous (fuel, vehicle upkeep)", "category": "misc", "amount": 500.0, "notes": "", "created_at": now_iso()},
+        ])
+    if await db.machines.count_documents({}) == 0:
+        def mach(name, category, acq, price=0.0, lease=0.0, term=48.0, life=7.0, ink="", details="", notes=""):
+            return {"name": name, "category": category, "acquisition": acq, "purchase_price": price,
+                    "lease_monthly": lease, "lease_term_months": term, "useful_life_years": life,
+                    "maintenance_pct_year": 2.0, "productive_hours_month": 0.0, "ink_config": ink,
+                    "ink_details": details, "notes": notes, "created_at": now_iso()}
+        await db.machines.insert_many([
+            mach("Mimaki UCJV300-160", "largeformat", "owned", 40000.0, ink="CMYK+CL+WH", details="8 x 1L @ $310/L"),
+            mach("Roland SOLJET Pro 4 XR-640", "largeformat", "owned", 16000.0, ink="CMYK+Lm/Lc/Lk+WH", details="8 x 440ml @ $90"),
+            mach("Roland VersaCAMM VP-540i", "largeformat", "owned", 7500.0, ink="CMYK", details="4 x 440ml @ $90"),
+            mach("Roland VersaArt RE-640", "largeformat", "owned", 10000.0, ink="Double CMYK", details="8 x 440ml @ $90"),
+            mach("Roland VersaUV LEJ-640FT", "directprint", "owned", 75000.0, ink="CMYK+WH", details="6 x 500ml CMYK @ $315 + 2 x 220ml WH @ $195"),
+            mach("Roland VersaUV LEJ-640", "directprint", "owned", 0.0, ink="CMYK+WH", details="6 x 500ml CMYK @ $315 + 2 x 220ml WH @ $195", notes="Purchase price pending"),
+            mach("Roland VersaUV LEF2-200", "directprint", "owned", 20000.0, ink="CMYK+CL+WH", details="@ $195 ea"),
+            mach("xTool F2 Ultra", "laser", "owned", 6000.0),
+            mach("xTool M1 Ultra", "laser", "owned", 2500.0),
+            mach("Glowforge Pro", "laser", "owned", 7500.0),
+            mach("Konica AccurioPress C3080", "laserprint", "leased", 0.0, 1300.0, 48.0, 4.0, "CMYK", "Toner $50 ea + click", "4-year lease"),
+            mach("Xerox Versant 280", "laserprint", "leased", 0.0, 1550.0, 60.0, 5.0, "CMYK", "Toner + click", "5-year lease"),
         ])
 
 @app.on_event("shutdown")

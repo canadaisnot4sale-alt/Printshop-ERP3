@@ -1,0 +1,36 @@
+{
+  "summary": "Phase 1 Business Control tested end-to-end (backend + frontend). All backend endpoints (/api/machines, /api/fixed-costs, /api/finance/summary) work, admin-gated (403 for reseller). Frontend: sidebar Business section shows Financials/Machinery/Fixed Costs for admin only; /financials dashboard renders all metrics with expected values ($19,025 overhead, $5,612.94 machines, $24,637.94 total, $101.20 hourly, $36,956.91 break-even, $184,500 investment, GST 5% + PST 7%, breakeven-bar visible); Machinery page shows 12 seeded machines with $/month & $/hour; Fixed Costs page shows 5 seeded rows totaling $19,025; CRUD (add+delete) verified for both machines and fixed-costs; overhead updated live to $19,525 when TEST_UI_FC was added. Access control: reseller cliente1@test.com sees no Business nav items and direct navigation to /financials, /machinery, /fixed-costs redirects to /.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "detailed_results": {
+    "backend_curl": {
+      "finance_summary": "overhead=19025, machines=5612.94, total=24637.94, hourly=101.2, breakeven=36956.91, investment=184500, GST=5, PST=7, machine_count=12, fixed_cost_count=5",
+      "machines_count": 12,
+      "fixed_costs_count": 5,
+      "admin_create_delete_machine": "POST 200 + DELETE 200 (TEST_MachineX)",
+      "reseller_gating": "GET /api/machines, /api/fixed-costs, /api/finance/summary all return 403 for reseller"
+    },
+    "frontend": {
+      "admin_login": "OK (admin@printandsave.ca)",
+      "sidebar_business_section": {"nav-financials": true, "nav-machinery": true, "nav-fixed-costs": true},
+      "machinery_page": {"rows": 12, "add_TEST_UI_Machine": "OK", "delete": "OK", "metric_card_$184,500_present": true, "note": "Metric card labels use different casing/word breaks ('MACHINES / MO', 'TOTAL MONTHLY COST', 'BUSINESS HOURLY RATE'), values verified via screenshot"},
+      "fixed_costs_page": {"rows": 5, "overhead_$19,025_shown": true, "add_updates_overhead_to_$19,525": true, "delete": "OK"},
+      "financials_page": {"$19,025": true, "$5,612.94": true, "$24,637.94": true, "$101.20": true, "$36,956.91": true, "$184,500": true, "GST 5% + PST 7%": true, "breakeven_bar": true, "break_even_progress_bar_pct": "7%"},
+      "reseller_access_control": {"nav_hidden": true, "/financials_redirect": "/", "/machinery_redirect": "/", "/fixed-costs_redirect": "/"}
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend correctly enforces require_admin on all 3 Business endpoints (validated with reseller token -> 403)",
+    "Financial computations match spec exactly (owned = straight-line depreciation, leased = lease + 2%/yr maintenance, business_hourly = overhead / 188)",
+    "seed_demo appears idempotent (re-runs did not duplicate); 12 machines & 5 fixed costs consistently returned"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@printandsave.ca / admin123, cliente1@test.com / test123 (reseller)",
+  "seed_data_creation": "Created TEST_MachineX (deleted via API) and TEST_UI_Machine & TEST_UI_FC via UI (both deleted during test).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 1 Business Control (Machinery/FixedCosts/Financials) fully verified. Admin-only enforcement is via <Protected adminOnly> route wrapper + backend require_admin. All computed monetary values match spec. Metric card labels use uppercase tracking styling — search body text with the numeric value rather than the label word (e.g. '5,612.94' not 'Machines/mo')."
+}
