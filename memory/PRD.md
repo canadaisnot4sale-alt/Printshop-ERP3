@@ -48,7 +48,16 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
-## Implemented (2026-07-23) — v20 P1: Multi-module quotes + Quote→Product + Product Catalog
+## Implemented (2026-07-23) — v21 P2a: E-commerce storefront + Orders + auto-inventory (no payment yet)
+- **Storefront** (/store, all roles): published products grouped by category; **role-based price** (client=retail, reseller=wholesale, admin sees both). Cart + checkout → creates an Order.
+- **Products** now have `price` (retail) + `wholesale_price` + a **Bill-of-Materials** (bom: [{material_id, qty_per_unit}]) editable in the Products page. Convert-to-product also captures wholesale.
+- **Auto inventory deduction on order**: for each line, deduct qty_per_unit × qty per BoM material; PLUS each material's **`waste_per_order`** applied ONCE per material per order (waste field editable per material in Materials page, in the material's own unit — sheets/ft/ft²/inches/pieces). Verified: 100 BC (5 sheets) + 1 waste = 6; multi-item same material = waste once.
+- **Orders** (/orders): history + printable **invoice**; admin sees all + inventory-deduction detail + status control (pending/paid/fulfilled/cancelled); DELETE order (admin). Clients/resellers see only their own.
+- **Profit dashboard** now includes **REAL SALES** (orders, excl. cancelled): new `sales` + `net_real` per month; KPI + chart bar/line updated to real sales.
+- RBAC verified; clients don't see wholesale/bom. Verified iteration_17 = 16/16 backend + 100% frontend, no bugs. Test data cleaned.
+
+### P2b (next): online payment — Stripe + PayPal at checkout.
+
 - **Multi-module quote (cart)**: SaveQuoteBar gained an **"Add to quote"** button in every calculator → adds item to a localStorage cart (one cart). Sidebar **Quote Builder** nav shows a live cart badge. QuoteBuilder page (/quote-builder): editable qty, combined total, Save (multi quote: quote_type='multi', items[]) / Print. Multi quotes render an items table in the email HTML.
 - **Quote→Product**: admin-only "Convert to product" on My Quotes → dialog (name, editable category w/ suggestions, price prefilled, publish toggle) → POST /api/quotes/{id}/to-product (carries module + specs snapshot).
 - **Product Catalog** (/products-catalog, admin nav "Products"): products grouped by **category (A-Z within)**, publish toggle, full CRUD. Categories = predefined editable list (PRODUCT_CATEGORIES via /api/config, datalist input). Non-admin GET /catalog-products returns only published (ready for P2 storefront).

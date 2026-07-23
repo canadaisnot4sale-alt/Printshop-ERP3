@@ -2216,6 +2216,11 @@ async def update_order_status(oid: str, body: OrderStatusIn, user=Depends(requir
     await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"status": body.status}})
     return clean(await db.orders.find_one({"_id": ObjectId(oid)}))
 
+@api_router.delete("/orders/{oid}")
+async def delete_order(oid: str, user=Depends(require_admin)):
+    await db.orders.delete_one({"_id": ObjectId(oid)})
+    return {"ok": True}
+
 def _fmt(v):
     try:
         return f"${float(v):,.2f} CAD"
