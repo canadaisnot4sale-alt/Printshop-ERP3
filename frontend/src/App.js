@@ -27,6 +27,7 @@ import Financials from "@/pages/Financials";
 import InkEstimator from "@/pages/InkEstimator";
 import Materials from "@/pages/Materials";
 import ReorderCenter from "@/pages/ReorderCenter";
+import Purchases from "@/pages/Purchases";
 
 function Protected({ children, adminOnly }) {
   const { user, ready } = useAuth();
@@ -64,6 +65,7 @@ function App() {
             <Route path="/ink-estimator" element={<Protected adminOnly><InkEstimator /></Protected>} />
             <Route path="/materials" element={<Protected adminOnly><Materials /></Protected>} />
             <Route path="/reorder" element={<Protected adminOnly><ReorderCenter /></Protected>} />
+            <Route path="/purchases" element={<Protected adminOnly><Purchases /></Protected>} />
             <Route path="/users" element={<Protected adminOnly><Users /></Protected>} />
             <Route path="/settings" element={<Protected adminOnly><Settings /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />

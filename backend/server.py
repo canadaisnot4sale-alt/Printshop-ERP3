@@ -867,6 +867,212 @@ async def reorder_email(body: ReorderEmailIn, user=Depends(require_admin)):
             {"$set": {"reordered_at": now_iso()}})
     return {"status": "success", "message": f"Reorder emailed to {body.recipient_email}"}
 
+# ---------------- Purchases: PDF invoice import + history (tax) ----------------
+SUPPLIER_MODULE_RULES = [
+    ("alfa", ["paper"], "sheet"),
+    ("spicers", ["large-format", "direct-print"], "ink"),
+    ("grimco", ["large-format", "direct-print"], "roll"),
+]
+
+def suggest_supplier_defaults(company: str):
+    c = (company or "").lower()
+    for key, mods, cat in SUPPLIER_MODULE_RULES:
+        if key in c:
+            return mods, cat
+    return [], "other"
+
+def extract_pdf_text(raw: bytes) -> str:
+    import pypdfium2 as pdfium
+    pdf = pdfium.PdfDocument(raw)
+    parts = []
+    for i in range(len(pdf)):
+        tp = pdf[i].get_textpage()
+        parts.append(tp.get_text_range())
+    pdf.close()
+    return "\n".join(parts)
+
+INVOICE_SCHEMA_PROMPT = """You are an expert accounts-payable invoice/purchase-order extractor.
+Extract the data from the supplier invoice text below and return ONLY valid minified JSON
+(no markdown, no commentary) with EXACTLY this shape:
+{"supplier":{"company":"","contact":"","phone":"","email":"","address":""},
+"invoice_number":"","date":"YYYY-MM-DD","po_number":"","currency":"CAD",
+"line_items":[{"code":"","description":"","quantity":0,"unit":"","unit_price":0,"line_total":0}],
+"subtotal":0,"gst":0,"pst":0,"shipping":0,"total":0}
+Rules: numbers must be plain numbers (no currency symbols or commas). If a field is missing use "" for strings and 0 for numbers. Convert the date to YYYY-MM-DD. Keep the full product description on one line.
+INVOICE TEXT:
+"""
+
+async def parse_invoice_with_llm(text: str) -> dict:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    chat = LlmChat(
+        api_key=os.environ["EMERGENT_LLM_KEY"],
+        session_id=f"invoice-{secrets.token_hex(6)}",
+        system_message="You extract structured data from supplier invoices and return only JSON.",
+    ).with_model("openai", "gpt-4o")
+    resp = await chat.send_message(UserMessage(text=INVOICE_SCHEMA_PROMPT + text[:15000]))
+    raw = resp.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```", 2)[1] if "```" in raw[3:] else raw.strip("`")
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip().strip("`").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start != -1 and end != -1:
+        raw = raw[start:end + 1]
+    import json as _json
+    return _json.loads(raw)
+
+@api_router.post("/purchases/parse")
+async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admin)):
+    raw = await file.read()
+    try:
+        text = extract_pdf_text(raw)
+    except Exception as e:
+        logger.error(f"PDF text extraction failed: {e}")
+        raise HTTPException(400, "Could not read PDF")
+    if not text.strip():
+        raise HTTPException(400, "No text found in PDF (scanned image PDFs are not supported)")
+    try:
+        data = await parse_invoice_with_llm(text)
+    except Exception as e:
+        logger.error(f"Invoice LLM parse failed: {e}")
+        raise HTTPException(502, "Could not parse the invoice. Please try again.")
+    mods, cat = suggest_supplier_defaults((data.get("supplier") or {}).get("company", ""))
+    data["suggested_modules"] = mods
+    data["suggested_category"] = cat
+    for li in data.get("line_items", []):
+        li["import"] = True
+        li["name"] = (li.get("description") or "")[:60]
+    return data
+
+class PurchaseLine(BaseModel):
+    code: str = ""
+    description: str = ""
+    name: str = ""
+    quantity: float = 0.0
+    unit: str = ""
+    unit_price: float = 0.0
+    line_total: float = 0.0
+    import_material: bool = True
+
+class PurchaseSupplier(BaseModel):
+    company: str = ""
+    contact: str = ""
+    phone: str = ""
+    email: str = ""
+    address: str = ""
+
+class PurchaseIn(BaseModel):
+    supplier: PurchaseSupplier
+    invoice_number: str = ""
+    date: str = ""
+    po_number: str = ""
+    currency: str = "CAD"
+    subtotal: float = 0.0
+    gst: float = 0.0
+    pst: float = 0.0
+    shipping: float = 0.0
+    total: float = 0.0
+    default_category: str = "other"
+    modules: List[str] = []
+    update_inventory: bool = True
+    line_items: List[PurchaseLine] = []
+
+@api_router.post("/purchases")
+async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
+    sup = body.supplier
+    affected = []
+    if body.update_inventory:
+        for li in body.line_items:
+            if not li.import_material:
+                continue
+            match = None
+            if li.code:
+                match = await db.materials.find_one({"code": {"$regex": f"^{li.code}$", "$options": "i"}})
+            if not match and li.name:
+                match = await db.materials.find_one({"name": li.name})
+            if match:
+                mods = list(set((match.get("modules") or []) + body.modules))
+                upd = {
+                    "unit_cost": li.unit_price,
+                    "stock_qty": (match.get("stock_qty") or 0.0) + li.quantity,
+                    "modules": mods,
+                    "last_purchase_at": now_iso(),
+                }
+                for k, v in [("supplier_company", sup.company), ("supplier_contact", sup.contact),
+                             ("supplier_phone", sup.phone), ("supplier_email", sup.email)]:
+                    if v and not match.get(k):
+                        upd[k] = v
+                await db.materials.update_one({"_id": match["_id"]}, {"$set": upd})
+                affected.append({"id": str(match["_id"]), "name": match.get("name"), "action": "updated"})
+            else:
+                doc = {
+                    "name": li.name or li.description[:60] or li.code,
+                    "code": li.code, "category": body.default_category,
+                    "supplier_company": sup.company, "supplier_contact": sup.contact,
+                    "supplier_phone": sup.phone, "supplier_email": sup.email,
+                    "unit": li.unit or "each", "unit_cost": li.unit_price,
+                    "stock_qty": li.quantity, "reorder_point": 0.0, "reorder_target": 0.0,
+                    "modules": body.modules, "is_default": False,
+                    "last_purchase_at": now_iso(), "created_at": now_iso(),
+                }
+                res = await db.materials.insert_one(doc)
+                affected.append({"id": str(res.inserted_id), "name": doc["name"], "action": "created"})
+    doc = body.model_dump()
+    doc["materials_affected"] = affected
+    doc["created_at"] = now_iso()
+    doc["created_by"] = user["email"]
+    res = await db.purchases.insert_one(doc)
+    saved = clean(await db.purchases.find_one({"_id": res.inserted_id}))
+    return saved
+
+@api_router.get("/purchases")
+async def list_purchases(supplier: Optional[str] = None, date_from: Optional[str] = None,
+                         date_to: Optional[str] = None, user=Depends(require_admin)):
+    q = {}
+    if supplier:
+        q["supplier.company"] = {"$regex": supplier, "$options": "i"}
+    if date_from or date_to:
+        q["date"] = {}
+        if date_from:
+            q["date"]["$gte"] = date_from
+        if date_to:
+            q["date"]["$lte"] = date_to
+    items = await db.purchases.find(q).sort("date", -1).to_list(2000)
+    return [clean(i) for i in items]
+
+@api_router.get("/purchases/export.csv")
+async def export_purchases_csv(supplier: Optional[str] = None, date_from: Optional[str] = None,
+                               date_to: Optional[str] = None, user=Depends(require_admin)):
+    import csv, io
+    q = {}
+    if supplier:
+        q["supplier.company"] = {"$regex": supplier, "$options": "i"}
+    if date_from or date_to:
+        q["date"] = {}
+        if date_from:
+            q["date"]["$gte"] = date_from
+        if date_to:
+            q["date"]["$lte"] = date_to
+    items = await db.purchases.find(q).sort("date", -1).to_list(5000)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Date", "Supplier", "Invoice #", "PO #", "Currency",
+                "Subtotal", "GST", "PST", "Shipping", "Total"])
+    for i in items:
+        sup = i.get("supplier") or {}
+        w.writerow([i.get("date", ""), sup.get("company", ""), i.get("invoice_number", ""),
+                    i.get("po_number", ""), i.get("currency", "CAD"),
+                    i.get("subtotal", 0), i.get("gst", 0), i.get("pst", 0),
+                    i.get("shipping", 0), i.get("total", 0)])
+    return Response(content=buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=purchases.csv"})
+
+@api_router.delete("/purchases/{pid}")
+async def delete_purchase(pid: str, user=Depends(require_admin)):
+    await db.purchases.delete_one({"_id": ObjectId(pid)})
+    return {"ok": True}
+
 @api_router.get("/finance/summary")
 async def finance_summary(user=Depends(require_admin)):
     from datetime import datetime, timezone

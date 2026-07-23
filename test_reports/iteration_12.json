@@ -1,0 +1,26 @@
+{
+  "summary": "Tested new Purchases / PDF invoice import feature end-to-end. Backend: 8/8 pytest cases passed covering PDF parse (Alfa+Grimco), create-with-upsert (created + updated + stock-added), list+filter, CSV export, delete, RBAC. Frontend: full flow verified — admin login, navigate to Purchases, open dialog, upload Alfa PDF, parse into editable draft (supplier=Alfa Paper, invoice=177613, 7 line rows, paper module chip preselected), save purchase, verify row appears, supplier filter narrows results, CSV export downloads purchases.csv, Materials page shows Alfa Paper items. Post-test cleanup completed (deleted test purchase + 7 Alfa materials I created).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_purchases.py",
+    "/app/test_reports/pytest/purchases.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now ~2195 lines; consider splitting into modular routers (purchases, materials, finance) — approaching the 700-line advisory limit x3.",
+    "parse_invoice_with_llm has no timeout guard; if EMERGENT_LLM_KEY expires or gpt-4o is slow, endpoint just 502s — could add explicit asyncio.wait_for + friendlier error.",
+    "DELETE /api/purchases/{pid} returns {ok:true} regardless of whether the id existed (no 404 for missing). Minor."
+  ],
+  "updated_files": ["/app/backend/tests/test_purchases.py"],
+  "success_rate": { "backend": "100% (8/8)", "frontend": "100% (all flows passed)" },
+  "test_credentials": "admin@printandsave.ca/admin123, cliente1@test.com/test123 (both valid)",
+  "seed_data_creation": "None left. Created 2 test purchases + 7 Alfa Paper materials during pytest and UI test; all deleted at teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature is production-ready. test_purchases.py can be re-run as regression. Parse endpoint calls gpt-4o (~4-8s), so keep timeouts >=60s. UI file upload works via hidden <input type='file' data-testid='purchase-file-input'> — use set_input_files, not clicking dropzone."
+}
