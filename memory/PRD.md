@@ -48,7 +48,14 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
-## Implemented (2026-07-23) — v15 Phase 2: Unified Materials + Inventory + Reorder + Ink propagation
+## Implemented (2026-07-23) — v16 Phase 2.1: Purchases — PDF invoice import + tax history
+- **Import supplier invoice from PDF**: admin uploads a supplier invoice/PO PDF → backend extracts text (pypdfium2) and parses it with **GPT-4o** (emergentintegrations, EMERGENT_LLM_KEY) into structured JSON (supplier, invoice #, date, line items [code/desc/qty/unit/unit_price/total], subtotal/GST/PST/shipping/total). Shows an **editable preview** before saving. Endpoint POST /api/purchases/parse (multipart, no save).
+- **On confirm** (POST /api/purchases): saves a Purchase record (tax history) AND upserts Materials/Inventory when update_inventory=on — match by code (case-insensitive): if found, update unit_cost + **add** qty to stock + union modules; if not found, **create** the material. Supplier→module rule preselected & editable: Alfa→paper, Spicers/Grimco→large-format+direct-print (also sets a default category).
+- **Purchase History** page (/purchases, admin): metrics (total spend, GST paid, PST paid), supplier + date-range filters, per-row delete, and **CSV export** (GET /api/purchases/export.csv) for taxes.
+- Verified against the user's 3 real invoices (Alfa Paper, Spicers, Grimco) — parse + create/update + list + CSV all correct. iteration_12 = 8/8 backend + 100% frontend.
+- NOTE: quantities stored as-is (e.g. Alfa "M Sheets" = thousands, not expanded). EMERGENT_LLM_KEY added to backend/.env.
+
+
 - **Ink consumption applies per brand+technology**: calibrating one machine's ml/ft² now auto-propagates to all sibling machines of the same brand + category (e.g. all Roland eco-solvent large-format, or all Roland UV directprint, or all Mimaki). Endpoints /api/ink/calibrate and /api/ink/calibrate-file return `siblings_updated`; InkEstimator toast reports how many siblings were updated.
 - **Unified Materials DB** (new `materials` collection, NOT the per-module tables): nickname/name, code, category, full supplier info (company/contact/phone/email), unit + specs (size/gramage/weight/sheet_area_sqft), unit_cost, labor_minutes, machine_id + ink_coverage_pct. Computed on read: **finish_cost** (unit cost + labor via business+machine hourly + ink cost), retail/wholesale price, price_override with **below-cost warning**, cross-module usage flags, and **DEFAULT material** per category (auto-unsets others).
 - **Inventory**: stock_qty + reorder_point + reorder_target per material; low-stock badge (red) + inline +/- stock adjust (POST /api/materials/{id}/adjust-stock, never below 0).
