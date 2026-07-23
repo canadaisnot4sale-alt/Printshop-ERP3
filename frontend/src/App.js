@@ -24,6 +24,7 @@ import Quotes from "@/pages/Quotes";
 import Machinery from "@/pages/Machinery";
 import FixedCosts from "@/pages/FixedCosts";
 import Financials from "@/pages/Financials";
+import ProfitDashboard from "@/pages/ProfitDashboard";
 import InkEstimator from "@/pages/InkEstimator";
 import Materials from "@/pages/Materials";
 import ReorderCenter from "@/pages/ReorderCenter";
@@ -62,6 +63,7 @@ function App() {
             <Route path="/machinery" element={<Protected adminOnly><Machinery /></Protected>} />
             <Route path="/fixed-costs" element={<Protected adminOnly><FixedCosts /></Protected>} />
             <Route path="/financials" element={<Protected adminOnly><Financials /></Protected>} />
+            <Route path="/profit-dashboard" element={<Protected adminOnly><ProfitDashboard /></Protected>} />
             <Route path="/ink-estimator" element={<Protected adminOnly><InkEstimator /></Protected>} />
             <Route path="/materials" element={<Protected adminOnly><Materials /></Protected>} />
             <Route path="/reorder" element={<Protected adminOnly><ReorderCenter /></Protected>} />

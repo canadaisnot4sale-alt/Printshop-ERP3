@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutGrid, FileText, BookOpen, Ruler, Sticker, Printer, Settings as Cog, LogOut,
   Shirt, Sparkles, Scissors, PanelTop, Type, Users as UsersIcon, FolderOpen,
-  Coffee, Disc, BookMarked, Cpu, Receipt, LineChart, Droplet, Boxes, Truck, ReceiptText,
+  Coffee, Disc, BookMarked, Cpu, Receipt, LineChart, Droplet, Boxes, Truck, ReceiptText, PiggyBank,
 } from "lucide-react";
 
 const NAV = [
@@ -24,6 +24,7 @@ const NAV = [
   { to: "/quotes", label: "My Quotes", icon: FolderOpen, testid: "nav-quotes" },
   { section: "Business", admin: true },
   { to: "/financials", label: "Financials", icon: LineChart, testid: "nav-financials", admin: true },
+  { to: "/profit-dashboard", label: "Profit & Loss", icon: PiggyBank, testid: "nav-profit-dashboard", admin: true },
   { to: "/machinery", label: "Machinery", icon: Cpu, testid: "nav-machinery", admin: true },
   { to: "/materials", label: "Materials", icon: Boxes, testid: "nav-materials", admin: true },
   { to: "/reorder", label: "Reorder Center", icon: Truck, testid: "nav-reorder", admin: true },

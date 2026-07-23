@@ -1151,6 +1151,56 @@ async def calc_profitability(body: ProfitabilityIn, user=Depends(require_admin))
         "below_cost": margin < 0,
     }
 
+@api_router.get("/finance/profit-dashboard")
+async def profit_dashboard(months: int = 6, user=Depends(require_admin)):
+    """Monthly P&L: quoted revenue vs actual purchases (pre-tax) vs fixed overhead => net profit."""
+    from datetime import datetime, timezone
+    s = await get_settings()
+    oh_hours = s.get("open_hours_per_month", 188) or 188
+    fixed = await db.fixed_costs.find().to_list(500)
+    overhead = sum((f.get("amount") or 0) for f in fixed)
+    machines = await db.machines.find().to_list(500)
+    machines_monthly = sum(machine_computed(clean(m), oh_hours)["monthly_cost"] for m in machines)
+    monthly_overhead = round(overhead + machines_monthly, 2)
+
+    months = max(1, min(months, 24))
+    now = datetime.now(timezone.utc)
+    keys = []
+    y, mo = now.year, now.month
+    for _ in range(months):
+        keys.append(f"{y:04d}-{mo:02d}")
+        mo -= 1
+        if mo == 0:
+            mo = 12; y -= 1
+    keys = list(reversed(keys))
+    buckets = {k: {"month": k, "revenue": 0.0, "purchases": 0.0, "quotes": 0} for k in keys}
+
+    async for q in db.quotes.find():
+        k = (q.get("created_at") or "")[:7]
+        if k in buckets:
+            summ = q.get("summary") or {}
+            p = (summ.get("retail_total") or summ.get("customer_price")
+                 or (summ.get("total") or {}).get("selling_price") or summ.get("selling_price") or 0)
+            buckets[k]["revenue"] += p or 0
+            buckets[k]["quotes"] += 1
+
+    async for pu in db.purchases.find():
+        k = (pu.get("date") or "")[:7]
+        if k in buckets:
+            buckets[k]["purchases"] += (pu.get("subtotal") or 0) + (pu.get("shipping") or 0)
+
+    series = []
+    for k in keys:
+        b = buckets[k]
+        rev = round(b["revenue"], 2)
+        pur = round(b["purchases"], 2)
+        net = round(rev - pur - monthly_overhead, 2)
+        series.append({"month": k, "revenue": rev, "purchases": pur,
+                       "overhead": monthly_overhead, "total_cost": round(pur + monthly_overhead, 2),
+                       "net_profit": net, "quotes": b["quotes"]})
+    return {"monthly_overhead": monthly_overhead, "series": series,
+            "current": series[-1] if series else None}
+
 @api_router.get("/finance/summary")
 async def finance_summary(user=Depends(require_admin)):
     from datetime import datetime, timezone
