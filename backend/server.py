@@ -1112,6 +1112,45 @@ async def delete_purchase(pid: str, user=Depends(require_admin)):
     await db.purchases.delete_one({"_id": ObjectId(pid)})
     return {"ok": True}
 
+# ---------------- Profitability: true manufacturing cost + margin ----------------
+class ProfitabilityIn(BaseModel):
+    base_cost: float = 0.0
+    quoted_price: float = 0.0
+    production_hours: float = 0.0
+    machine_id: Optional[str] = None
+
+@api_router.post("/calc/profitability")
+async def calc_profitability(body: ProfitabilityIn, user=Depends(require_admin)):
+    s = await get_settings()
+    biz = await _business_hourly(s)
+    machine_hourly = 0.0
+    machine_name = None
+    if body.machine_id:
+        m = await db.machines.find_one({"_id": ObjectId(body.machine_id)})
+        if m:
+            oh = s.get("open_hours_per_month", 188) or 188
+            machine_hourly = machine_computed(clean(m), oh)["hourly_cost"]
+            machine_name = m.get("name")
+    shop_rate = round(biz + machine_hourly, 2)
+    labor_cost = round(body.production_hours * shop_rate, 2)
+    true_cost = round(body.base_cost + labor_cost, 2)
+    margin = round(body.quoted_price - true_cost, 2)
+    margin_pct = round(margin / body.quoted_price * 100, 1) if body.quoted_price else 0.0
+    return {
+        "business_hourly": biz,
+        "machine_hourly": round(machine_hourly, 2),
+        "machine_name": machine_name,
+        "shop_rate": shop_rate,
+        "production_hours": body.production_hours,
+        "labor_cost": labor_cost,
+        "base_cost": round(body.base_cost, 2),
+        "true_manufacturing_cost": true_cost,
+        "quoted_price": round(body.quoted_price, 2),
+        "margin": margin,
+        "margin_pct": margin_pct,
+        "below_cost": margin < 0,
+    }
+
 @api_router.get("/finance/summary")
 async def finance_summary(user=Depends(require_admin)):
     from datetime import datetime, timezone

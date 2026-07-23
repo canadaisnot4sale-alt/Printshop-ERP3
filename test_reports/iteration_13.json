@@ -1,0 +1,28 @@
+{
+  "summary": "Tested new admin-only Profitability panel end-to-end. Backend POST /api/calc/profitability math (base+labor, shop_rate=101.2, machine hourly add-on, below_cost flag) and RBAC (403 for reseller, 401 unauth) all pass (5/5 pytest). Frontend: panel appears for admin in Stickers and Paper Printing modules, updates on hours/machine change with 300ms debounce, red Loss bar + below-cost alert appears when true cost > quoted price, and panel is correctly hidden for reseller while wholesale price still renders. No layout regression to existing PricingPanel price rows.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_profitability.py",
+    "/app/test_reports/pytest/profitability_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ProfitabilityPanel debounce (300ms) works well; consider also debouncing machine changes if a user rapidly toggles.",
+    "estimateHours heuristic in ProfitabilityPanel.js falls back to 0.5h if neither area nor qty are present — fine, but consider surfacing an 'estimated' hint.",
+    "In Stickers.js the quoted price fallback uses selling_price OR wholesale_price; ProfitabilityPanel only renders for admin so admins always see retail_total (as expected)."
+  ],
+  "updated_files": ["/app/backend/tests/test_profitability.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (all 4 acceptance flows verified)"},
+  "test_credentials": "admin@printandsave.ca/admin123, cliente1@test.com/test123",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Profitability panel verified in Stickers (/stickers) and Paper Printing (/paper). Paper route path is /paper (not /paper-printing). PricingPanel from Metric.js wraps the panel in all 11 modules — spot-checked 2 modules; if regressions suspected, spot-check others (booklets/large-format/dtf/etc.).",
+  "test_evidence": {
+    "backend_pytest": "5 passed in 1.95s",
+    "frontend_admin_stickers": "panel visible; initial hours=0.35 true_cost=$50.04 margin=-$6.17; hours=5 -> true_cost=$520.62 margin=-$476.75 + below-cost alert shown; machine select (13 options) increased true_cost $115.82 -> $124.89",
+    "frontend_admin_paper": "panel visible after selecting product & clicking Calculate; true_cost=$118.10 margin=$84.40; Production/Retail rows still render",
+    "frontend_reseller_stickers": "profitability-panel count=0; wholesale price ($29.25) still visible"
+  }
+}

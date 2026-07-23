@@ -1,5 +1,6 @@
 // Shared modern UI primitives used across every module.
 import { money } from "@/lib/format";
+import ProfitabilityPanel from "@/components/ProfitabilityPanel";
 
 export function Metric({ icon: Icon, label, value, sub, accent }) {
   return (
@@ -56,16 +57,19 @@ export function PricingPanel({ r, className = "" }) {
   const wholesale = r.wholesale_total ?? r.wholesale_price;
   const order = retail ?? wholesale;
   return (
-    <div className={`rounded-xl border border-slate-200 overflow-hidden ${className}`} data-testid="pricing-panel">
-      {prod != null && <PriceLine label="Production Cost" value={prod} tone="muted" testid="price-production" />}
-      {retail != null && <PriceLine label="Retail Price" value={retail} unit={r.unit_price} tone="retail" testid="price-retail" />}
-      {wholesale != null && <PriceLine label="Wholesale Price" value={wholesale} unit={r.wholesale_unit} testid="price-wholesale" />}
-      {order != null && (
-        <div className="flex items-baseline justify-between bg-[#2495D3] text-white px-4 py-3">
-          <span className="text-[10px] font-mono uppercase tracking-widest">Order Total</span>
-          <span className="num text-2xl font-black" data-testid="price-order-total">{money(order)}</span>
-        </div>
-      )}
+    <div className={className} data-testid="pricing-panel-wrap">
+      <div className="rounded-xl border border-slate-200 overflow-hidden" data-testid="pricing-panel">
+        {prod != null && <PriceLine label="Production Cost" value={prod} tone="muted" testid="price-production" />}
+        {retail != null && <PriceLine label="Retail Price" value={retail} unit={r.unit_price} tone="retail" testid="price-retail" />}
+        {wholesale != null && <PriceLine label="Wholesale Price" value={wholesale} unit={r.wholesale_unit} testid="price-wholesale" />}
+        {order != null && (
+          <div className="flex items-baseline justify-between bg-[#2495D3] text-white px-4 py-3">
+            <span className="text-[10px] font-mono uppercase tracking-widest">Order Total</span>
+            <span className="num text-2xl font-black" data-testid="price-order-total">{money(order)}</span>
+          </div>
+        )}
+      </div>
+      <ProfitabilityPanel r={r} />
     </div>
   );
 }
