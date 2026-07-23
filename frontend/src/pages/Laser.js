@@ -24,11 +24,13 @@ const matFields = [
   { name: "sheet_width", label: "Sheet Width (in)", type: "number", default: 24 },
   { name: "sheet_height", label: "Sheet Height (in)", type: "number", default: 18 },
   { name: "cost_per_sheet", label: "Cost / sheet (CAD)", type: "number", default: 8 },
+  { name: "linked_material_id", label: "Link to Materials DB (cost from purchases)", type: "material-link", full: true },
 ];
 const matCols = [
   { name: "name", label: "Material" },
   { name: "sheet_width", label: "Sheet", mono: true, render: (i) => `${i.sheet_width}×${i.sheet_height}"` },
   { name: "cost_per_sheet", label: "Cost/sheet", mono: true, render: (i) => money(i.cost_per_sheet) },
+  { name: "linked", label: "Linked", render: (i) => i.linked_material_name || "—" },
 ];
 
 export default function Laser() {

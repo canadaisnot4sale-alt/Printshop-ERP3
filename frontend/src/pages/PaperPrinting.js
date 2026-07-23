@@ -23,12 +23,14 @@ const stockFields = [
   { name: "size", label: "Size", type: "text", default: "13x19" },
   { name: "sheets_per_box", label: "Sheets / Box", type: "number", default: 500 },
   { name: "cost_per_box", label: "Cost / Box (CAD)", type: "number" },
+  { name: "linked_material_id", label: "Link to Materials DB (cost from purchases)", type: "material-link", full: true },
 ];
 const stockCols = [
   { name: "name", label: "Name" }, { name: "size", label: "Size", mono: true },
   { name: "sheets_per_box", label: "Sheets/Box", mono: true },
   { name: "cost_per_box", label: "Cost/Box", mono: true, render: (i) => money(i.cost_per_box) },
   { name: "cost_per_sheet", label: "Cost/Sheet", mono: true, render: (i) => money(i.cost_per_sheet) },
+  { name: "linked", label: "Linked", render: (i) => i.linked_material_name || "—" },
 ];
 const prodFields = [
   { name: "name", label: "Product Name", type: "text", full: true },

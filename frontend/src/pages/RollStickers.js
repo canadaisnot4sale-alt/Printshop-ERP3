@@ -24,12 +24,14 @@ const matFields = [
   { name: "roll_width", label: "Roll width (in)", type: "number", default: 4 },
   { name: "sticker_w", label: "Sticker W (in)", type: "number", default: 3 },
   { name: "sticker_h", label: "Sticker H (in)", type: "number", default: 3 },
+  { name: "linked_material_id", label: "Link to Materials DB (cost from purchases)", type: "material-link", full: true },
 ];
 const matCols = [
   { name: "name", label: "Material" },
   { name: "paper_type", label: "Type" },
   { name: "roll_cost", label: "Roll cost", mono: true, render: (i) => money(i.roll_cost) },
   { name: "pieces_per_roll", label: "Pcs/roll", mono: true },
+  { name: "linked", label: "Linked", render: (i) => i.linked_material_name || "—" },
   { name: "sticker", label: "Size", mono: true, render: (i) => `${i.sticker_w}×${i.sticker_h}"` },
 ];
 

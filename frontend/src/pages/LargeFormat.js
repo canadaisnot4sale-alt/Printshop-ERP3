@@ -33,6 +33,7 @@ const matFields = [
   { name: "price_per_sqft", label: "Price / sqft (CAD)", type: "number", default: 0.85 },
   { name: "min_linear_feet", label: "Min Linear Feet", type: "number", default: 1 },
   { name: "sticker_compatible", label: "Sticker Compatible", type: "switch" },
+  { name: "linked_material_id", label: "Link to Materials DB (cost from purchases)", type: "material-link", full: true },
 ];
 const matCols = [
   { name: "name", label: "Name" },
@@ -40,6 +41,7 @@ const matCols = [
   { name: "material_type", label: "Type" },
   { name: "printable_width", label: "Printable", mono: true, render: (i) => `${num(i.printable_width, 0)}"` },
   { name: "price_per_sqft", label: "$/sqft", mono: true, render: (i) => money(i.price_per_sqft) },
+  { name: "linked", label: "Linked", render: (i) => i.linked_material_name || "—" },
   { name: "sticker_compatible", label: "Sticker", render: (i) => (i.sticker_compatible ? "Yes" : "—") },
 ];
 const presetFields = [

@@ -103,6 +103,7 @@ class PaperStock(BaseModel):
     sheets_per_box: float = 500
     cost_per_box: float = 0.0
     cost_per_sheet: Optional[float] = None
+    linked_material_id: Optional[str] = None
 
 class Product(BaseModel):
     name: str
@@ -124,6 +125,7 @@ class RollMaterial(BaseModel):
     min_linear_feet: float = 1.0
     sticker_compatible: bool = False
     material_type: str = "vinyl"
+    linked_material_id: Optional[str] = None
 
 class Equipment(BaseModel):
     name: str
@@ -179,6 +181,7 @@ class LaserMaterial(BaseModel):
     sheet_width: float = 24.0
     sheet_height: float = 18.0
     cost_per_sheet: float = 0.0
+    linked_material_id: Optional[str] = None
 
 class SheetMaterial(BaseModel):
     name: str
@@ -187,6 +190,7 @@ class SheetMaterial(BaseModel):
     inks: str = "CMYK"
     cnc_capable: bool = True
     channel_capable: bool = False
+    linked_material_id: Optional[str] = None
 
 MATERIAL_MODULES = ["paper", "booklet", "large-format", "stickers", "dtf", "embroidery",
                     "laser", "direct-print", "channel-letters", "sublimation", "roll-stickers"]
@@ -586,7 +590,9 @@ def register_crud(path, model, collection, transform=None):
     @api_router.get(f"/{path}")
     async def list_items(user=Depends(get_current_user)):
         items = await coll.find().sort("created_at", -1).to_list(1000)
-        return [clean(i) for i in items]
+        items = [clean(i) for i in items]
+        await apply_links(items, collection)
+        return items
 
     @api_router.post(f"/{path}")
     async def create_item(body: model, user=Depends(require_admin)):
@@ -626,6 +632,40 @@ register_crud("laser-materials", LaserMaterial, "laser_materials")
 register_crud("sheet-materials", SheetMaterial, "sheet_materials")
 register_crud("sublimation-products", SublimationProduct, "sublimation_products")
 register_crud("roll-sticker-materials", RollStickerMaterial, "roll_sticker_materials")
+
+# ---------------- Unified Materials linking (cost flows from purchases/inventory) ----------------
+LINK_COST_FIELD = {
+    "paper_stocks": "cost_per_sheet",
+    "roll_materials": "price_per_sqft",
+    "roll_sticker_materials": "roll_cost",
+    "sheet_materials": "price_per_sqft",
+    "laser_materials": "cost_per_sheet",
+}
+
+async def apply_links(docs, collection):
+    """If a per-module material is linked to a unified Material, override its cost field
+    with the unified material's live unit_cost (kept current by purchase imports)."""
+    field = LINK_COST_FIELD.get(collection)
+    if not field:
+        return docs
+    ids = []
+    for d in docs:
+        lid = d.get("linked_material_id")
+        if lid:
+            try:
+                ids.append(ObjectId(lid))
+            except Exception:
+                pass
+    if not ids:
+        return docs
+    mats = {str(m["_id"]): m for m in await db.materials.find({"_id": {"$in": ids}}).to_list(500)}
+    for d in docs:
+        lid = d.get("linked_material_id")
+        if lid and lid in mats:
+            d[field] = mats[lid].get("unit_cost") or 0
+            d["linked_material_name"] = mats[lid].get("name")
+            d["linked_stock_qty"] = mats[lid].get("stock_qty")
+    return docs
 
 # ---------------- Business finance: machines + fixed costs + summary ----------------
 def machine_computed(m, open_hours):
@@ -1510,6 +1550,7 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
     product = clean(product)
     q = {"_id": {"$in": [ObjectId(s) for s in body.stock_ids]}} if body.stock_ids else {}
     stocks = [clean(s) for s in await db.paper_stocks.find(q).to_list(200)]
+    await apply_links(stocks, "paper_stocks")
     results = []
     for st in stocks:
         quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key)
@@ -1536,6 +1577,7 @@ async def calc_booklet(body: BookletCalcIn, user=Depends(get_current_user)):
     if not cover or not inside:
         raise HTTPException(404, "Stock not found")
     cover, inside = clean(cover), clean(inside)
+    await apply_links([cover, inside], "paper_stocks")
     def cps(s):
         return s.get("cost_per_sheet") or (s["cost_per_box"] / s["sheets_per_box"] if s.get("sheets_per_box") else 0)
     # 2-up imposition on selected sheet (folded)
@@ -1584,6 +1626,7 @@ async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
     q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
     mats = [clean(m) for m in await db.roll_materials.find(q).to_list(200)]
+    await apply_links(mats, "roll_materials")
     machine = None
     if body.machine_id:
         machine = await db.machines.find_one({"_id": ObjectId(body.machine_id)})
@@ -1634,6 +1677,7 @@ class StickerCalcIn(BaseModel):
 async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
     mats = [clean(m) for m in await db.roll_materials.find({"sticker_compatible": True}).to_list(200)]
+    await apply_links(mats, "roll_materials")
     results = []
     for m in mats:
         printable = m["printable_width"]
@@ -1768,6 +1812,7 @@ async def calc_laser(body: LaserCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
     q = {"_id": {"$in": [ObjectId(body.material_id)]}} if body.material_id else {}
     mats = [clean(m) for m in await db.laser_materials.find(q).to_list(200)]
+    await apply_links(mats, "laser_materials")
     total_qty = sum(int(z.qty) for z in body.sizes) or 1
     items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
     results = []
@@ -1806,6 +1851,7 @@ async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_use
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
     q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
     mats = [clean(m) for m in await db.sheet_materials.find(q).to_list(200)]
+    await apply_links(mats, "sheet_materials")
     items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
     total_qty = sum(int(z.qty) for z in body.sizes) or 1
     print_area = sum((z.w * z.h) / 144.0 * int(z.qty) for z in body.sizes)
@@ -1858,6 +1904,7 @@ async def calc_channel(body: ChannelCalcIn, user=Depends(get_current_user)):
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
     q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
     mats = [clean(m) for m in await db.sheet_materials.find({**q, "channel_capable": True}).to_list(200)]
+    await apply_links(mats, "sheet_materials")
     margin = s["channel_fixture_margin_in"]
     ret_depth = s["channel_return_depth_in"]
     # rectangle with fixture margin on every side
@@ -1939,6 +1986,7 @@ async def calc_rollsticker(body: RollStickerCalcIn, user=Depends(get_current_use
     if not m:
         raise HTTPException(404, "Material not found")
     m = clean(m)
+    await apply_links([m], "roll_sticker_materials")
     waste = s["rollsticker_waste_pieces"]
     total_pieces = body.quantity + waste
     rolls = math.ceil(total_pieces / m["pieces_per_roll"]) if m.get("pieces_per_roll") else 1

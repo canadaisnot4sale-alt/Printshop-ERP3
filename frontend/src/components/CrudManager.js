@@ -19,6 +19,12 @@ export default function CrudManager({ endpoint, fields, columns, prefix, onChang
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({});
   const [editId, setEditId] = useState(null);
+  const [materials, setMaterials] = useState([]);
+  const hasLink = fields.some((f) => f.type === "material-link");
+
+  useEffect(() => {
+    if (hasLink) api.get("/materials").then(({ data }) => setMaterials(data)).catch(() => {});
+  }, [hasLink]);
 
   const blank = () => {
     const o = {};
@@ -42,6 +48,7 @@ export default function CrudManager({ endpoint, fields, columns, prefix, onChang
       fields.forEach((f) => {
         let v = form[f.name];
         if (f.type === "number") v = v === "" || v == null ? 0 : Number(v);
+        if (f.type === "material-link") v = !v || v === "none" ? null : v;
         payload[f.name] = v;
       });
       if (editId) await api.put(`/${endpoint}/${editId}`, payload);
@@ -125,6 +132,16 @@ export default function CrudManager({ endpoint, fields, columns, prefix, onChang
                     <SelectTrigger data-testid={`${prefix}-field-${f.name}`} className="rounded-sm mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {f.options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : f.type === "material-link" ? (
+                  <Select value={form[f.name] || "none"} onValueChange={(v) => setForm({ ...form, [f.name]: v })}>
+                    <SelectTrigger data-testid={`${prefix}-field-${f.name}`} className="rounded-sm mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not linked (manual cost)</SelectItem>
+                      {materials.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}{m.unit_cost != null ? ` — $${m.unit_cost}/${m.unit || "unit"}` : ""}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 ) : (

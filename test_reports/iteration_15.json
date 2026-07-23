@@ -1,0 +1,45 @@
+{
+  "summary": "Backend + Frontend test of P0 Step 2 'Link modules to unified Materials DB'. 8/9 backend tests pass. Roll material link override, unlink revert, calc uses linked cost, and 4/5 module models accept linked_material_id. Frontend: all 5 module tabs (Large Format Roll Materials, Paper Stocks, Laser Materials, Direct Print Sheet Materials, Roll Stickers Materials) show the 'Link to Materials DB' dropdown (data-testid material/stock/laser-material/sheet-material/rs-material -field-linked_material_id) and a 'Linked' column. BUG: RollStickerMaterial backend Pydantic model does not include the linked_material_id field, so PUTs from the UI silently drop the link even though the dropdown exists.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/roll-sticker-materials/{id} (PUT/POST)",
+        "issue": "RollStickerMaterial Pydantic model (server.py ~line 160) is missing 'linked_material_id: Optional[str] = None'. As a result, linking a roll sticker material to a unified material is silently dropped by FastAPI on save. Fix: add the field to the RollStickerMaterial class (same as PaperStock/RollMaterial/SheetMaterial/LaserMaterial). apply_links() and LINK_COST_FIELD map already handle 'roll_sticker_materials' correctly, so this is a one-line model fix.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Roll Stickers → Roll Materials → Add/Edit → Link to Materials DB",
+        "issue": "Dropdown shows and can be selected + saved from UI, but backend model strips the field, so the link never persists. User will see 'Linked' column always show — for roll stickers.",
+        "affected_selectors": ["[data-testid=\"rs-material-field-linked_material_id\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_material_links.py",
+    "/app/test_reports/pytest/material_links.xml"
+  ],
+  "action_items": [
+    "Add 'linked_material_id: Optional[str] = None' to RollStickerMaterial model in /app/backend/server.py (~line 160). This is the only missed model; the other 4 modules already have it and pass end-to-end."
+  ],
+  "critical_code_review_comments": [
+    "RollStickerMaterial model missing linked_material_id even though LINK_COST_FIELD maps 'roll_sticker_materials' → 'roll_cost' and apply_links() is called at line 1989. This is a real inconsistency between the map, the model, and the frontend CRUD config.",
+    "apply_links() in server.py is clean and DRY (single implementation reused across modules).",
+    "Frontend CrudManager 'material-link' field type is consistently wired across all 5 module CRUDs (verified for paper-stocks, roll-materials, sheet-materials, laser-materials, roll-sticker-materials).",
+    "server.py is 2376 lines — approaching size limit; consider splitting into modules (materials, calc, auth, business finance) in a follow-up."
+  ],
+  "updated_files": ["/app/backend/tests/test_material_links.py"],
+  "success_rate": {"backend": "89% (8/9)", "frontend": "100% (5/5 modules show link UI)"},
+  "test_credentials": "admin@printandsave.ca / admin123 (worked)",
+  "seed_data_creation": "Test creates and cleans up a unified Material 'LINKTEST-ROLL' (category=roll, unit=sqft, unit_cost=0.42, stock_qty=30). Also temporarily links/unlinks the first item of each module's material list (auto-reverted).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend override, unlink revert, and calc integration all verified. Regression across /api/calc/paper|largeformat|laser|directprint|channel|rollstickers passes (no 500). Only remaining issue is the RollStickerMaterial model missing linked_material_id. Frontend link dropdown + Linked column verified in all 5 module tabs via UI: LargeFormat Roll Materials, PaperPrinting Paper Stocks (via tab-paper-stocks flow), Laser (data-testid tab-laser-materials), DirectPrint Sheet Materials, RollStickers Roll Materials (tab-rs-materials).",
+  "rca of the issue": "RollStickerMaterial Pydantic BaseModel does not declare linked_material_id, so FastAPI drops the field on POST/PUT even though the DB layer and frontend send it. Repro: PUT /api/roll-sticker-materials/{id} with linked_material_id set to a valid material id → GET returns the item without linked_material_id and without linked_material_name (verified in test_all_module_materials_accept_linked_field for roll-sticker-materials). Fix: add 'linked_material_id: Optional[str] = None' to RollStickerMaterial in server.py around line 160."
+}

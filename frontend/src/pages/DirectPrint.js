@@ -27,12 +27,14 @@ const sheetFields = [
   { name: "price_per_sqft", label: "Price / ft² (CAD)", type: "number", default: 0.55 },
   { name: "cnc_capable", label: "CNC Cut Capable", type: "switch" },
   { name: "channel_capable", label: "Channel Letters Capable", type: "switch" },
+  { name: "linked_material_id", label: "Link to Materials DB (cost from purchases)", type: "material-link", full: true },
 ];
 const sheetCols = [
   { name: "name", label: "Material" },
   { name: "code", label: "Code", mono: true },
   { name: "inks", label: "Inks", mono: true },
   { name: "price_per_sqft", label: "$/ft²", mono: true, render: (i) => money(i.price_per_sqft) },
+  { name: "linked", label: "Linked", render: (i) => i.linked_material_name || "—" },
   { name: "cnc_capable", label: "CNC", render: (i) => (i.cnc_capable ? "Yes" : "—") },
   { name: "channel_capable", label: "Channel", render: (i) => (i.channel_capable ? "Yes" : "—") },
 ];
