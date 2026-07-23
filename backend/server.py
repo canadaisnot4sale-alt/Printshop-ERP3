@@ -222,6 +222,20 @@ class Material(BaseModel):
     wholesale_markup_pct: Optional[float] = None
     modules: List[str] = []                      # cross-module usage flags
     is_default: bool = False                     # default material for its category
+    # Module-specific specs (optional; shown per assigned module)
+    sheet_width: float = 0.0                      # paper/laser sheet imposition (inches)
+    sheet_height: float = 0.0
+    sheets_per_box: float = 0.0                   # paper cost helper
+    roll_width: float = 0.0                       # large-format / roll-stickers
+    printable_width: float = 0.0
+    min_linear_feet: float = 1.0
+    material_type: str = ""                       # vinyl, banner, etc.
+    sticker_compatible: bool = False
+    cnc_capable: bool = True                       # direct-print
+    channel_capable: bool = False                  # channel-letters
+    pieces_per_roll: float = 0.0                   # roll-stickers
+    sticker_w: float = 0.0
+    sticker_h: float = 0.0
     # Inventory
     stock_qty: float = 0.0
     reorder_point: float = 0.0
@@ -594,7 +608,6 @@ def register_crud(path, model, collection, transform=None):
     async def list_items(user=Depends(get_current_user)):
         items = await coll.find().sort("created_at", -1).to_list(1000)
         items = [clean(i) for i in items]
-        await apply_links(items, collection)
         return items
 
     @api_router.post(f"/{path}")
@@ -625,50 +638,107 @@ def paper_transform(doc):
     if not doc.get("cost_per_sheet") and doc.get("sheets_per_box"):
         doc["cost_per_sheet"] = round(doc["cost_per_box"] / doc["sheets_per_box"], 4)
 
-register_crud("paper-stocks", PaperStock, "paper_stocks", paper_transform)
 register_crud("products", Product, "products")
-register_crud("roll-materials", RollMaterial, "roll_materials")
 register_crud("equipment", Equipment, "equipment")
 register_crud("size-presets", SizePreset, "size_presets")
 register_crud("garments", Garment, "garments")
-register_crud("laser-materials", LaserMaterial, "laser_materials")
-register_crud("sheet-materials", SheetMaterial, "sheet_materials")
 register_crud("sublimation-products", SublimationProduct, "sublimation_products")
-register_crud("roll-sticker-materials", RollStickerMaterial, "roll_sticker_materials")
 
-# ---------------- Unified Materials linking (cost flows from purchases/inventory) ----------------
-LINK_COST_FIELD = {
-    "paper_stocks": "cost_per_sheet",
-    "roll_materials": "price_per_sqft",
-    "roll_sticker_materials": "roll_cost",
-    "sheet_materials": "price_per_sqft",
-    "laser_materials": "cost_per_sheet",
+# ---------------- Unified Materials: single source of truth for all module materials ----------------
+# Each legacy per-module material endpoint now READS from the central `materials` collection
+# (filtered by assigned modules) and maps to the shape each calculator expects. Editing is
+# done ONLY from the central Materials page; per-module writes are blocked.
+COLLECTION_MODULES = {
+    "paper_stocks": ["paper", "booklet"],
+    "roll_materials": ["large-format", "stickers"],
+    "laser_materials": ["laser"],
+    "sheet_materials": ["direct-print", "channel-letters"],
+    "roll_sticker_materials": ["roll-stickers"],
 }
 
-async def apply_links(docs, collection):
-    """If a per-module material is linked to a unified Material, override its cost field
-    with the unified material's live unit_cost (kept current by purchase imports)."""
-    field = LINK_COST_FIELD.get(collection)
-    if not field:
-        return docs
-    ids = []
-    for d in docs:
-        lid = d.get("linked_material_id")
-        if lid:
-            try:
-                ids.append(ObjectId(lid))
-            except Exception:
-                pass
-    if not ids:
-        return docs
-    mats = {str(m["_id"]): m for m in await db.materials.find({"_id": {"$in": ids}}).to_list(500)}
-    for d in docs:
-        lid = d.get("linked_material_id")
-        if lid and lid in mats:
-            d[field] = mats[lid].get("unit_cost") or 0
-            d["linked_material_name"] = mats[lid].get("name")
-            d["linked_stock_qty"] = mats[lid].get("stock_qty")
-    return docs
+def map_material(collection, m):
+    """Map a central Material doc into the legacy per-module shape used by calculators."""
+    uc = m.get("unit_cost") or 0
+    base = {"id": m.get("id"), "name": m.get("name"), "code": m.get("code", ""),
+            "unit_cost": uc, "unit": m.get("unit"), "stock_qty": m.get("stock_qty", 0),
+            "linked_material_id": m.get("id"), "linked_material_name": m.get("name"),
+            "linked_stock_qty": m.get("stock_qty", 0), "modules": m.get("modules", [])}
+    if collection == "paper_stocks":
+        spb = m.get("sheets_per_box") or 500
+        base.update({"cost_per_sheet": uc, "sheets_per_box": spb,
+                     "cost_per_box": round(uc * spb, 2), "size": m.get("size", "")})
+    elif collection == "roll_materials":
+        base.update({"price_per_sqft": uc, "roll_width": m.get("roll_width") or 54.0,
+                     "printable_width": m.get("printable_width") or (m.get("roll_width") or 54.0) - 2,
+                     "min_linear_feet": m.get("min_linear_feet") or 1.0,
+                     "sticker_compatible": bool(m.get("sticker_compatible")),
+                     "material_type": m.get("material_type") or "vinyl"})
+    elif collection == "laser_materials":
+        base.update({"cost_per_sheet": uc, "sheet_width": m.get("sheet_width") or 24.0,
+                     "sheet_height": m.get("sheet_height") or 18.0})
+    elif collection == "sheet_materials":
+        base.update({"price_per_sqft": uc, "inks": "CMYK",
+                     "cnc_capable": bool(m.get("cnc_capable", True)),
+                     "channel_capable": bool(m.get("channel_capable"))})
+    elif collection == "roll_sticker_materials":
+        base.update({"roll_cost": uc, "pieces_per_roll": m.get("pieces_per_roll") or 1000,
+                     "roll_width": m.get("roll_width") or 4.0,
+                     "sticker_w": m.get("sticker_w") or 3.0, "sticker_h": m.get("sticker_h") or 3.0})
+    return base
+
+async def materials_for_collection(collection, extra_filter=None):
+    modules = COLLECTION_MODULES[collection]
+    q = {"modules": {"$in": modules}}
+    if extra_filter:
+        q.update(extra_filter)
+    docs = [clean(d) for d in await db.materials.find(q).sort("name", 1).to_list(500)]
+    return [map_material(collection, d) for d in docs]
+
+async def material_by_id(collection, mid):
+    try:
+        d = await db.materials.find_one({"_id": ObjectId(mid)})
+    except Exception:
+        d = None
+    return map_material(collection, clean(d)) if d else None
+
+async def materials_by_ids(collection, ids):
+    oids = []
+    for i in (ids or []):
+        try:
+            oids.append(ObjectId(i))
+        except Exception:
+            pass
+    q = {"modules": {"$in": COLLECTION_MODULES[collection]}}
+    if oids:
+        q["_id"] = {"$in": oids}
+    docs = [clean(d) for d in await db.materials.find(q).sort("name", 1).to_list(500)]
+    return [map_material(collection, d) for d in docs]
+
+def register_material_view(path, collection):
+    @api_router.get(f"/{path}")
+    async def list_material_view(user=Depends(get_current_user)):
+        return await materials_for_collection(collection)
+
+    @api_router.post(f"/{path}")
+    async def blocked_create(user=Depends(require_admin)):
+        raise HTTPException(400, "Materials are managed from the central Materials page.")
+
+    @api_router.put(f"/{path}/{{item_id}}")
+    async def blocked_update(item_id: str, user=Depends(require_admin)):
+        raise HTTPException(400, "Materials are managed from the central Materials page.")
+
+    @api_router.delete(f"/{path}/{{item_id}}")
+    async def blocked_delete(item_id: str, user=Depends(require_admin)):
+        raise HTTPException(400, "Materials are managed from the central Materials page.")
+
+register_material_view("paper-stocks", "paper_stocks")
+register_material_view("roll-materials", "roll_materials")
+register_material_view("laser-materials", "laser_materials")
+register_material_view("sheet-materials", "sheet_materials")
+register_material_view("roll-sticker-materials", "roll_sticker_materials")
+
+def paper_transform(doc):
+    pass
 
 # ---------------- Business finance: machines + fixed costs + summary ----------------
 def machine_computed(m, open_hours):
@@ -1560,9 +1630,7 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
     if not product:
         raise HTTPException(404, "Product not found")
     product = clean(product)
-    q = {"_id": {"$in": [ObjectId(s) for s in body.stock_ids]}} if body.stock_ids else {}
-    stocks = [clean(s) for s in await db.paper_stocks.find(q).to_list(200)]
-    await apply_links(stocks, "paper_stocks")
+    stocks = await materials_by_ids("paper_stocks", body.stock_ids)
     results = []
     for st in stocks:
         quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key)
@@ -1584,12 +1652,10 @@ class BookletCalcIn(BaseModel):
 @api_router.post("/calc/booklet")
 async def calc_booklet(body: BookletCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
-    cover = await db.paper_stocks.find_one({"_id": ObjectId(body.cover_stock_id)})
-    inside = await db.paper_stocks.find_one({"_id": ObjectId(body.inside_stock_id)})
+    cover = await material_by_id("paper_stocks", body.cover_stock_id)
+    inside = await material_by_id("paper_stocks", body.inside_stock_id)
     if not cover or not inside:
         raise HTTPException(404, "Stock not found")
-    cover, inside = clean(cover), clean(inside)
-    await apply_links([cover, inside], "paper_stocks")
     def cps(s):
         return s.get("cost_per_sheet") or (s["cost_per_box"] / s["sheets_per_box"] if s.get("sheets_per_box") else 0)
     # 2-up imposition on selected sheet (folded)
@@ -1636,9 +1702,7 @@ class LFCalcIn(BaseModel):
 @api_router.post("/calc/largeformat")
 async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
-    q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
-    mats = [clean(m) for m in await db.roll_materials.find(q).to_list(200)]
-    await apply_links(mats, "roll_materials")
+    mats = await materials_by_ids("roll_materials", body.material_ids)
     machine = None
     if body.machine_id:
         machine = await db.machines.find_one({"_id": ObjectId(body.machine_id)})
@@ -1688,8 +1752,7 @@ class StickerCalcIn(BaseModel):
 @api_router.post("/calc/sticker")
 async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
-    mats = [clean(m) for m in await db.roll_materials.find({"sticker_compatible": True}).to_list(200)]
-    await apply_links(mats, "roll_materials")
+    mats = await materials_for_collection("roll_materials", {"sticker_compatible": True})
     results = []
     for m in mats:
         printable = m["printable_width"]
@@ -1822,9 +1885,7 @@ class LaserCalcIn(BaseModel):
 @api_router.post("/calc/laser")
 async def calc_laser(body: LaserCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
-    q = {"_id": {"$in": [ObjectId(body.material_id)]}} if body.material_id else {}
-    mats = [clean(m) for m in await db.laser_materials.find(q).to_list(200)]
-    await apply_links(mats, "laser_materials")
+    mats = await materials_by_ids("laser_materials", [body.material_id] if body.material_id else None)
     total_qty = sum(int(z.qty) for z in body.sizes) or 1
     items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
     results = []
@@ -1861,9 +1922,7 @@ class DirectPrintCalcIn(BaseModel):
 async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
-    q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
-    mats = [clean(m) for m in await db.sheet_materials.find(q).to_list(200)]
-    await apply_links(mats, "sheet_materials")
+    mats = await materials_by_ids("sheet_materials", body.material_ids)
     items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
     total_qty = sum(int(z.qty) for z in body.sizes) or 1
     print_area = sum((z.w * z.h) / 144.0 * int(z.qty) for z in body.sizes)
@@ -1914,9 +1973,8 @@ class ChannelCalcIn(BaseModel):
 async def calc_channel(body: ChannelCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
-    q = {"_id": {"$in": [ObjectId(m) for m in body.material_ids]}} if body.material_ids else {}
-    mats = [clean(m) for m in await db.sheet_materials.find({**q, "channel_capable": True}).to_list(200)]
-    await apply_links(mats, "sheet_materials")
+    _sheet_all = await materials_by_ids("sheet_materials", body.material_ids)
+    mats = [m for m in _sheet_all if m.get("channel_capable")]
     margin = s["channel_fixture_margin_in"]
     ret_depth = s["channel_return_depth_in"]
     # rectangle with fixture margin on every side
@@ -1994,11 +2052,9 @@ class RollStickerCalcIn(BaseModel):
 @api_router.post("/calc/rollsticker")
 async def calc_rollsticker(body: RollStickerCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
-    m = await db.roll_sticker_materials.find_one({"_id": ObjectId(body.material_id)})
+    m = await material_by_id("roll_sticker_materials", body.material_id)
     if not m:
         raise HTTPException(404, "Material not found")
-    m = clean(m)
-    await apply_links([m], "roll_sticker_materials")
     waste = s["rollsticker_waste_pieces"]
     total_pieces = body.quantity + waste
     rolls = math.ceil(total_pieces / m["pieces_per_roll"]) if m.get("pieces_per_roll") else 1
@@ -2475,15 +2531,15 @@ async def email_quote(quote_id: str, body: QuoteEmailIn, user=Depends(get_curren
 @api_router.get("/dashboard")
 async def dashboard(user=Depends(get_current_user)):
     return {
-        "paper_stocks": await db.paper_stocks.count_documents({}),
+        "paper_stocks": await db.materials.count_documents({"modules": {"$in": ["paper", "booklet"]}}),
         "products": await db.products.count_documents({}),
-        "roll_materials": await db.roll_materials.count_documents({}),
+        "roll_materials": await db.materials.count_documents({"modules": {"$in": ["large-format", "stickers"]}}),
         "equipment": await db.equipment.count_documents({}),
-        "sticker_materials": await db.roll_materials.count_documents({"sticker_compatible": True}),
+        "sticker_materials": await db.materials.count_documents({"modules": {"$in": ["large-format", "stickers"]}, "sticker_compatible": True}),
         "size_presets": await db.size_presets.count_documents({}),
         "garments": await db.garments.count_documents({}),
-        "laser_materials": await db.laser_materials.count_documents({}),
-        "sheet_materials": await db.sheet_materials.count_documents({}),
+        "laser_materials": await db.materials.count_documents({"modules": "laser"}),
+        "sheet_materials": await db.materials.count_documents({"modules": {"$in": ["direct-print", "channel-letters"]}}),
         "quotes": await db.quotes.count_documents({} if user.get("role") == "admin" else {"user_id": user["id"]}),
     }
 
@@ -2519,7 +2575,19 @@ async def startup():
     await seed_demo()
     await backfill_quote_inputs()
     await calibrate_default_ink()
+    await unify_materials_clean()
     await seed_materials()
+
+async def unify_materials_clean():
+    """One-time: drop legacy per-module material tables and reset central materials so the
+    unified single-source-of-truth starts clean (per user request)."""
+    if await db.migrations.find_one({"_id": "unify_materials_clean_v1"}):
+        return
+    for coll in ["paper_stocks", "roll_materials", "laser_materials", "sheet_materials", "roll_sticker_materials"]:
+        await db[coll].delete_many({})
+    await db.materials.delete_many({})
+    await db.migrations.delete_one({"_id": "materials_seed_v1"})
+    await db.migrations.update_one({"_id": "unify_materials_clean_v1"}, {"$set": {"done": True}}, upsert=True)
 
 async def seed_materials():
     if await db.migrations.find_one({"_id": "materials_seed_v1"}):
@@ -2531,27 +2599,41 @@ async def seed_materials():
         {"name": "Coroplast 4x8 White 4mm", "code": "CORO-48-W", "category": "substrate",
          "supplier_company": "SignSupply Co.", "supplier_contact": "Dave Miller",
          "supplier_phone": "604-555-0182", "supplier_email": "orders@signsupply.example",
-         "unit": "sheet", "size": "4x8 ft", "sheet_area_sqft": 32.0, "unit_cost": 12.50,
-         "modules": ["direct-print", "large-format"], "is_default": True,
+         "unit": "sqft", "size": "4x8 ft", "sheet_area_sqft": 32.0, "unit_cost": 0.55,
+         "modules": ["direct-print"], "is_default": True, "cnc_capable": True, "channel_capable": False,
          "stock_qty": 8, "reorder_point": 10, "reorder_target": 50},
         {"name": "ACM 4x8 3mm White", "code": "ACM-48-W", "category": "substrate",
          "supplier_company": "SignSupply Co.", "supplier_contact": "Dave Miller",
          "supplier_phone": "604-555-0182", "supplier_email": "orders@signsupply.example",
-         "unit": "sheet", "size": "4x8 ft", "sheet_area_sqft": 32.0, "unit_cost": 38.00,
-         "modules": ["direct-print", "channel-letters"],
+         "unit": "sqft", "size": "4x8 ft", "sheet_area_sqft": 32.0, "unit_cost": 2.20,
+         "modules": ["direct-print", "channel-letters"], "cnc_capable": True, "channel_capable": True,
          "stock_qty": 25, "reorder_point": 8, "reorder_target": 40},
         {"name": "Eco-Solvent Vinyl 54in Gloss", "code": "VNL-54-G", "category": "roll",
          "supplier_company": "RollMedia Ltd.", "supplier_contact": "Sara Lee",
          "supplier_phone": "778-555-0110", "supplier_email": "sales@rollmedia.example",
-         "unit": "roll", "size": "54in x 150ft", "unit_cost": 145.00,
+         "unit": "sqft", "size": "54in x 150ft", "unit_cost": 0.85,
          "modules": ["large-format", "stickers"], "is_default": True,
+         "roll_width": 54.0, "printable_width": 52.0, "min_linear_feet": 1.0,
+         "material_type": "vinyl", "sticker_compatible": True,
          "stock_qty": 2, "reorder_point": 3, "reorder_target": 12},
         {"name": "Gloss Text 100lb 13x19", "code": "PPR-1319-G", "category": "sheet",
          "supplier_company": "PaperHouse", "supplier_contact": "Tom Ng",
          "supplier_phone": "604-555-0143", "supplier_email": "purchasing@paperhouse.example",
-         "unit": "sheet", "size": "13x19 in", "gramage": "148 gsm", "unit_cost": 0.22,
+         "unit": "sheet", "size": "13x19 in", "gramage": "148 gsm", "unit_cost": 0.15,
          "modules": ["paper", "booklet"], "is_default": True,
+         "sheet_width": 13.0, "sheet_height": 19.0, "sheets_per_box": 500,
          "stock_qty": 1200, "reorder_point": 500, "reorder_target": 3000},
+        {"name": "1/8in Baltic Birch 24x18", "code": "BIRCH-18", "category": "substrate",
+         "supplier_company": "WoodStock", "supplier_email": "sales@woodstock.example",
+         "unit": "sheet", "size": "24x18 in", "unit_cost": 8.0,
+         "modules": ["laser"], "sheet_width": 24.0, "sheet_height": 18.0,
+         "stock_qty": 30, "reorder_point": 10, "reorder_target": 60},
+        {"name": "Gloss Label Roll 4in", "code": "LBL-4-G", "category": "roll",
+         "supplier_company": "RollMedia Ltd.", "supplier_email": "sales@rollmedia.example",
+         "unit": "roll", "size": "4in x 1000pc", "unit_cost": 60.0,
+         "modules": ["roll-stickers"], "pieces_per_roll": 1000, "roll_width": 4.0,
+         "sticker_w": 3.0, "sticker_h": 3.0,
+         "stock_qty": 5, "reorder_point": 3, "reorder_target": 15},
     ]
     for s in samples:
         s["created_at"] = now_iso()
@@ -2607,17 +2689,6 @@ async def backfill_quote_inputs():
             await db.quotes.update_one({"_id": q["_id"]}, {"$set": {"inputs": inp}})
 
 async def seed_demo():
-    if await db.paper_stocks.count_documents({}) == 0:
-        stocks = [
-            {"name": "80lb Gloss Cover", "size": "13x19", "sheets_per_box": 500, "cost_per_box": 95.0},
-            {"name": "100lb Gloss Text", "size": "13x19", "sheets_per_box": 500, "cost_per_box": 75.0},
-            {"name": "14pt C2S Cover", "size": "13x19", "sheets_per_box": 250, "cost_per_box": 110.0},
-            {"name": "70lb Uncoated Text", "size": "13x19", "sheets_per_box": 500, "cost_per_box": 55.0},
-        ]
-        for s in stocks:
-            s["cost_per_sheet"] = round(s["cost_per_box"] / s["sheets_per_box"], 4)
-            s["created_at"] = now_iso()
-        await db.paper_stocks.insert_many(stocks)
     if await db.products.count_documents({}) == 0:
         prods = [
             {"name": "Business Card", "finished_w": 3.5, "finished_h": 2.0, "bleed_w": 3.75, "bleed_h": 2.25},
@@ -2627,16 +2698,6 @@ async def seed_demo():
         for p in prods:
             p["created_at"] = now_iso()
         await db.products.insert_many(prods)
-    if await db.roll_materials.count_documents({}) == 0:
-        mats = [
-            {"name": "Glossy Vinyl", "code": "VNL-G", "roll_width": 54, "printable_width": 52, "price_per_sqft": 0.85, "min_linear_feet": 1, "sticker_compatible": True, "material_type": "vinyl"},
-            {"name": "Matte Vinyl", "code": "VNL-M", "roll_width": 54, "printable_width": 52, "price_per_sqft": 0.90, "min_linear_feet": 1, "sticker_compatible": True, "material_type": "vinyl"},
-            {"name": "Banner 13oz", "code": "BNR-13", "roll_width": 60, "printable_width": 58, "price_per_sqft": 0.65, "min_linear_feet": 1, "sticker_compatible": False, "material_type": "banner"},
-            {"name": "Holographic", "code": "HOLO", "roll_width": 51, "printable_width": 49, "price_per_sqft": 1.75, "min_linear_feet": 1, "sticker_compatible": True, "material_type": "specialty"},
-        ]
-        for m in mats:
-            m["created_at"] = now_iso()
-        await db.roll_materials.insert_many(mats)
     if await db.equipment.count_documents({}) == 0:
         eqs = [
             {"name": "Ricoh Pro C7200", "module": "paper", "ink_config": "CMYK", "cartridge_ml": 500, "ink_price": 180.0, "ink_consumption_ml_sqft": 0.4, "maintenance_pct": 6.0},
@@ -2657,12 +2718,6 @@ async def seed_demo():
             {"name": "Photo Frame 8.5x11", "category": "frame", "model": "FR-811", "price_per_box": 120.0, "pieces_per_box": 24, "cost_per_unit": 0.0, "uses_paper": True, "print_bleed_w": 8.75, "print_bleed_h": 11.25, "created_at": now_iso()},
             {"name": "Metal Keychain", "category": "keychain", "model": "KC-2", "price_per_box": 50.0, "pieces_per_box": 100, "cost_per_unit": 0.0, "uses_paper": True, "print_bleed_w": 2.25, "print_bleed_h": 1.25, "created_at": now_iso()},
         ])
-    if await db.roll_sticker_materials.count_documents({}) == 0:
-        await db.roll_sticker_materials.insert_many([
-            {"name": "Gloss Label 4\"", "paper_type": "gloss", "roll_cost": 60.0, "pieces_per_roll": 1000, "roll_width": 4.0, "sticker_w": 3.0, "sticker_h": 3.0, "created_at": now_iso()},
-            {"name": "Matte Label 4\"", "paper_type": "matte", "roll_cost": 55.0, "pieces_per_roll": 1000, "roll_width": 4.0, "sticker_w": 3.0, "sticker_h": 3.0, "created_at": now_iso()},
-            {"name": "Clear Label 4\"", "paper_type": "transparent", "roll_cost": 75.0, "pieces_per_roll": 800, "roll_width": 4.0, "sticker_w": 3.0, "sticker_h": 3.0, "created_at": now_iso()},
-        ])
     if await db.size_presets.count_documents({}) == 0:
         presets = [
             {"name": "Yard Sign 24x18", "width": 24, "height": 18, "created_at": now_iso()},
@@ -2675,17 +2730,6 @@ async def seed_demo():
             {"name": "Gildan 5000 T-Shirt", "category": "tshirt", "cost_each": 4.50, "created_at": now_iso()},
             {"name": "Bella Canvas 3001", "category": "tshirt", "cost_each": 6.00, "created_at": now_iso()},
             {"name": "Gildan 18500 Hoodie", "category": "hoodie", "cost_each": 14.00, "created_at": now_iso()},
-        ])
-    if await db.laser_materials.count_documents({}) == 0:
-        await db.laser_materials.insert_many([
-            {"name": "1/8\" Baltic Birch", "sheet_width": 24, "sheet_height": 18, "cost_per_sheet": 8.0, "created_at": now_iso()},
-            {"name": "1/8\" Acrylic Clear", "sheet_width": 24, "sheet_height": 12, "cost_per_sheet": 15.0, "created_at": now_iso()},
-        ])
-    if await db.sheet_materials.count_documents({}) == 0:
-        await db.sheet_materials.insert_many([
-            {"name": "Coroplast 4mm White", "code": "CORO-4", "price_per_sqft": 0.55, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": False, "created_at": now_iso()},
-            {"name": "ACM / Dibond 3mm", "code": "ACM-3", "price_per_sqft": 2.20, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": True, "created_at": now_iso()},
-            {"name": "PVC 6mm", "code": "PVC-6", "price_per_sqft": 1.60, "inks": "CMYKWW", "cnc_capable": True, "channel_capable": True, "created_at": now_iso()},
         ])
     if await db.fixed_costs.count_documents({}) == 0:
         await db.fixed_costs.insert_many([

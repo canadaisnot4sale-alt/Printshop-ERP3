@@ -156,7 +156,7 @@ export default function DirectPrint() {
           </TabsContent>
           {isAdmin && (
             <TabsContent value="materials" className="mt-6">
-              <CrudManager endpoint="sheet-materials" fields={sheetFields} columns={sheetCols} prefix="sheet-material" />
+              <CrudManager endpoint="sheet-materials" fields={sheetFields} columns={sheetCols} prefix="sheet-material" readOnly />
             </TabsContent>
           )}
         </Tabs>

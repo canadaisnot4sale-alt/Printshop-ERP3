@@ -217,7 +217,7 @@ export default function LargeFormat() {
           </TabsContent>
 
           <TabsContent value="materials" className="mt-6">
-            {isAdmin && <CrudManager endpoint="roll-materials" fields={matFields} columns={matCols} prefix="material" />}
+            {isAdmin && <CrudManager endpoint="roll-materials" fields={matFields} columns={matCols} prefix="material" readOnly />}
           </TabsContent>
           <TabsContent value="presets" className="mt-6">
             {isAdmin && <CrudManager endpoint="size-presets" fields={presetFields} columns={presetCols} prefix="preset" onChange={setPresets} />}

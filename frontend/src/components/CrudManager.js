@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 
 // fields: [{name,label,type:'text'|'number'|'switch'|'select',options?}]
-export default function CrudManager({ endpoint, fields, columns, prefix, onChange }) {
+export default function CrudManager({ endpoint, fields, columns, prefix, onChange, readOnly }) {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({});
@@ -73,10 +73,21 @@ export default function CrudManager({ endpoint, fields, columns, prefix, onChang
         <span className="text-xs font-mono uppercase tracking-widest text-slate-500">
           {items.length} records
         </span>
-        <Button data-testid={`${prefix}-add-button`} onClick={openNew} size="sm" className="bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
-          <Plus size={15} className="mr-1" /> Add
-        </Button>
+        {readOnly ? (
+          <a href="/materials" data-testid={`${prefix}-manage-link`} className="text-xs font-medium text-[#2495D3] hover:underline">
+            Manage in Materials →
+          </a>
+        ) : (
+          <Button data-testid={`${prefix}-add-button`} onClick={openNew} size="sm" className="bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
+            <Plus size={15} className="mr-1" /> Add
+          </Button>
+        )}
       </div>
+      {readOnly && (
+        <div className="mb-3 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-sm px-3 py-2" data-testid={`${prefix}-readonly-note`}>
+          Reference only. Materials are created and edited centrally in the <a href="/materials" className="text-[#2495D3] hover:underline">Materials</a> page and assigned to this module.
+        </div>
+      )}
       <div className="border border-slate-200 rounded-sm overflow-hidden bg-white">
         <table className="w-full text-sm">
           <thead>
@@ -86,7 +97,7 @@ export default function CrudManager({ endpoint, fields, columns, prefix, onChang
                   {c.label}
                 </th>
               ))}
-              <th className="w-20"></th>
+              {!readOnly && <th className="w-20"></th>}
             </tr>
           </thead>
           <tbody>
@@ -97,16 +108,18 @@ export default function CrudManager({ endpoint, fields, columns, prefix, onChang
                     {c.render ? c.render(it) : String(it[c.name] ?? "")}
                   </td>
                 ))}
-                <td className="px-4 py-2.5">
-                  <div className="flex gap-1 justify-end">
-                    <button data-testid={`${prefix}-edit`} onClick={() => openEdit(it)} className="p-1.5 text-slate-400 hover:text-[#2495D3]">
-                      <Pencil size={15} />
-                    </button>
-                    <button data-testid={`${prefix}-delete`} onClick={() => remove(it.id)} className="p-1.5 text-slate-400 hover:text-red-500">
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </td>
+                {!readOnly && (
+                  <td className="px-4 py-2.5">
+                    <div className="flex gap-1 justify-end">
+                      <button data-testid={`${prefix}-edit`} onClick={() => openEdit(it)} className="p-1.5 text-slate-400 hover:text-[#2495D3]">
+                        <Pencil size={15} />
+                      </button>
+                      <button data-testid={`${prefix}-delete`} onClick={() => remove(it.id)} className="p-1.5 text-slate-400 hover:text-red-500">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
             {items.length === 0 && (

@@ -109,7 +109,7 @@ export default function RollStickers() {
 
           {isAdmin && (
             <TabsContent value="materials" className="mt-6">
-              <CrudManager endpoint="roll-sticker-materials" fields={matFields} columns={matCols} prefix="rs-material" onChange={setMats} />
+              <CrudManager endpoint="roll-sticker-materials" fields={matFields} columns={matCols} prefix="rs-material" onChange={setMats} readOnly />
             </TabsContent>
           )}
         </Tabs>

@@ -164,7 +164,7 @@ export default function Laser() {
           </TabsContent>
           {isAdmin && (
             <TabsContent value="materials" className="mt-6">
-              <CrudManager endpoint="laser-materials" fields={matFields} columns={matCols} prefix="laser-material" />
+              <CrudManager endpoint="laser-materials" fields={matFields} columns={matCols} prefix="laser-material" readOnly />
             </TabsContent>
           )}
         </Tabs>

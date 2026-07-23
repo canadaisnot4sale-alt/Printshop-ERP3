@@ -31,11 +31,17 @@ const BLANK = {
   unit_cost: 0, labor_minutes: 0, machine_id: "", ink_coverage_pct: 0,
   price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false,
+  sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
+  roll_width: 0, printable_width: 0, min_linear_feet: 1, material_type: "",
+  sticker_compatible: false, cnc_capable: true, channel_capable: false,
+  pieces_per_roll: 0, sticker_w: 0, sticker_h: 0,
   stock_qty: 0, reorder_point: 0, reorder_target: 0, waste_per_order: 0, notes: "",
 };
 
 const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct",
-  "stock_qty", "reorder_point", "reorder_target", "waste_per_order"];
+  "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
+  "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
+  "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
 const OPT_NUMS = ["price_override", "retail_markup_pct", "wholesale_markup_pct"];
 
 export default function Materials() {
@@ -55,6 +61,7 @@ export default function Materials() {
   }, []);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const has = (...mods) => mods.some((m) => form.modules.includes(m));
   const toggleModule = (m) =>
     setForm((f) => ({ ...f, modules: f.modules.includes(m) ? f.modules.filter((x) => x !== m) : [...f.modules, m] }));
 
@@ -288,6 +295,63 @@ export default function Materials() {
                 ))}
               </div>
             </div>
+
+            {(has("paper", "booklet", "laser") || has("large-format", "stickers") || has("direct-print", "channel-letters") || has("roll-stickers")) && (
+              <div data-testid="material-module-specs">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Module specs</div>
+                {has("paper", "booklet", "laser") && (
+                  <div className="grid grid-cols-3 gap-4 mb-3">
+                    <div><Label className="text-xs">Sheet width (in)</Label>
+                      <Input data-testid="material-field-sheet_width" type="number" value={form.sheet_width} onChange={(e) => set("sheet_width", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Sheet height (in)</Label>
+                      <Input data-testid="material-field-sheet_height" type="number" value={form.sheet_height} onChange={(e) => set("sheet_height", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Sheets per box</Label>
+                      <Input data-testid="material-field-sheets_per_box" type="number" value={form.sheets_per_box} onChange={(e) => set("sheets_per_box", e.target.value)} className="rounded-lg mt-1" /></div>
+                  </div>
+                )}
+                {has("large-format", "stickers") && (
+                  <div className="grid grid-cols-3 gap-4 mb-3">
+                    <div><Label className="text-xs">Roll width (in)</Label>
+                      <Input data-testid="material-field-roll_width" type="number" value={form.roll_width} onChange={(e) => set("roll_width", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Printable width (in)</Label>
+                      <Input data-testid="material-field-printable_width" type="number" value={form.printable_width} onChange={(e) => set("printable_width", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Min linear feet</Label>
+                      <Input data-testid="material-field-min_linear_feet" type="number" value={form.min_linear_feet} onChange={(e) => set("min_linear_feet", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Material type</Label>
+                      <Input data-testid="material-field-material_type" value={form.material_type} onChange={(e) => set("material_type", e.target.value)} className="rounded-lg mt-1" placeholder="vinyl / banner" /></div>
+                    <div className="flex items-center gap-2 pt-6">
+                      <Switch data-testid="material-field-sticker_compatible" checked={!!form.sticker_compatible} onCheckedChange={(v) => set("sticker_compatible", v)} />
+                      <Label className="text-xs">Sticker-compatible</Label>
+                    </div>
+                  </div>
+                )}
+                {has("direct-print", "channel-letters") && (
+                  <div className="flex flex-wrap gap-6 mb-3">
+                    <div className="flex items-center gap-2">
+                      <Switch data-testid="material-field-cnc_capable" checked={!!form.cnc_capable} onCheckedChange={(v) => set("cnc_capable", v)} />
+                      <Label className="text-xs">CNC-capable (Direct Print)</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch data-testid="material-field-channel_capable" checked={!!form.channel_capable} onCheckedChange={(v) => set("channel_capable", v)} />
+                      <Label className="text-xs">Channel-capable (Channel Letters)</Label>
+                    </div>
+                  </div>
+                )}
+                {has("roll-stickers") && (
+                  <div className="grid grid-cols-3 gap-4 mb-3">
+                    <div><Label className="text-xs">Pieces per roll</Label>
+                      <Input data-testid="material-field-pieces_per_roll" type="number" value={form.pieces_per_roll} onChange={(e) => set("pieces_per_roll", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Roll width (in)</Label>
+                      <Input type="number" value={form.roll_width} onChange={(e) => set("roll_width", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Sticker W (in)</Label>
+                      <Input type="number" value={form.sticker_w} onChange={(e) => set("sticker_w", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Sticker H (in)</Label>
+                      <Input type="number" value={form.sticker_h} onChange={(e) => set("sticker_h", e.target.value)} className="rounded-lg mt-1" /></div>
+                  </div>
+                )}
+                <div className="text-[11px] text-slate-400">Unit cost is interpreted per the material's unit: per sheet (paper/laser), per ft² (large-format/direct-print/channel), or per roll (roll-stickers).</div>
+              </div>
+            )}
 
             <div className="flex items-center gap-3 pt-1">
               <Switch data-testid="material-field-is_default" checked={!!form.is_default} onCheckedChange={(v) => set("is_default", v)} />

@@ -225,7 +225,7 @@ export default function PaperPrinting() {
           </TabsContent>
 
           <TabsContent value="stocks" className="mt-6">
-            {isAdmin && <CrudManager endpoint="paper-stocks" fields={stockFields} columns={stockCols} prefix="stock" />}
+            {isAdmin && <CrudManager endpoint="paper-stocks" fields={stockFields} columns={stockCols} prefix="stock" readOnly />}
           </TabsContent>
           <TabsContent value="products" className="mt-6">
             {isAdmin && <CrudManager endpoint="products" fields={prodFields} columns={prodCols} prefix="product" onChange={setProducts} />}
