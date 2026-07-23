@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Truck, PackageX, Mail } from "lucide-react";
@@ -137,7 +137,10 @@ export default function ReorderCenter() {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rounded-xl max-w-xl" data-testid="reorder-compose-dialog">
-          <DialogHeader><DialogTitle className="font-head">Reorder email</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="font-head">Reorder email</DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">Review the auto-suggested quantities, edit the message, then send.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-3 py-1">
             <div><Label className="text-xs">To</Label>
               <Input data-testid="reorder-recipient" value={compose.recipient_email} onChange={(e) => setCompose({ ...compose, recipient_email: e.target.value })} className="rounded-lg mt-1" /></div>

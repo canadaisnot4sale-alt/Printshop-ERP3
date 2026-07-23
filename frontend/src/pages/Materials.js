@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Minus, Package, AlertTriangle, Boxes, Star } from "lucide-react";
@@ -183,7 +183,10 @@ export default function Materials() {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rounded-xl max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="material-dialog">
-          <DialogHeader><DialogTitle className="font-head">{editId ? "Edit" : "New"} material</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="font-head">{editId ? "Edit" : "New"} material</DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">Supplier, cost, pricing, inventory and module usage.</DialogDescription>
+          </DialogHeader>
 
           <div className="space-y-5 py-1">
             <div className="grid grid-cols-2 gap-4">

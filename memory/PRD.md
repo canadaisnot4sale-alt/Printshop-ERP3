@@ -48,7 +48,18 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
-## Implemented (2026-07-19) — v14 Smart ink calibration from VersaWorks
+## Implemented (2026-07-23) — v15 Phase 2: Unified Materials + Inventory + Reorder + Ink propagation
+- **Ink consumption applies per brand+technology**: calibrating one machine's ml/ft² now auto-propagates to all sibling machines of the same brand + category (e.g. all Roland eco-solvent large-format, or all Roland UV directprint, or all Mimaki). Endpoints /api/ink/calibrate and /api/ink/calibrate-file return `siblings_updated`; InkEstimator toast reports how many siblings were updated.
+- **Unified Materials DB** (new `materials` collection, NOT the per-module tables): nickname/name, code, category, full supplier info (company/contact/phone/email), unit + specs (size/gramage/weight/sheet_area_sqft), unit_cost, labor_minutes, machine_id + ink_coverage_pct. Computed on read: **finish_cost** (unit cost + labor via business+machine hourly + ink cost), retail/wholesale price, price_override with **below-cost warning**, cross-module usage flags, and **DEFAULT material** per category (auto-unsets others).
+- **Inventory**: stock_qty + reorder_point + reorder_target per material; low-stock badge (red) + inline +/- stock adjust (POST /api/materials/{id}/adjust-stock, never below 0).
+- **Reorder Center** (/reorder): low-stock materials grouped by supplier with auto-suggested qty (target − current, editable) + 1-click editable reorder email via Resend (POST /api/materials/reorder/email).
+- Role scrubbing: non-admin GET /api/materials hides cost/supplier/stock fields; all writes + reorder are admin-only. 4 demo materials seeded (guarded by migration).
+- Pages: Materials.js, ReorderCenter.js; nav + routes added (adminOnly). Verified iteration_11 = 9/9 backend + 100% frontend flows.
+
+### Phase 2 remaining (next — P0)
+- Integrate exact manufacturing cost (shop rate + material finish cost + ink) into ALL 11 quoting modules' outputs (link quote material inputs to the unified Materials DB where relevant).
+
+
 - Ink Estimator "Calibrate" now uses the exact data VersaWorks shows: enter **Print Area (W×H in)** + **Ink Consumption (ml)** and attach the same file → the system measures the file's coverage automatically and back-solves the machine's ml/ft² @100% (running average across jobs). Endpoint POST /api/ink/calibrate-file (multipart). Manual coverage still available as fallback.
 - Verified with the user's real VP-540i reading (48.8×11.8 in = 4.0 ft², 2.35 ml, solid file → 87.9% coverage → 0.669 ml/ft²; a 48×96 banner @100% then estimates 21.41 ml / $5.35 — realistic eco-solvent). Confirms default 10 ml/ft² must be calibrated per machine (eco-solvent ≪ UV).
 - NEXT: Phase 2 core — Materials overhaul + Inventory + Reorder Center (still pending).
