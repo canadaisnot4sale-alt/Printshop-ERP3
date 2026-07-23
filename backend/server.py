@@ -2221,6 +2221,77 @@ async def delete_order(oid: str, user=Depends(require_admin)):
     await db.orders.delete_one({"_id": ObjectId(oid)})
     return {"ok": True}
 
+# ---------------- Stripe payment (pay an existing order) ----------------
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+class CheckoutIn(BaseModel):
+    order_id: str
+    origin_url: str
+
+@api_router.post("/payments/checkout")
+async def create_checkout(body: CheckoutIn, user=Depends(get_current_user)):
+    order = await db.orders.find_one({"_id": ObjectId(body.order_id)})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if user.get("role") != "admin" and order.get("user_id") != user["id"]:
+        raise HTTPException(403, "Not your order")
+    amount = float(order.get("total") or 0)
+    if amount <= 0:
+        raise HTTPException(400, "Order total must be greater than 0")
+    session = stripe.checkout.Session.create(
+        line_items=[{"price_data": {"currency": "usd", "unit_amount": int(round(amount * 100)),
+                     "product_data": {"name": f"Order · {order.get('customer_name', '')}".strip(" ·")}},
+                     "quantity": 1}],
+        mode="payment",
+        success_url=f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/payment/cancel",
+        metadata={"order_id": body.order_id, "user_id": user["id"]},
+    )
+    await db.payment_transactions.insert_one({
+        "session_id": session.id, "order_id": body.order_id, "user_id": user["id"],
+        "amount": amount, "currency": "usd", "status": "initiated",
+        "payment_status": "pending", "created_at": now_iso(), "updated_at": now_iso()})
+    return {"checkout_url": session.url, "session_id": session.id}
+
+async def _mark_paid(session_id, order_id=None):
+    await db.payment_transactions.update_one(
+        {"session_id": session_id, "payment_status": {"$ne": "paid"}},
+        {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso()}})
+    if not order_id:
+        tx = await db.payment_transactions.find_one({"session_id": session_id})
+        order_id = tx.get("order_id") if tx else None
+    if order_id:
+        await db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": {"status": "paid"}})
+
+@api_router.get("/payments/status/{session_id}")
+async def payment_status(session_id: str):
+    rec = await db.payment_transactions.find_one({"session_id": session_id})
+    if not rec:
+        raise HTTPException(404, "Transaction not found")
+    if rec.get("payment_status") != "paid":
+        try:
+            s = stripe.checkout.Session.retrieve(session_id)
+            if s.payment_status == "paid" or s.status == "complete":
+                await _mark_paid(session_id, rec.get("order_id"))
+                rec = await db.payment_transactions.find_one({"session_id": session_id})
+        except stripe.error.StripeError:
+            pass
+    return {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"]}
+
+@api_router.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+    except Exception:
+        raise HTTPException(400, "Invalid signature")
+    obj, t = event["data"]["object"], event["type"]
+    if t == "checkout.session.completed":
+        await _mark_paid(obj["id"], (obj.get("metadata") or {}).get("order_id"))
+    return {"status": "ok"}
+
 def _fmt(v):
     try:
         return f"${float(v):,.2f} CAD"
