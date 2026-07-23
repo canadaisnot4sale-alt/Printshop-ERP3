@@ -85,7 +85,7 @@ export default function LargeFormat() {
         machine_id: machineId !== "none" ? machineId : null, ink_coverage_pct: inkCoverage };
       const { data } = await api.post("/calc/largeformat", body);
       setRes(data);
-      setSel(data.results[0] || null);
+      setSel(data.results.find((r) => r.material?.is_default) || data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 

@@ -221,7 +221,8 @@ class Material(BaseModel):
     retail_markup_pct: Optional[float] = None    # per-material override
     wholesale_markup_pct: Optional[float] = None
     modules: List[str] = []                      # cross-module usage flags
-    is_default: bool = False                     # default material for its category
+    is_default: bool = False                     # (legacy) default material for its category
+    default_modules: List[str] = []              # modules where THIS is the default material
     # Module-specific specs (optional; shown per assigned module)
     sheet_width: float = 0.0                      # paper/laser sheet imposition (inches)
     sheet_height: float = 0.0
@@ -656,13 +657,15 @@ COLLECTION_MODULES = {
     "roll_sticker_materials": ["roll-stickers"],
 }
 
-def map_material(collection, m):
+def map_material(collection, m, default_module=None):
     """Map a central Material doc into the legacy per-module shape used by calculators."""
     uc = m.get("unit_cost") or 0
+    is_def = bool(default_module and default_module in (m.get("default_modules") or []))
     base = {"id": m.get("id"), "name": m.get("name"), "code": m.get("code", ""),
             "unit_cost": uc, "unit": m.get("unit"), "stock_qty": m.get("stock_qty", 0),
             "linked_material_id": m.get("id"), "linked_material_name": m.get("name"),
-            "linked_stock_qty": m.get("stock_qty", 0), "modules": m.get("modules", [])}
+            "linked_stock_qty": m.get("stock_qty", 0), "modules": m.get("modules", []),
+            "is_default": is_def, "default_modules": m.get("default_modules", [])}
     if collection == "paper_stocks":
         spb = m.get("sheets_per_box") or 500
         base.update({"cost_per_sheet": uc, "sheets_per_box": spb,
@@ -686,22 +689,24 @@ def map_material(collection, m):
                      "sticker_w": m.get("sticker_w") or 3.0, "sticker_h": m.get("sticker_h") or 3.0})
     return base
 
-async def materials_for_collection(collection, extra_filter=None):
+async def materials_for_collection(collection, extra_filter=None, module=None):
     modules = COLLECTION_MODULES[collection]
     q = {"modules": {"$in": modules}}
     if extra_filter:
         q.update(extra_filter)
     docs = [clean(d) for d in await db.materials.find(q).sort("name", 1).to_list(500)]
-    return [map_material(collection, d) for d in docs]
+    out = [map_material(collection, d, module) for d in docs]
+    out.sort(key=lambda x: (not x.get("is_default"), x.get("name", "")))
+    return out
 
-async def material_by_id(collection, mid):
+async def material_by_id(collection, mid, module=None):
     try:
         d = await db.materials.find_one({"_id": ObjectId(mid)})
     except Exception:
         d = None
-    return map_material(collection, clean(d)) if d else None
+    return map_material(collection, clean(d), module) if d else None
 
-async def materials_by_ids(collection, ids):
+async def materials_by_ids(collection, ids, module=None):
     oids = []
     for i in (ids or []):
         try:
@@ -712,12 +717,19 @@ async def materials_by_ids(collection, ids):
     if oids:
         q["_id"] = {"$in": oids}
     docs = [clean(d) for d in await db.materials.find(q).sort("name", 1).to_list(500)]
-    return [map_material(collection, d) for d in docs]
+    out = [map_material(collection, d, module) for d in docs]
+    out.sort(key=lambda x: (not x.get("is_default"), x.get("name", "")))
+    return out
+
+MODULE_FOR_COLLECTION = {
+    "paper_stocks": "paper", "roll_materials": "large-format", "laser_materials": "laser",
+    "sheet_materials": "direct-print", "roll_sticker_materials": "roll-stickers",
+}
 
 def register_material_view(path, collection):
     @api_router.get(f"/{path}")
-    async def list_material_view(user=Depends(get_current_user)):
-        return await materials_for_collection(collection)
+    async def list_material_view(module: str = None, user=Depends(get_current_user)):
+        return await materials_for_collection(collection, module=module or MODULE_FOR_COLLECTION.get(collection))
 
     @api_router.post(f"/{path}")
     async def blocked_create(user=Depends(require_admin)):
@@ -885,18 +897,19 @@ async def list_materials(user=Depends(get_current_user)):
         out.append(m)
     return out
 
-async def _apply_default(coll, doc_id, category):
-    await db.materials.update_many(
-        {"_id": {"$ne": doc_id}, "category": category, "is_default": True},
-        {"$set": {"is_default": False}})
+async def _apply_default_modules(doc_id, default_modules):
+    """Ensure only one material is the default per module: unset the given modules from others."""
+    for mod in (default_modules or []):
+        await db.materials.update_many(
+            {"_id": {"$ne": doc_id}, "default_modules": mod},
+            {"$pull": {"default_modules": mod}})
 
 @api_router.post("/materials")
 async def create_material(body: Material, user=Depends(require_admin)):
     doc = body.model_dump()
     doc["created_at"] = now_iso()
     res = await db.materials.insert_one(doc)
-    if doc.get("is_default"):
-        await _apply_default(db.materials, res.inserted_id, doc.get("category"))
+    await _apply_default_modules(res.inserted_id, doc.get("default_modules"))
     s = await get_settings()
     saved = clean(await db.materials.find_one({"_id": res.inserted_id}))
     return compute_material(saved, await _business_hourly(s), await _machines_by_id(s), s)
@@ -906,8 +919,7 @@ async def update_material(mid: str, body: Material, user=Depends(require_admin))
     doc = body.model_dump()
     oid = ObjectId(mid)
     await db.materials.update_one({"_id": oid}, {"$set": doc})
-    if doc.get("is_default"):
-        await _apply_default(db.materials, oid, doc.get("category"))
+    await _apply_default_modules(oid, doc.get("default_modules"))
     s = await get_settings()
     saved = clean(await db.materials.find_one({"_id": oid}))
     return compute_material(saved, await _business_hourly(s), await _machines_by_id(s), s)
@@ -1630,7 +1642,7 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
     if not product:
         raise HTTPException(404, "Product not found")
     product = clean(product)
-    stocks = await materials_by_ids("paper_stocks", body.stock_ids)
+    stocks = await materials_by_ids("paper_stocks", body.stock_ids, module="paper")
     results = []
     for st in stocks:
         quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key)
@@ -1652,8 +1664,8 @@ class BookletCalcIn(BaseModel):
 @api_router.post("/calc/booklet")
 async def calc_booklet(body: BookletCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
-    cover = await material_by_id("paper_stocks", body.cover_stock_id)
-    inside = await material_by_id("paper_stocks", body.inside_stock_id)
+    cover = await material_by_id("paper_stocks", body.cover_stock_id, module="booklet")
+    inside = await material_by_id("paper_stocks", body.inside_stock_id, module="booklet")
     if not cover or not inside:
         raise HTTPException(404, "Stock not found")
     def cps(s):
@@ -1702,7 +1714,7 @@ class LFCalcIn(BaseModel):
 @api_router.post("/calc/largeformat")
 async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
-    mats = await materials_by_ids("roll_materials", body.material_ids)
+    mats = await materials_by_ids("roll_materials", body.material_ids, module="large-format")
     machine = None
     if body.machine_id:
         machine = await db.machines.find_one({"_id": ObjectId(body.machine_id)})
@@ -1752,7 +1764,7 @@ class StickerCalcIn(BaseModel):
 @api_router.post("/calc/sticker")
 async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
     settings = await get_settings()
-    mats = await materials_for_collection("roll_materials", {"sticker_compatible": True})
+    mats = await materials_for_collection("roll_materials", {"sticker_compatible": True}, module="stickers")
     results = []
     for m in mats:
         printable = m["printable_width"]
@@ -1771,7 +1783,7 @@ async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
         lam_cost = billed_area * settings["sticker_laminate_per_sqft"] if body.laminate else 0.0
         base = material_cost + printing_cost + finishing_cost + lam_cost
         results.append(scrub({
-            "material": m.get("name"), "material_id": m.get("id"),
+            "material": m.get("name"), "material_id": m.get("id"), "is_default": m.get("is_default"),
             "width": body.width, "height": body.height, "qty": body.qty,
             "finishing": body.finishing, "laminate": body.laminate,
             "billed_sqft": round(billed_area, 3),
@@ -1885,7 +1897,7 @@ class LaserCalcIn(BaseModel):
 @api_router.post("/calc/laser")
 async def calc_laser(body: LaserCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
-    mats = await materials_by_ids("laser_materials", [body.material_id] if body.material_id else None)
+    mats = await materials_by_ids("laser_materials", [body.material_id] if body.material_id else None, module="laser")
     total_qty = sum(int(z.qty) for z in body.sizes) or 1
     items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
     results = []
@@ -1922,7 +1934,7 @@ class DirectPrintCalcIn(BaseModel):
 async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
-    mats = await materials_by_ids("sheet_materials", body.material_ids)
+    mats = await materials_by_ids("sheet_materials", body.material_ids, module="direct-print")
     items = [{"w": z.w, "h": z.h, "qty": z.qty, "label": z.label or f"{z.w}x{z.h}"} for z in body.sizes if z.w > 0 and z.h > 0]
     total_qty = sum(int(z.qty) for z in body.sizes) or 1
     print_area = sum((z.w * z.h) / 144.0 * int(z.qty) for z in body.sizes)
@@ -1973,7 +1985,7 @@ class ChannelCalcIn(BaseModel):
 async def calc_channel(body: ChannelCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
-    _sheet_all = await materials_by_ids("sheet_materials", body.material_ids)
+    _sheet_all = await materials_by_ids("sheet_materials", body.material_ids, module="channel-letters")
     mats = [m for m in _sheet_all if m.get("channel_capable")]
     margin = s["channel_fixture_margin_in"]
     ret_depth = s["channel_return_depth_in"]
@@ -2052,7 +2064,7 @@ class RollStickerCalcIn(BaseModel):
 @api_router.post("/calc/rollsticker")
 async def calc_rollsticker(body: RollStickerCalcIn, user=Depends(get_current_user)):
     s = await get_settings()
-    m = await material_by_id("roll_sticker_materials", body.material_id)
+    m = await material_by_id("roll_sticker_materials", body.material_id, module="roll-stickers")
     if not m:
         raise HTTPException(404, "Material not found")
     waste = s["rollsticker_waste_pieces"]
@@ -2120,29 +2132,64 @@ class CatalogProduct(BaseModel):
     name: str
     category: str = "Other"
     module: str = ""
-    price: float = 0.0                 # retail price
+    price: float = 0.0                 # retail price (manual fallback when no BoM)
     wholesale_price: float = 0.0
+    retail_markup_pct: Optional[float] = None    # for dynamic BoM pricing (else settings)
+    wholesale_markup_pct: Optional[float] = None
     description: str = ""
     image_url: str = ""
     published: bool = False
     source_quote_id: Optional[str] = None
     specs: dict = {}
-    bom: List[dict] = []               # [{material_id, material_name, qty_per_unit}]
+    # BoM: [{material_id, material_name, qty_per_unit, waste_per_order, waste_per_unit}]
+    bom: List[dict] = []
+
+async def compute_product_pricing(product, settings, mats_by_id=None):
+    """If a product has a BoM, compute unit material cost + dynamic retail/wholesale price
+    from live central material costs. Returns None if no BoM (keep manual price)."""
+    bom = product.get("bom") or []
+    if not bom:
+        return None
+    if mats_by_id is None:
+        ids = [ObjectId(b["material_id"]) for b in bom if b.get("material_id")]
+        mats_by_id = {str(m["_id"]): m for m in await db.materials.find({"_id": {"$in": ids}}).to_list(500)}
+    unit_cost = 0.0
+    for b in bom:
+        mat = mats_by_id.get(b.get("material_id"))
+        if not mat:
+            continue
+        unit_cost += (mat.get("unit_cost") or 0.0) * (b.get("qty_per_unit") or 0.0)
+    unit_cost = round(unit_cost, 4)
+    rm = product.get("retail_markup_pct")
+    rm = settings.get("retail_markup_pct", 200) if rm in (None, "") else rm
+    wm = product.get("wholesale_markup_pct")
+    wm = settings.get("wholesale_markup_pct", 100) if wm in (None, "") else wm
+    return {"computed_cost": unit_cost,
+            "price": round(unit_cost * (1 + rm / 100.0), 2),
+            "wholesale_price": round(unit_cost * (1 + wm / 100.0), 2)}
 
 @api_router.get("/catalog-products")
 async def list_catalog_products(user=Depends(get_current_user)):
     role = user.get("role")
     q = {} if role == "admin" else {"published": True}
     items = [clean(i) for i in await db.catalog_products.find(q).sort("name", 1).to_list(2000)]
+    s = await get_settings()
     for p in items:
+        pricing = await compute_product_pricing(p, s)
+        if pricing:
+            p["price"] = pricing["price"]
+            p["wholesale_price"] = pricing["wholesale_price"]
+            p["dynamic_pricing"] = True
+            if role == "admin":
+                p["computed_cost"] = pricing["computed_cost"]
         retail = p.get("price") or 0
         wholesale = p.get("wholesale_price") or retail
         p["your_price"] = wholesale if role == "reseller" else retail
         if role not in ("admin",):
-            # clients never see wholesale; resellers never see retail-only cost internals
             if role == "client":
                 p.pop("wholesale_price", None)
             p.pop("bom", None)
+            p.pop("computed_cost", None)
     return items
 
 @api_router.post("/catalog-products")
@@ -2162,6 +2209,32 @@ async def update_catalog_product(pid: str, body: CatalogProduct, user=Depends(re
 async def delete_catalog_product(pid: str, user=Depends(require_admin)):
     await db.catalog_products.delete_one({"_id": ObjectId(pid)})
     return {"ok": True}
+
+@api_router.get("/products/waste-suggestion")
+async def waste_suggestion(material_id: str, category: str = "", module: str = "", user=Depends(require_admin)):
+    """Suggest waste (per-order + per-unit) for a material based on the average across existing
+    products in the same category/module that already use that material."""
+    q = {"bom.material_id": material_id}
+    ors = []
+    if category:
+        ors.append({"category": category})
+    if module:
+        ors.append({"module": module})
+    if ors:
+        q["$or"] = ors
+    prods = await db.catalog_products.find(q).to_list(500)
+    wpo, wpu, n = [], [], 0
+    for p in prods:
+        for b in (p.get("bom") or []):
+            if b.get("material_id") == material_id:
+                wpo.append(b.get("waste_per_order") or 0.0)
+                wpu.append(b.get("waste_per_unit") or 0.0)
+                n += 1
+    if not n:
+        return {"waste_per_order": 0, "waste_per_unit": 0, "samples": 0}
+    return {"waste_per_order": round(sum(wpo) / n, 3),
+            "waste_per_unit": round(sum(wpu) / n, 4), "samples": n}
+
 
 class ToProductIn(BaseModel):
     name: str
@@ -2187,14 +2260,17 @@ async def quote_to_product(quote_id: str, body: ToProductIn, user=Depends(requir
 # ---------------- Orders (storefront) + inventory deduction ----------------
 async def deduct_inventory_for_order(enriched):
     """enriched: [{product(dict), qty}]. Deduct BoM usage (qty_per_unit * qty) per material,
-    plus each used material's waste_per_order ONCE per order."""
+    PLUS per-product waste: waste_per_order (once per product line) + waste_per_unit * qty."""
     used = {}
+    waste_acc = {}
     for it in enriched:
         for b in (it["product"].get("bom") or []):
             mid = b.get("material_id")
             if not mid:
                 continue
             used[mid] = used.get(mid, 0.0) + (b.get("qty_per_unit") or 0.0) * it["qty"]
+            w = (b.get("waste_per_order") or 0.0) + (b.get("waste_per_unit") or 0.0) * it["qty"]
+            waste_acc[mid] = waste_acc.get(mid, 0.0) + w
     deductions = []
     for mid, usage in used.items():
         try:
@@ -2203,7 +2279,7 @@ async def deduct_inventory_for_order(enriched):
             mat = None
         if not mat:
             continue
-        waste = mat.get("waste_per_order") or 0.0
+        waste = round(waste_acc.get(mid, 0.0), 3)
         total = round(usage + waste, 3)
         new_stock = round((mat.get("stock_qty") or 0.0) - total, 3)
         await db.materials.update_one({"_id": ObjectId(mid)}, {"$set": {"stock_qty": new_stock}})
@@ -2224,6 +2300,7 @@ class OrderIn(BaseModel):
 @api_router.post("/orders")
 async def create_order(body: OrderIn, user=Depends(get_current_user)):
     role = user.get("role")
+    s = await get_settings()
     line_items, enriched, total = [], [], 0.0
     for it in body.items:
         try:
@@ -2233,8 +2310,9 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
         if not prod or not prod.get("published"):
             continue
         p = clean(prod)
-        retail = p.get("price") or 0.0
-        wholesale = p.get("wholesale_price") or retail
+        pricing = await compute_product_pricing(p, s)
+        retail = pricing["price"] if pricing else (p.get("price") or 0.0)
+        wholesale = (pricing["wholesale_price"] if pricing else p.get("wholesale_price")) or retail
         price = wholesale if role == "reseller" else retail
         lt = round(price * it.qty, 2)
         total += lt
@@ -2581,13 +2659,13 @@ async def startup():
 async def unify_materials_clean():
     """One-time: drop legacy per-module material tables and reset central materials so the
     unified single-source-of-truth starts clean (per user request)."""
-    if await db.migrations.find_one({"_id": "unify_materials_clean_v1"}):
+    if await db.migrations.find_one({"_id": "unify_materials_clean_v2"}):
         return
     for coll in ["paper_stocks", "roll_materials", "laser_materials", "sheet_materials", "roll_sticker_materials"]:
         await db[coll].delete_many({})
     await db.materials.delete_many({})
     await db.migrations.delete_one({"_id": "materials_seed_v1"})
-    await db.migrations.update_one({"_id": "unify_materials_clean_v1"}, {"$set": {"done": True}}, upsert=True)
+    await db.migrations.update_one({"_id": "unify_materials_clean_v2"}, {"$set": {"done": True}}, upsert=True)
 
 async def seed_materials():
     if await db.migrations.find_one({"_id": "materials_seed_v1"}):
@@ -2600,7 +2678,7 @@ async def seed_materials():
          "supplier_company": "SignSupply Co.", "supplier_contact": "Dave Miller",
          "supplier_phone": "604-555-0182", "supplier_email": "orders@signsupply.example",
          "unit": "sqft", "size": "4x8 ft", "sheet_area_sqft": 32.0, "unit_cost": 0.55,
-         "modules": ["direct-print"], "is_default": True, "cnc_capable": True, "channel_capable": False,
+         "modules": ["direct-print"], "default_modules": ["direct-print"], "cnc_capable": True, "channel_capable": False,
          "stock_qty": 8, "reorder_point": 10, "reorder_target": 50},
         {"name": "ACM 4x8 3mm White", "code": "ACM-48-W", "category": "substrate",
          "supplier_company": "SignSupply Co.", "supplier_contact": "Dave Miller",
@@ -2612,7 +2690,7 @@ async def seed_materials():
          "supplier_company": "RollMedia Ltd.", "supplier_contact": "Sara Lee",
          "supplier_phone": "778-555-0110", "supplier_email": "sales@rollmedia.example",
          "unit": "sqft", "size": "54in x 150ft", "unit_cost": 0.85,
-         "modules": ["large-format", "stickers"], "is_default": True,
+         "modules": ["large-format", "stickers"], "default_modules": ["large-format"],
          "roll_width": 54.0, "printable_width": 52.0, "min_linear_feet": 1.0,
          "material_type": "vinyl", "sticker_compatible": True,
          "stock_qty": 2, "reorder_point": 3, "reorder_target": 12},
@@ -2620,7 +2698,7 @@ async def seed_materials():
          "supplier_company": "PaperHouse", "supplier_contact": "Tom Ng",
          "supplier_phone": "604-555-0143", "supplier_email": "purchasing@paperhouse.example",
          "unit": "sheet", "size": "13x19 in", "gramage": "148 gsm", "unit_cost": 0.15,
-         "modules": ["paper", "booklet"], "is_default": True,
+         "modules": ["paper", "booklet"], "default_modules": ["paper"],
          "sheet_width": 13.0, "sheet_height": 19.0, "sheets_per_box": 500,
          "stock_qty": 1200, "reorder_point": 500, "reorder_target": 3000},
         {"name": "1/8in Baltic Birch 24x18", "code": "BIRCH-18", "category": "substrate",

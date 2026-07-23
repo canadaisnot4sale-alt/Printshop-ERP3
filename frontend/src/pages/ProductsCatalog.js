@@ -37,22 +37,34 @@ export default function ProductsCatalog() {
 
   const openNew = () => { setForm(BLANK); setEditId(null); setOpen(true); };
   const openEdit = (p) => {
-    setForm({ name: p.name, category: p.category, price: p.price, wholesale_price: p.wholesale_price || 0, description: p.description || "", published: !!p.published, bom: p.bom || [] });
+    setForm({ name: p.name, category: p.category, module: p.module || "", price: p.price, wholesale_price: p.wholesale_price || 0, description: p.description || "", published: !!p.published, bom: (p.bom || []).map((b) => ({ waste_per_order: 0, waste_per_unit: 0, ...b })) });
     setEditId(p.id); setOpen(true);
   };
-  const addBom = () => setForm((f) => ({ ...f, bom: [...f.bom, { material_id: "", material_name: "", qty_per_unit: 1 }] }));
+  const addBom = () => setForm((f) => ({ ...f, bom: [...f.bom, { material_id: "", material_name: "", qty_per_unit: 1, waste_per_order: 0, waste_per_unit: 0 }] }));
   const setBom = (i, k, v) => setForm((f) => {
     const bom = [...f.bom];
     bom[i] = { ...bom[i], [k]: v };
     if (k === "material_id") { const m = materials.find((x) => x.id === v); bom[i].material_name = m?.name || ""; }
     return { ...f, bom };
   });
+  const onPickMaterial = async (i, v) => {
+    setBom(i, "material_id", v);
+    try {
+      const { data } = await api.get(`/products/waste-suggestion`, { params: { material_id: v, category: form.category, module: form.module || "" } });
+      if (data.samples > 0) {
+        setForm((f) => { const bom = [...f.bom]; bom[i] = { ...bom[i], waste_per_order: data.waste_per_order, waste_per_unit: data.waste_per_unit }; return { ...f, bom }; });
+        toast.info(`Suggested waste from ${data.samples} similar product(s)`);
+      }
+    } catch (e) { /* no suggestion */ }
+  };
+  const matCost = (id) => Number(materials.find((m) => m.id === id)?.unit_cost || 0);
+  const bomUnitCost = form.bom.reduce((a, b) => a + matCost(b.material_id) * Number(b.qty_per_unit || 0), 0);
   const rmBom = (i) => setForm((f) => ({ ...f, bom: f.bom.filter((_, idx) => idx !== i) }));
 
   const save = async () => {
     if (!form.name.trim()) return toast.error("Name required");
     const payload = { ...form, price: Number(form.price || 0), wholesale_price: Number(form.wholesale_price || 0),
-      bom: form.bom.filter((b) => b.material_id).map((b) => ({ ...b, qty_per_unit: Number(b.qty_per_unit || 0) })) };
+      bom: form.bom.filter((b) => b.material_id).map((b) => ({ ...b, qty_per_unit: Number(b.qty_per_unit || 0), waste_per_order: Number(b.waste_per_order || 0), waste_per_unit: Number(b.waste_per_unit || 0) })) };
     try {
       if (editId) await api.put(`/catalog-products/${editId}`, payload);
       else await api.post("/catalog-products", payload);
@@ -160,19 +172,40 @@ export default function ProductsCatalog() {
               </div>
               <div className="space-y-2">
                 {form.bom.map((b, i) => (
-                  <div key={i} className="flex gap-2 items-center" data-testid="bom-row">
-                    <Select value={b.material_id || ""} onValueChange={(v) => setBom(i, "material_id", v)}>
-                      <SelectTrigger className="rounded-lg h-8 text-xs flex-1" data-testid={`bom-material-${i}`}><SelectValue placeholder="Material" /></SelectTrigger>
-                      <SelectContent>
-                        {materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Input type="number" value={b.qty_per_unit} onChange={(e) => setBom(i, "qty_per_unit", e.target.value)} className="rounded-lg h-8 w-24 text-xs num" placeholder="qty/unit" data-testid={`bom-qty-${i}`} />
-                    <button onClick={() => rmBom(i)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                  <div key={i} className="space-y-1 border border-slate-100 rounded-lg p-2" data-testid="bom-row">
+                    <div className="flex gap-2 items-center">
+                      <Select value={b.material_id || ""} onValueChange={(v) => onPickMaterial(i, v)}>
+                        <SelectTrigger className="rounded-lg h-8 text-xs flex-1" data-testid={`bom-material-${i}`}><SelectValue placeholder="Material" /></SelectTrigger>
+                        <SelectContent>
+                          {materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <button onClick={() => rmBom(i)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <span className="text-[10px] text-slate-400">Qty / unit</span>
+                        <Input type="number" value={b.qty_per_unit} onChange={(e) => setBom(i, "qty_per_unit", e.target.value)} className="rounded-lg h-8 text-xs num" data-testid={`bom-qty-${i}`} />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400">Waste / order</span>
+                        <Input type="number" step="0.1" value={b.waste_per_order} onChange={(e) => setBom(i, "waste_per_order", e.target.value)} className="rounded-lg h-8 text-xs num" data-testid={`bom-waste-order-${i}`} />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400">Waste / unit</span>
+                        <Input type="number" step="0.01" value={b.waste_per_unit} onChange={(e) => setBom(i, "waste_per_unit", e.target.value)} className="rounded-lg h-8 text-xs num" data-testid={`bom-waste-unit-${i}`} />
+                      </div>
+                    </div>
                   </div>
                 ))}
-                {form.bom.length === 0 && <div className="text-[11px] text-slate-400">No materials linked — this product won't deduct inventory.</div>}
+                {form.bom.length === 0 && <div className="text-[11px] text-slate-400">No materials linked — this product won't deduct inventory and uses the manual price above.</div>}
               </div>
+              {form.bom.length > 0 && (
+                <div className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2" data-testid="bom-cost-preview">
+                  Material cost / unit: <span className="num font-semibold">{money(bomUnitCost)}</span>
+                  <span className="text-slate-400"> — retail & wholesale prices are auto-calculated from this cost + your markups on save (dynamic pricing).</span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <Switch data-testid="product-field-published" checked={form.published} onCheckedChange={(v) => setForm({ ...form, published: v })} />

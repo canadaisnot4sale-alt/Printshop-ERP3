@@ -64,7 +64,7 @@ export default function DirectPrint() {
       const { data } = await api.post("/calc/directprint", body);
       if (!data.results.length) toast.info("Add sheet materials first.");
       setRes(data);
-      setSel(data.results[0] || null);
+      setSel(data.results.find((r) => r.material?.is_default) || data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 

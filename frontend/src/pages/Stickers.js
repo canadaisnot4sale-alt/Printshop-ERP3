@@ -38,7 +38,7 @@ export default function Stickers() {
       const { data } = await api.post("/calc/sticker", { width: +w, height: +h, qty: +qty, finishing, laminate });
       if (data.results.length === 0) toast.info("No sticker-compatible materials. Flag a roll material as sticker-compatible.");
       setRes(data);
-      setSel(data.results[0] || null);
+      setSel(data.results.find((r) => r.is_default) || data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 

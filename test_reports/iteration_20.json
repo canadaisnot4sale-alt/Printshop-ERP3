@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 20 – tested new unified-materials features: default material per module, dynamic BoM pricing, per-product waste + suggestion + order deduction. Backend: 7 passed / 1 skipped / 0 failed (pytest). Frontend: all requested data-testids present and behaving correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_unified_materials_v2.py",
+    "/app/test_reports/pytest/iter20.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 2843 lines — approaching maintainability limits; consider splitting materials / catalog / orders into modules.",
+    "compute_product_pricing is called inside a loop over catalog products; consider batching material lookups by IDs once for the whole list to avoid N+1 queries.",
+    "unique_default_per_module regression could not be exercised end-to-end because seed data ships only ONE large-format material (vinyl). Backend logic (_apply_default_modules) is unit-verified but seeding a 2nd large-format material would improve future regression coverage."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_unified_materials_v2.py (new)"
+  ],
+  "success_rate": {"backend": "100% (7/7 executed, 1 skipped due to seed data)", "frontend": "100% of requested checks"},
+  "test_credentials": "Admin: admin@printandsave.ca / admin123",
+  "seed_data_creation": "None persisted – all TEST_* products & orders created during tests are cleaned up by fixtures; material unit_cost & stock_qty restored to originals.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite for these 3 features lives at /app/backend/tests/test_unified_materials_v2.py. Run with: pytest backend/tests/test_unified_materials_v2.py -v -o addopts=''. It relies on the seeded 'Eco-Solvent Vinyl 54in Gloss' material and admin credentials from /app/memory/test_credentials.md. Frontend testids verified: material-default-modules, material-default-large-format, material-default-stickers, material-default-badge, lf-compare-row (pre-selects Best Value = vinyl default), bom-add, bom-waste-order-0, bom-waste-unit-0, bom-cost-preview."
+}

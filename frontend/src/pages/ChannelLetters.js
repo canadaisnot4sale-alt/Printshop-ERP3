@@ -32,7 +32,7 @@ export default function ChannelLetters() {
       const { data } = await api.post("/calc/channelletters", body);
       if (!data.results.length) toast.info("Mark sheet materials as 'Channel Letters Capable' in Direct Print.");
       setRes(data);
-      setSel(data.results[0] || null);
+      setSel(data.results.find((r) => r.material?.is_default) || data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 

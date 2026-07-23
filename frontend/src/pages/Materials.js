@@ -30,7 +30,7 @@ const BLANK = {
   unit: "sheet", size: "", gramage: "", weight: "", sheet_area_sqft: 0,
   unit_cost: 0, labor_minutes: 0, machine_id: "", ink_coverage_pct: 0,
   price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
-  modules: [], is_default: false,
+  modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
   roll_width: 0, printable_width: 0, min_linear_feet: 1, material_type: "",
   sticker_compatible: false, cnc_capable: true, channel_capable: false,
@@ -63,7 +63,10 @@ export default function Materials() {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const has = (...mods) => mods.some((m) => form.modules.includes(m));
   const toggleModule = (m) =>
-    setForm((f) => ({ ...f, modules: f.modules.includes(m) ? f.modules.filter((x) => x !== m) : [...f.modules, m] }));
+    setForm((f) => ({ ...f, modules: f.modules.includes(m) ? f.modules.filter((x) => x !== m) : [...f.modules, m],
+      default_modules: f.modules.includes(m) ? f.default_modules.filter((x) => x !== m) : f.default_modules }));
+  const toggleDefaultModule = (m) =>
+    setForm((f) => ({ ...f, default_modules: f.default_modules.includes(m) ? f.default_modules.filter((x) => x !== m) : [...f.default_modules, m] }));
 
   const openNew = () => { setForm(BLANK); setEditId(null); setOpen(true); };
   const openEdit = (it) => {
@@ -74,6 +77,7 @@ export default function Materials() {
       retail_markup_pct: it.retail_markup_pct ?? "",
       wholesale_markup_pct: it.wholesale_markup_pct ?? "",
       modules: it.modules || [],
+      default_modules: it.default_modules || [],
     });
     setEditId(it.id);
     setOpen(true);
@@ -108,7 +112,7 @@ export default function Materials() {
 
   const lowCount = items.filter((m) => m.low_stock).length;
   const invValue = items.reduce((a, m) => a + (m.stock_qty || 0) * (m.unit_cost || 0), 0);
-  const defaults = items.filter((m) => m.is_default).length;
+  const defaults = items.filter((m) => (m.default_modules || []).length > 0).length;
 
   return (
     <div data-testid="materials-page">
@@ -147,7 +151,9 @@ export default function Materials() {
                   <td className="px-4 py-2.5">
                     <div className="font-medium flex items-center gap-2">
                       {m.name}
-                      {m.is_default && <Badge className="bg-amber-100 text-amber-700 border-0 text-[10px]" data-testid="material-default-badge">DEFAULT</Badge>}
+                      {(m.default_modules || []).map((dm) => (
+                        <Badge key={dm} className="bg-amber-100 text-amber-700 border-0 text-[10px]" data-testid="material-default-badge">DEFAULT · {dm}</Badge>
+                      ))}
                       {m.below_cost && <Badge className="bg-red-100 text-red-700 border-0 text-[10px]" data-testid="material-belowcost-badge">BELOW COST</Badge>}
                     </div>
                     <div className="text-[11px] text-slate-400 font-mono">{m.category}{m.code ? ` · ${m.code}` : ""}{m.size ? ` · ${m.size}` : ""}</div>
@@ -353,10 +359,20 @@ export default function Materials() {
               </div>
             )}
 
-            <div className="flex items-center gap-3 pt-1">
-              <Switch data-testid="material-field-is_default" checked={!!form.is_default} onCheckedChange={(v) => set("is_default", v)} />
-              <Label className="text-xs">Mark as DEFAULT material for its category</Label>
-            </div>
+            {form.modules.length > 0 && (
+              <div data-testid="material-default-modules">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Default material in module</div>
+                <div className="flex flex-wrap gap-2">
+                  {form.modules.map((m) => (
+                    <button key={m} type="button" data-testid={`material-default-${m}`} onClick={() => toggleDefaultModule(m)}
+                      className={`text-xs rounded-full px-3 py-1 border transition-colors flex items-center gap-1 ${form.default_modules.includes(m) ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
+                      <Star size={12} className={form.default_modules.includes(m) ? "fill-white" : ""} /> {m}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1">When set, this material is pre-selected when opening that module's calculator (one default per module).</div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
