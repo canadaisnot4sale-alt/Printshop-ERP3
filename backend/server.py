@@ -788,6 +788,39 @@ async def ink_calibrate(body: InkCalibration, user=Depends(require_admin)):
     return {"machine": m.get("name"), "implied_ml_per_sqft_full": round(implied, 3),
             "new_ml_per_sqft_full": round(new_val, 3), "samples": samples + 1}
 
+@api_router.post("/ink/calibrate-file")
+async def ink_calibrate_file(
+    machine_id: str = Form(...),
+    print_area_sqft: float = Form(...),
+    actual_ml: float = Form(...),
+    file: UploadFile = File(...),
+    user=Depends(require_admin),
+):
+    """Smart calibration: measures the file's coverage automatically and back-solves the
+    machine's ml/ft² @ 100% from a real VersaWorks reading (Print Area + Ink Consumption)."""
+    m = await db.machines.find_one({"_id": ObjectId(machine_id)})
+    if not m:
+        raise HTTPException(404, "Machine not found")
+    raw = await file.read()
+    try:
+        density = analyze_ink_density(raw)
+    except Exception:
+        raise HTTPException(400, "Could not read file (use PDF/PNG/JPG/TIFF)")
+    ref = m.get("ink_full_ref_density") or 0.55
+    frac = min(1.0, density / ref) if ref else density
+    denom = print_area_sqft * frac
+    if denom <= 0:
+        raise HTTPException(400, "Print area and measured coverage must be greater than 0")
+    implied = actual_ml / denom
+    prev = m.get("ink_ml_per_sqft_full") or 0.0
+    samples = m.get("ink_samples") or 0
+    new_val = (prev * samples + implied) / (samples + 1)
+    await db.machines.update_one({"_id": m["_id"]}, {"$set": {
+        "ink_ml_per_sqft_full": round(new_val, 3), "ink_samples": samples + 1}})
+    return {"machine": m.get("name"), "coverage_pct": round(frac * 100, 1),
+            "implied_ml_per_sqft_full": round(implied, 3),
+            "new_ml_per_sqft_full": round(new_val, 3), "samples": samples + 1}
+
 # ---------------- Equipment supplies (admin) ----------------
 @api_router.get("/equipment/{equipment_id}/supplies")
 async def list_supplies(equipment_id: str, user=Depends(get_current_user)):

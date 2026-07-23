@@ -48,6 +48,11 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
+## Implemented (2026-07-19) — v14 Smart ink calibration from VersaWorks
+- Ink Estimator "Calibrate" now uses the exact data VersaWorks shows: enter **Print Area (W×H in)** + **Ink Consumption (ml)** and attach the same file → the system measures the file's coverage automatically and back-solves the machine's ml/ft² @100% (running average across jobs). Endpoint POST /api/ink/calibrate-file (multipart). Manual coverage still available as fallback.
+- Verified with the user's real VP-540i reading (48.8×11.8 in = 4.0 ft², 2.35 ml, solid file → 87.9% coverage → 0.669 ml/ft²; a 48×96 banner @100% then estimates 21.41 ml / $5.35 — realistic eco-solvent). Confirms default 10 ml/ft² must be calibrated per machine (eco-solvent ≪ UV).
+- NEXT: Phase 2 core — Materials overhaul + Inventory + Reorder Center (still pending).
+
 ## Implemented (2026-07-19) — v13 Ink in quoting + PDF
 - Large Format & Direct Print calculators now have an admin-only "Machine & Ink" picker (InkPicker): choose which machine fabricates the job + coverage % → ink cost is added into base before markup, so it flows into Retail/Wholesale/unit prices. Machine+coverage saved in quote inputs (survives Re-quote). LF shows an explicit ink line; DP shows an "Ink (machine)" cost row. Verified: LF Mimaki@50% +$40 (retail 158.40→278.40); DP LEJ-640FT@100% +$30 (retail 232.80).
 - Backend /calc/largeformat & /calc/directprint accept machine_id + ink_coverage_pct.

@@ -22,9 +22,11 @@ export default function InkEstimator() {
   const [res, setRes] = useState(null);
 
   // calibration
-  const [calArea, setCalArea] = useState(32);
+  const [calW, setCalW] = useState(48.8);
+  const [calH, setCalH] = useState(11.8);
   const [calCov, setCalCov] = useState(100);
   const [calMl, setCalMl] = useState("");
+  const [calFile, setCalFile] = useState(null);
 
   const load = () => api.get("/machines").then((r) => { setMachines(r.data); if (!machineId && r.data[0]) setMachineId(r.data[0].id); });
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
@@ -46,13 +48,23 @@ export default function InkEstimator() {
   };
 
   const calibrate = async () => {
-    if (!machineId || !calMl) return toast.error("Enter actual ml from VersaWorks");
+    if (!machineId) return toast.error("Select a machine");
+    if (!calMl) return toast.error("Enter the VersaWorks ink ml");
+    const areaSqft = (+calW * +calH) / 144;
     try {
-      const { data } = await api.post("/ink/calibrate", {
-        machine_id: machineId, area_sqft: +calArea, coverage_pct: +calCov, actual_ml: +calMl,
-      });
-      toast.success(`Learned! ${data.machine} now ${data.new_ml_per_sqft_full} ml/ft² (${data.samples} samples)`);
-      setCalMl(""); load();
+      let data;
+      if (calFile) {
+        const fd = new FormData();
+        fd.append("machine_id", machineId);
+        fd.append("print_area_sqft", areaSqft);
+        fd.append("actual_ml", calMl);
+        fd.append("file", calFile);
+        ({ data } = await api.post("/ink/calibrate-file", fd));
+      } else {
+        ({ data } = await api.post("/ink/calibrate", { machine_id: machineId, area_sqft: areaSqft, coverage_pct: +calCov, actual_ml: +calMl }));
+      }
+      toast.success(`Learned! ${data.machine} → ${data.new_ml_per_sqft_full} ml/ft²${data.coverage_pct != null ? ` (file coverage ${data.coverage_pct}%)` : ""} · ${data.samples} samples`);
+      setCalMl(""); setCalFile(null); load();
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
@@ -104,13 +116,21 @@ export default function InkEstimator() {
             </Button>
           </ConfigCard>
 
-          <ConfigCard title="Calibrate from a real job">
-            <p className="text-xs text-slate-500 mb-3">After printing, enter the total ink (ml) VersaWorks reported. The machine's ml/ft² will self-adjust from your real numbers.</p>
+          <ConfigCard title="Calibrate from a real VersaWorks job">
+            <p className="text-xs text-slate-500 mb-3">Enter what VersaWorks shows (Print Area + Ink Consumption). Attach the same file and the coverage is measured automatically, so the machine's ml/ft² self-adjusts to reality.</p>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label className="text-xs">Area (ft²)</Label><Input data-testid="cal-area" type="number" value={calArea} onChange={(e) => setCalArea(e.target.value)} className="rounded-lg mt-1 num" /></div>
-              <div><Label className="text-xs">Coverage %</Label><Input data-testid="cal-cov" type="number" value={calCov} onChange={(e) => setCalCov(e.target.value)} className="rounded-lg mt-1 num" /></div>
-              <div><Label className="text-xs">Actual ml</Label><Input data-testid="cal-ml" type="number" value={calMl} onChange={(e) => setCalMl(e.target.value)} className="rounded-lg mt-1 num" /></div>
+              <div><Label className="text-xs">Print W (in)</Label><Input data-testid="cal-w" type="number" value={calW} onChange={(e) => setCalW(e.target.value)} className="rounded-lg mt-1 num" /></div>
+              <div><Label className="text-xs">Print H (in)</Label><Input data-testid="cal-h" type="number" value={calH} onChange={(e) => setCalH(e.target.value)} className="rounded-lg mt-1 num" /></div>
+              <div><Label className="text-xs">Ink (ml)</Label><Input data-testid="cal-ml" type="number" value={calMl} onChange={(e) => setCalMl(e.target.value)} className="rounded-lg mt-1 num" /></div>
             </div>
+            <label className="mt-3 flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-3 py-2.5 cursor-pointer hover:border-[#2495D3]" data-testid="cal-file-label">
+              <Upload size={15} className="text-slate-400" />
+              <span className="text-sm text-slate-500 truncate">{calFile ? calFile.name : "Attach printed file (auto coverage) — recommended"}</span>
+              <input data-testid="cal-file-input" type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCalFile(e.target.files?.[0] || null)} />
+            </label>
+            {!calFile && (
+              <div className="mt-3"><Label className="text-xs">Coverage % (only if no file)</Label><Input data-testid="cal-cov" type="number" value={calCov} onChange={(e) => setCalCov(e.target.value)} className="rounded-lg mt-1 num" /></div>
+            )}
             <Button data-testid="ink-calibrate-button" onClick={calibrate} variant="outline" className="w-full mt-4 rounded-lg">
               <Sparkles size={15} className="mr-2" />Teach the estimator
             </Button>
