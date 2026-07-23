@@ -1,0 +1,55 @@
+{
+  "summary": "Phase 2 verification (unified Materials + Reorder Center + Ink calibration propagation). Backend: 9/9 pytest cases pass. Frontend: Materials CRUD, +/- stock, is_default replacement, Reorder Center email send (200 OK), Ink Estimator calibration with sibling toast all pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dialogs (New material / Reorder compose)", "issues": ["Radix warning in console: 'Missing Description or aria-describedby={undefined} for {DialogContent}'. Non-blocking a11y warning — add DialogDescription for screen readers."]}
+    ]
+  },
+  "verification_results": {
+    "backend": {
+      "ink_calibrate_propagation": "POST /api/ink/calibrate on Roland VersaCAMM VP-540i (largeformat): siblings_updated>0, other Roland LF machines updated to same new_ml_per_sqft_full, Roland directprint & Mimaki untouched. PASS",
+      "materials_list_computed_fields": "finish_cost / retail_price / selling_price / low_stock / below_cost all present. PASS",
+      "materials_below_cost": "price_override=50 with unit_cost=100 => below_cost=true. PASS",
+      "materials_is_default_replacement": "Creating second material with is_default=true in same category unsets previous default. PASS",
+      "materials_put_delete": "PASS",
+      "adjust_stock_never_below_zero": "delta -5 on stock=3 => stock_qty=0. PASS",
+      "reorder_grouping_and_suggested_qty": "Groups by supplier_email; suggested_qty=target-stock. Verified 20-1=19. PASS",
+      "reseller_field_scrubbing": "unit_cost/finish_cost/supplier_*/stock_qty NOT in reseller response. PASS",
+      "reseller_403_on_admin_endpoints": "POST/GET reorder/adjust-stock all 401-403. PASS"
+    },
+    "frontend": {
+      "materials_page": "Loads with 4 seeded rows, 3 default badges, low-stock stock values shown in red (2 of 4).",
+      "materials_create": "Dialog opens, name/cost/supplier/stock/reorder/module chip/is_default all fillable. Save → row appears (rows: 4→5). New material appears in listing.",
+      "materials_stock_plus_minus": "Verified 10→11→10 with +/- buttons.",
+      "materials_delete": "Delete removes row (rows: 5→4). window.confirm auto-accepted.",
+      "is_default_replacement_UI": "Setting is_default on new sheet material unset previous default (Gloss Text lost DEFAULT badge; 'Defaults set' KPI dropped 3→2). Behavior consistent with backend.",
+      "reorder_center": "2 supplier cards (SignSupply Co., RollMedia Ltd.), 2 low-stock items; Order Qty prefilled to 42 (50-8) and 10 (12-2).",
+      "reorder_email_send": "Compose dialog opens; recipient editable and changed to admin@printandsave.ca; POST /api/materials/reorder/email → 200 OK; dialog closes.",
+      "ink_estimator_calibration_toast": "Toast: 'Learned! Roland VersaCAMM VP-540i → 9.2 ml/ft² · 2 samples · applied to 2 sibling machine(s)' — sibling wording present. PASS"
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase2_materials_ink.py",
+    "/app/test_reports/pytest/phase2_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Suppress Radix Dialog a11y warning by adding <DialogDescription> to material-dialog and reorder-compose-dialog."
+  ],
+  "critical_code_review_comments": [
+    "server.py compute_material writes computed fields into the input dict via m.update — fine, but the same dict is later scrubbed in-place for non-admins (list_materials). Works, but consider returning a fresh dict to avoid mutation surprises.",
+    "reorder_email endpoint stamps materials.reordered_at only after successful send but does NOT decrement stock or link to an incoming PO — likely intentional (email is a suggestion), worth documenting.",
+    "_propagate_ink_calibration matches sibling machines by regex on brand + same category. Two Roland VersaCAMM series (RE-640, XR-640, VP-540i) all categorized as 'largeformat' — propagates as expected. Note: it will also propagate across any Roland LF ink chemistry variants if added later; not a bug now but flag if UV/eco-solvent Roland LF ever coexist.",
+    "Frontend Materials.js: uses window.confirm for delete rather than shadcn AlertDialog — inconsistent with rest of app."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase2_materials_ink.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% of tested flows"},
+  "test_credentials": "admin@printandsave.ca/admin123 (works); cliente1@test.com/test123 (works, non-admin scrubbing verified)",
+  "seed_data_creation": "Test materials created and cleaned up via pytest fixtures and UI test flow. Final state matches initial state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Phase 2 (Materials + Reorder + Ink propagation) fully verified. Note: running the ink calibration test bumps ink_samples on Roland VP-540i and applies new_val to Roland RE-640 & XR-640; if further iterations depend on original seeded ink values, re-seed or reset the machines collection.",
+  "rca of the issue": "No blocking issues found."
+}

@@ -63,7 +63,7 @@ export default function InkEstimator() {
       } else {
         ({ data } = await api.post("/ink/calibrate", { machine_id: machineId, area_sqft: areaSqft, coverage_pct: +calCov, actual_ml: +calMl }));
       }
-      toast.success(`Learned! ${data.machine} → ${data.new_ml_per_sqft_full} ml/ft²${data.coverage_pct != null ? ` (file coverage ${data.coverage_pct}%)` : ""} · ${data.samples} samples`);
+      toast.success(`Learned! ${data.machine} → ${data.new_ml_per_sqft_full} ml/ft²${data.coverage_pct != null ? ` (file coverage ${data.coverage_pct}%)` : ""} · ${data.samples} samples${data.siblings_updated ? ` · applied to ${data.siblings_updated} sibling machine(s)` : ""}`);
       setCalMl(""); setCalFile(null); load();
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };

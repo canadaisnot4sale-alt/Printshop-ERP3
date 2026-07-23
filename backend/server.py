@@ -188,6 +188,50 @@ class SheetMaterial(BaseModel):
     cnc_capable: bool = True
     channel_capable: bool = False
 
+MATERIAL_MODULES = ["paper", "booklet", "large-format", "stickers", "dtf", "embroidery",
+                    "laser", "direct-print", "channel-letters", "sublimation", "roll-stickers"]
+
+class Material(BaseModel):
+    name: str                                   # nickname / display name
+    code: str = ""
+    category: str = "sheet"                     # sheet, roll, ink, laminate, substrate, other
+    # Supplier info
+    supplier_company: str = ""
+    supplier_contact: str = ""
+    supplier_phone: str = ""
+    supplier_email: str = ""
+    # Specs
+    unit: str = "sheet"                         # sheet, sqft, roll, each
+    size: str = ""                              # e.g. 4x8 ft, 13x19 in
+    weight: str = ""
+    gramage: str = ""
+    sheet_area_sqft: float = 0.0                # used to compute ink cost for finish cost
+    # Economics
+    unit_cost: float = 0.0                       # cost per unit
+    labor_minutes: float = 0.0                   # labor to finish one unit
+    machine_id: Optional[str] = None             # machine that fabricates (ink + hourly)
+    ink_coverage_pct: float = 0.0
+    price_override: Optional[float] = None       # manual selling price
+    retail_markup_pct: Optional[float] = None    # per-material override
+    wholesale_markup_pct: Optional[float] = None
+    modules: List[str] = []                      # cross-module usage flags
+    is_default: bool = False                     # default material for its category
+    # Inventory
+    stock_qty: float = 0.0
+    reorder_point: float = 0.0
+    reorder_target: float = 0.0
+    notes: str = ""
+
+class StockAdjust(BaseModel):
+    delta: float
+    reason: str = ""
+
+class ReorderEmailIn(BaseModel):
+    recipient_email: EmailStr
+    subject: str
+    body_html: str
+    material_ids: List[str] = []
+
 class JobPreset(BaseModel):
     name: str
     module: str = "generic"
@@ -653,6 +697,176 @@ async def delete_fixed_cost(fid: str, user=Depends(require_admin)):
     await db.fixed_costs.delete_one({"_id": ObjectId(fid)})
     return {"ok": True}
 
+# ---------------- Materials: unified DB + inventory + reorder ----------------
+async def _business_hourly(s):
+    fixed = await db.fixed_costs.find().to_list(500)
+    overhead = sum((f.get("amount") or 0) for f in fixed)
+    oh = s.get("open_hours_per_month", 188) or 188
+    return round(overhead / oh, 2) if oh else 0.0
+
+async def _machines_by_id(s):
+    oh = s.get("open_hours_per_month", 188) or 188
+    out = {}
+    for m in await db.machines.find().to_list(500):
+        c = clean(m)
+        c.update(machine_computed(c, oh))
+        out[c["id"]] = c
+    return out
+
+def compute_material(m, biz_hourly, machines_by_id, s):
+    """Attach finish cost (material + machine + ink + labor), prices, stock + below-cost flag."""
+    unit_cost = m.get("unit_cost") or 0.0
+    labor_min = m.get("labor_minutes") or 0.0
+    machine = machines_by_id.get(m.get("machine_id")) if m.get("machine_id") else None
+    machine_hourly = (machine.get("hourly_cost") or 0.0) if machine else 0.0
+    labor_cost = (labor_min / 60.0) * (biz_hourly + machine_hourly)
+    ink_cost = 0.0
+    area = m.get("sheet_area_sqft") or 0.0
+    if machine and area:
+        frac = (m.get("ink_coverage_pct") or 0.0) / 100.0
+        ml = area * frac * (machine.get("ink_ml_per_sqft_full") or 0.0)
+        ink_cost = ml * (machine.get("ink_cost_per_ml") or 0.0)
+    finish_cost = round(unit_cost + labor_cost + ink_cost, 4)
+    rm = m.get("retail_markup_pct")
+    rm = s.get("retail_markup_pct", 200) if rm is None else rm
+    wm = m.get("wholesale_markup_pct")
+    wm = s.get("wholesale_markup_pct", 100) if wm is None else wm
+    retail_price = round(finish_cost * (1 + rm / 100.0), 2)
+    wholesale_price = round(finish_cost * (1 + wm / 100.0), 2)
+    override = m.get("price_override")
+    has_override = override is not None and override > 0
+    selling_price = round(override, 2) if has_override else retail_price
+    below_cost = bool(has_override and override < finish_cost)
+    stock = m.get("stock_qty") or 0.0
+    rp = m.get("reorder_point") or 0.0
+    low_stock = stock <= rp
+    m.update({
+        "labor_cost": round(labor_cost, 4),
+        "ink_cost": round(ink_cost, 4),
+        "finish_cost": finish_cost,
+        "retail_price": retail_price,
+        "wholesale_price": wholesale_price,
+        "selling_price": selling_price,
+        "below_cost": below_cost,
+        "low_stock": low_stock,
+        "machine_name": machine.get("name") if machine else None,
+    })
+    return m
+
+@api_router.get("/materials")
+async def list_materials(user=Depends(get_current_user)):
+    s = await get_settings()
+    biz = await _business_hourly(s)
+    mbi = await _machines_by_id(s)
+    items = [clean(i) for i in await db.materials.find().sort("name", 1).to_list(2000)]
+    admin = user.get("role") == "admin"
+    out = []
+    for m in items:
+        compute_material(m, biz, mbi, s)
+        if not admin:
+            for k in ["unit_cost", "finish_cost", "labor_cost", "ink_cost",
+                      "supplier_company", "supplier_contact", "supplier_phone",
+                      "supplier_email", "wholesale_price", "below_cost", "stock_qty",
+                      "reorder_point", "reorder_target", "low_stock"]:
+                m.pop(k, None)
+        out.append(m)
+    return out
+
+async def _apply_default(coll, doc_id, category):
+    await db.materials.update_many(
+        {"_id": {"$ne": doc_id}, "category": category, "is_default": True},
+        {"$set": {"is_default": False}})
+
+@api_router.post("/materials")
+async def create_material(body: Material, user=Depends(require_admin)):
+    doc = body.model_dump()
+    doc["created_at"] = now_iso()
+    res = await db.materials.insert_one(doc)
+    if doc.get("is_default"):
+        await _apply_default(db.materials, res.inserted_id, doc.get("category"))
+    s = await get_settings()
+    saved = clean(await db.materials.find_one({"_id": res.inserted_id}))
+    return compute_material(saved, await _business_hourly(s), await _machines_by_id(s), s)
+
+@api_router.put("/materials/{mid}")
+async def update_material(mid: str, body: Material, user=Depends(require_admin)):
+    doc = body.model_dump()
+    oid = ObjectId(mid)
+    await db.materials.update_one({"_id": oid}, {"$set": doc})
+    if doc.get("is_default"):
+        await _apply_default(db.materials, oid, doc.get("category"))
+    s = await get_settings()
+    saved = clean(await db.materials.find_one({"_id": oid}))
+    return compute_material(saved, await _business_hourly(s), await _machines_by_id(s), s)
+
+@api_router.delete("/materials/{mid}")
+async def delete_material(mid: str, user=Depends(require_admin)):
+    await db.materials.delete_one({"_id": ObjectId(mid)})
+    return {"ok": True}
+
+@api_router.post("/materials/{mid}/adjust-stock")
+async def adjust_stock(mid: str, body: StockAdjust, user=Depends(require_admin)):
+    m = await db.materials.find_one({"_id": ObjectId(mid)})
+    if not m:
+        raise HTTPException(404, "Material not found")
+    new_qty = max(0.0, (m.get("stock_qty") or 0.0) + body.delta)
+    await db.materials.update_one({"_id": ObjectId(mid)}, {"$set": {"stock_qty": new_qty}})
+    return {"id": mid, "stock_qty": new_qty, "delta": body.delta}
+
+@api_router.get("/materials/reorder")
+async def reorder_center(user=Depends(require_admin)):
+    """Group low-stock materials by supplier with suggested reorder qty (target - current)."""
+    items = [clean(i) for i in await db.materials.find().to_list(2000)]
+    groups = {}
+    for m in items:
+        stock = m.get("stock_qty") or 0.0
+        rp = m.get("reorder_point") or 0.0
+        if stock > rp:
+            continue
+        target = m.get("reorder_target") or 0.0
+        suggested = round(max(target - stock, 0.0), 2)
+        key = (m.get("supplier_email") or "").lower() or (m.get("supplier_company") or "Unknown supplier")
+        g = groups.setdefault(key, {
+            "supplier_company": m.get("supplier_company") or "",
+            "supplier_contact": m.get("supplier_contact") or "",
+            "supplier_email": m.get("supplier_email") or "",
+            "supplier_phone": m.get("supplier_phone") or "",
+            "items": [],
+        })
+        g["items"].append({
+            "id": m["id"], "name": m.get("name"), "code": m.get("code"),
+            "unit": m.get("unit"), "stock_qty": stock, "reorder_point": rp,
+            "reorder_target": target, "suggested_qty": suggested,
+            "unit_cost": m.get("unit_cost") or 0.0,
+        })
+    return list(groups.values())
+
+@api_router.post("/materials/reorder/email")
+async def reorder_email(body: ReorderEmailIn, user=Depends(require_admin)):
+    payload = {
+        "to": [body.recipient_email],
+        "subject": body.subject,
+        "html": body.body_html,
+        "from_name": os.environ["EMAIL_FROM_NAME"],
+        "contact_email": user["email"],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
+                                     headers={"X-Email-Key": os.environ["EMERGENT_EMAIL_KEY"]}, json=payload)
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Reorder email failed: {e.response.status_code} {e.response.text}")
+        raise HTTPException(status_code=502, detail="Failed to send email")
+    except Exception as e:
+        logger.error(f"Reorder email error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send email")
+    if body.material_ids:
+        await db.materials.update_many(
+            {"_id": {"$in": [ObjectId(i) for i in body.material_ids]}},
+            {"$set": {"reordered_at": now_iso()}})
+    return {"status": "success", "message": f"Reorder emailed to {body.recipient_email}"}
+
 @api_router.get("/finance/summary")
 async def finance_summary(user=Depends(require_admin)):
     from datetime import datetime, timezone
@@ -765,6 +979,28 @@ async def ink_estimate(
         "samples": m.get("ink_samples") or 0,
     }
 
+INK_BRANDS = ["roland", "mimaki", "epson", "hp", "canon", "mutoh"]
+
+def _brand_of(name: str) -> str:
+    n = (name or "").lower()
+    for b in INK_BRANDS:
+        if b in n:
+            return b
+    return ""
+
+async def _propagate_ink_calibration(machine: dict, new_val: float) -> int:
+    """Apply a calibrated ink rate to all sibling machines of the same brand + category
+    (same ink technology, e.g. all Roland eco-solvent or all Roland UV flatbed)."""
+    brand = _brand_of(machine.get("name"))
+    if not brand:
+        return 0
+    res = await db.machines.update_many(
+        {"_id": {"$ne": machine["_id"]},
+         "name": {"$regex": brand, "$options": "i"},
+         "category": machine.get("category")},
+        {"$set": {"ink_ml_per_sqft_full": round(new_val, 3)}})
+    return res.modified_count
+
 class InkCalibration(BaseModel):
     machine_id: str
     area_sqft: float
@@ -785,8 +1021,10 @@ async def ink_calibrate(body: InkCalibration, user=Depends(require_admin)):
     new_val = (prev * samples + implied) / (samples + 1)
     await db.machines.update_one({"_id": m["_id"]}, {"$set": {
         "ink_ml_per_sqft_full": round(new_val, 3), "ink_samples": samples + 1}})
+    siblings = await _propagate_ink_calibration(m, new_val)
     return {"machine": m.get("name"), "implied_ml_per_sqft_full": round(implied, 3),
-            "new_ml_per_sqft_full": round(new_val, 3), "samples": samples + 1}
+            "new_ml_per_sqft_full": round(new_val, 3), "samples": samples + 1,
+            "siblings_updated": siblings}
 
 @api_router.post("/ink/calibrate-file")
 async def ink_calibrate_file(
@@ -817,9 +1055,11 @@ async def ink_calibrate_file(
     new_val = (prev * samples + implied) / (samples + 1)
     await db.machines.update_one({"_id": m["_id"]}, {"$set": {
         "ink_ml_per_sqft_full": round(new_val, 3), "ink_samples": samples + 1}})
+    siblings = await _propagate_ink_calibration(m, new_val)
     return {"machine": m.get("name"), "coverage_pct": round(frac * 100, 1),
             "implied_ml_per_sqft_full": round(implied, 3),
-            "new_ml_per_sqft_full": round(new_val, 3), "samples": samples + 1}
+            "new_ml_per_sqft_full": round(new_val, 3), "samples": samples + 1,
+            "siblings_updated": siblings}
 
 # ---------------- Equipment supplies (admin) ----------------
 @api_router.get("/equipment/{equipment_id}/supplies")
@@ -1546,6 +1786,44 @@ async def startup():
     await seed_demo()
     await backfill_quote_inputs()
     await calibrate_default_ink()
+    await seed_materials()
+
+async def seed_materials():
+    if await db.migrations.find_one({"_id": "materials_seed_v1"}):
+        return
+    if await db.materials.count_documents({}) > 0:
+        await db.migrations.update_one({"_id": "materials_seed_v1"}, {"$set": {"done": True}}, upsert=True)
+        return
+    samples = [
+        {"name": "Coroplast 4x8 White 4mm", "code": "CORO-48-W", "category": "substrate",
+         "supplier_company": "SignSupply Co.", "supplier_contact": "Dave Miller",
+         "supplier_phone": "604-555-0182", "supplier_email": "orders@signsupply.example",
+         "unit": "sheet", "size": "4x8 ft", "sheet_area_sqft": 32.0, "unit_cost": 12.50,
+         "modules": ["direct-print", "large-format"], "is_default": True,
+         "stock_qty": 8, "reorder_point": 10, "reorder_target": 50},
+        {"name": "ACM 4x8 3mm White", "code": "ACM-48-W", "category": "substrate",
+         "supplier_company": "SignSupply Co.", "supplier_contact": "Dave Miller",
+         "supplier_phone": "604-555-0182", "supplier_email": "orders@signsupply.example",
+         "unit": "sheet", "size": "4x8 ft", "sheet_area_sqft": 32.0, "unit_cost": 38.00,
+         "modules": ["direct-print", "channel-letters"],
+         "stock_qty": 25, "reorder_point": 8, "reorder_target": 40},
+        {"name": "Eco-Solvent Vinyl 54in Gloss", "code": "VNL-54-G", "category": "roll",
+         "supplier_company": "RollMedia Ltd.", "supplier_contact": "Sara Lee",
+         "supplier_phone": "778-555-0110", "supplier_email": "sales@rollmedia.example",
+         "unit": "roll", "size": "54in x 150ft", "unit_cost": 145.00,
+         "modules": ["large-format", "stickers"], "is_default": True,
+         "stock_qty": 2, "reorder_point": 3, "reorder_target": 12},
+        {"name": "Gloss Text 100lb 13x19", "code": "PPR-1319-G", "category": "sheet",
+         "supplier_company": "PaperHouse", "supplier_contact": "Tom Ng",
+         "supplier_phone": "604-555-0143", "supplier_email": "purchasing@paperhouse.example",
+         "unit": "sheet", "size": "13x19 in", "gramage": "148 gsm", "unit_cost": 0.22,
+         "modules": ["paper", "booklet"], "is_default": True,
+         "stock_qty": 1200, "reorder_point": 500, "reorder_target": 3000},
+    ]
+    for s in samples:
+        s["created_at"] = now_iso()
+        await db.materials.insert_one(s)
+    await db.migrations.update_one({"_id": "materials_seed_v1"}, {"$set": {"done": True}}, upsert=True)
 
 async def calibrate_default_ink():
     # Realistic ink defaults derived from the user's real VersaWorks readings. Runs ONCE.
