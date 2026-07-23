@@ -58,6 +58,13 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 
 ### P2b (next): online payment — Stripe + PayPal at checkout.
 
+## Implemented (2026-06) — v22 P2b: Stripe payments at checkout
+- **Backend Stripe** (server.py, uses emergent Sandbox keys in .env): `POST /api/payments/checkout` (creates Stripe Checkout Session for an existing order, currency CAD, records a `payment_transactions` row), `GET /api/payments/status/{session_id}` (polls Stripe + marks order paid), `POST /api/stripe/webhook` (signature-verified, marks order paid on checkout.session.completed). Added `import stripe` (was missing → server crashed; fixed).
+- **Frontend**: Storefront checkout dialog now has **Place order** + **Place & pay** (place-and-pay-button) → redirects to Stripe. Orders page: pending orders show a **Pay now** button (row + invoice dialog) → `/payments/checkout` → Stripe redirect. New **PaymentReturn.js** page on routes `/payment/success` (polls status, shows "Payment successful!") and `/payment/cancel`. On success the order flips pending → paid.
+- Verified iteration_18 = 100% backend (5/5 pytest) + full frontend E2E through the real Stripe hosted page (test card 4242…) incl. order status flip and cancel route. No bugs.
+
+### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).
+
 - **Multi-module quote (cart)**: SaveQuoteBar gained an **"Add to quote"** button in every calculator → adds item to a localStorage cart (one cart). Sidebar **Quote Builder** nav shows a live cart badge. QuoteBuilder page (/quote-builder): editable qty, combined total, Save (multi quote: quote_type='multi', items[]) / Print. Multi quotes render an items table in the email HTML.
 - **Quote→Product**: admin-only "Convert to product" on My Quotes → dialog (name, editable category w/ suggestions, price prefilled, publish toggle) → POST /api/quotes/{id}/to-product (carries module + specs snapshot).
 - **Product Catalog** (/products-catalog, admin nav "Products"): products grouped by **category (A-Z within)**, publish toggle, full CRUD. Categories = predefined editable list (PRODUCT_CATEGORIES via /api/config, datalist input). Non-admin GET /catalog-products returns only published (ready for P2 storefront).
