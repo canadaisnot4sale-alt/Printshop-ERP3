@@ -48,6 +48,19 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
+## Implemented (2026-07-19) — v12 Business Control · Phase 2a (Ink Estimator)
+- NEW admin **Ink / Toner Estimator** (/ink-estimator): 3-layer ink cost strategy.
+  1. Coverage-based estimate (25/50/75/100% buttons + slider) — works with no file.
+  2. **File analysis**: upload artwork → server converts to CMYK (Pillow) and computes average ink density → auto coverage % (verified: mostly-white "Big Sale" ≈16.6%, full-color ≈100%).
+  3. **Self-calibration**: enter real VersaWorks total ml + area/coverage → machine's ml/ft² recomputed as running weighted average (learns from real jobs). Endpoint POST /api/ink/calibrate.
+- Machine model gained ink_ml_per_sqft_full (calibratable), ink_cost_per_ml, ink_full_ref_density; editable in Machinery CRUD. Endpoint POST /api/ink/estimate (multipart, coverage or file).
+- Verified: iteration_9 frontend 100% + backend via curl. Minor a11y warning (CrudManager dialog) deferred.
+
+### Phase 2 remaining (next)
+- Materials overhaul: nickname + full supplier info (company, contact, phone, email, weight, gramage, size), auto Unit cost & **Finish cost** (printed sheet incl. machine+ink+labor using shop rate + ink estimator), **price override**, **below-cost warning**, cross-module usage flags, **DEFAULT material**.
+- **Inventory** per material + reorder point + alerts; **Reorder Center** grouped by supplier with 1-click editable reorder email (Resend). Applies to all material/supply areas.
+- Sales analytics (sold per hour/day/week/month, best-sellers, units-to-sell to cover costs) — depends on Orders (Phase 4); break-even $ already live in Financials.
+
 ## Implemented (2026-07-19) — v11 Business Control · Phase 1
 - NEW admin-only "Business" area: **Machinery/Assets DB**, **Fixed Costs**, **Financial Control dashboard**.
 - Machine model: owned (straight-line depreciation over useful life) or leased (lease + 2%/yr maintenance) → computed monthly_cost & hourly_cost (monthly ÷ productive hours, per-machine or shop default 188 h/mo). Seeded 12 real machines.
