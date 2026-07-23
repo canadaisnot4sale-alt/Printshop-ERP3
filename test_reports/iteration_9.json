@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend regression + new Ink Estimator page tested end-to-end. All Business sidebar pages load; Ink Estimator coverage estimate and calibration flows work; Machinery edit dialog exposes new ink profile fields.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Machinery edit dialog", "issues": ["Missing DialogContent Description / aria-describedby (a11y warning in console)"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: add DialogDescription (or aria-describedby) to Machinery edit dialog to silence a11y warning."
+  ],
+  "critical_code_review_comments": [
+    "InkEstimator.js is clean and focused (~145 lines). Uses FormData correctly for multipart estimate.",
+    "Consider disabling Estimate button while request in-flight to avoid double submits."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100%"},
+  "test_credentials": "admin@printandsave.ca / admin123 (verified working)",
+  "seed_data_creation": "None. Calibration POST added 1 sample to Xerox Versant 280 (ml/ft² recomputed to 10).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 4 Business pages (financials-page, machinery-page, fixed-costs-page, ink-estimator-page) render. Ink estimate 50%/48x96 -> Coverage 50%, Area 32 ft², 160 ml, $40.00 as expected. Calibrate 32/100/320 -> toast 'Learned! Xerox Versant 280 now 10 ml/ft² (1 samples)'. Machine edit dialog shows machine-field-ink_ml_per_sqft_full and machine-field-ink_cost_per_ml. File upload path NOT exercised (harness limitation) — backend already verified by main agent via curl.",
+  "verified_flows": [
+    "Admin login",
+    "Business regression: /financials, /machinery, /fixed-costs, /ink-estimator all mount",
+    "Sidebar nav-ink-estimator present",
+    "Ink estimate by coverage (50%) with correct math",
+    "Ink profile card shows ml/ft², cost/ml, samples",
+    "Calibration POST /api/ink/calibrate success toast",
+    "Machinery edit dialog exposes ink_ml_per_sqft_full & ink_cost_per_ml fields"
+  ]
+}

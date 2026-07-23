@@ -5,7 +5,7 @@ import os
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Form, File, UploadFile
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, BeforeValidator, EmailStr
@@ -215,6 +215,9 @@ class Machine(BaseModel):
     productive_hours_month: float = 0.0   # 0 => use settings.open_hours_per_month
     ink_config: str = ""
     ink_details: str = ""
+    ink_ml_per_sqft_full: float = 10.0     # ml consumed per ft² at 100% full-color coverage (calibratable)
+    ink_cost_per_ml: float = 0.25
+    ink_full_ref_density: float = 0.55     # avg CMYK density that maps to "100% full color" in file analysis
     notes: str = ""
 
 class FixedCost(BaseModel):
@@ -697,6 +700,79 @@ async def finance_summary(user=Depends(require_admin)):
         "machines": sorted(mc, key=lambda x: -x["monthly_cost"]),
         "fixed_costs": sorted([clean(f) for f in fixed], key=lambda x: -(x.get("amount") or 0)),
     }
+
+# ---------------- Ink / toner estimator (with file analysis + self-calibration) ----------------
+def analyze_ink_density(raw_bytes):
+    import io
+    from PIL import Image
+    img = Image.open(io.BytesIO(raw_bytes)).convert("CMYK")
+    img.thumbnail((400, 400))
+    px = list(img.getdata())
+    n = len(px)
+    if not n:
+        return 0.0
+    total = sum(c + m + y + k for (c, m, y, k) in px)
+    return total / (n * 4 * 255.0)   # 0..1 average ink density
+
+@api_router.post("/ink/estimate")
+async def ink_estimate(
+    machine_id: str = Form(...),
+    width_in: float = Form(...),
+    height_in: float = Form(...),
+    quantity: float = Form(1.0),
+    coverage_pct: Optional[float] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    user=Depends(require_admin),
+):
+    m = await db.machines.find_one({"_id": ObjectId(machine_id)})
+    if not m:
+        raise HTTPException(404, "Machine not found")
+    source = "coverage"
+    if file is not None:
+        raw = await file.read()
+        try:
+            density = analyze_ink_density(raw)
+        except Exception:
+            raise HTTPException(400, "Could not read image (use PNG/JPG/TIFF)")
+        ref = m.get("ink_full_ref_density") or 0.55
+        frac = min(1.0, density / ref) if ref else density
+        source = "file"
+    else:
+        frac = (coverage_pct if coverage_pct is not None else 100.0) / 100.0
+    area = (width_in * height_in / 144.0) * (quantity or 1)
+    mlpsf = m.get("ink_ml_per_sqft_full") or 10.0
+    cpm = m.get("ink_cost_per_ml") or 0.25
+    ml = area * frac * mlpsf
+    return {
+        "machine": m.get("name"), "source": source,
+        "coverage_pct": round(frac * 100, 1), "area_sqft": round(area, 3),
+        "ink_ml": round(ml, 2), "ink_cost": round(ml * cpm, 2),
+        "ml_per_sqft_full": mlpsf, "cost_per_ml": cpm,
+        "samples": m.get("ink_samples") or 0,
+    }
+
+class InkCalibration(BaseModel):
+    machine_id: str
+    area_sqft: float
+    coverage_pct: float
+    actual_ml: float
+
+@api_router.post("/ink/calibrate")
+async def ink_calibrate(body: InkCalibration, user=Depends(require_admin)):
+    m = await db.machines.find_one({"_id": ObjectId(body.machine_id)})
+    if not m:
+        raise HTTPException(404, "Machine not found")
+    denom = body.area_sqft * (body.coverage_pct / 100.0)
+    if denom <= 0:
+        raise HTTPException(400, "Area and coverage must be greater than 0")
+    implied = body.actual_ml / denom
+    prev = m.get("ink_ml_per_sqft_full") or 0.0
+    samples = m.get("ink_samples") or 0
+    new_val = (prev * samples + implied) / (samples + 1)
+    await db.machines.update_one({"_id": m["_id"]}, {"$set": {
+        "ink_ml_per_sqft_full": round(new_val, 3), "ink_samples": samples + 1}})
+    return {"machine": m.get("name"), "implied_ml_per_sqft_full": round(implied, 3),
+            "new_ml_per_sqft_full": round(new_val, 3), "samples": samples + 1}
 
 # ---------------- Equipment supplies (admin) ----------------
 @api_router.get("/equipment/{equipment_id}/supplies")

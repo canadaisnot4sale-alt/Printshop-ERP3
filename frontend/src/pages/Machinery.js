@@ -19,6 +19,8 @@ const fields = [
   { name: "productive_hours_month", label: "Productive hrs/mo (0 = shop default)", type: "number" },
   { name: "ink_config", label: "Ink / toner config", type: "text" },
   { name: "ink_details", label: "Ink details (e.g. 8 x 1L @ $310)", type: "text", full: true },
+  { name: "ink_ml_per_sqft_full", label: "Ink ml/ft² @ 100% (auto-calibrates)", type: "number", default: 10 },
+  { name: "ink_cost_per_ml", label: "Ink cost / ml (CAD)", type: "number", default: 0.25 },
   { name: "notes", label: "Notes", type: "text", full: true },
 ];
 
