@@ -1,6 +1,7 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { CartProvider } from "@/context/CartContext";
 import { Toaster } from "@/components/ui/sonner";
 import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
@@ -29,6 +30,8 @@ import InkEstimator from "@/pages/InkEstimator";
 import Materials from "@/pages/Materials";
 import ReorderCenter from "@/pages/ReorderCenter";
 import Purchases from "@/pages/Purchases";
+import QuoteBuilder from "@/pages/QuoteBuilder";
+import ProductsCatalog from "@/pages/ProductsCatalog";
 
 function Protected({ children, adminOnly }) {
   const { user, ready } = useAuth();
@@ -42,6 +45,7 @@ function App() {
   return (
     <div className="App">
       <AuthProvider>
+        <CartProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -59,6 +63,8 @@ function App() {
             <Route path="/roll-stickers" element={<Protected><RollStickers /></Protected>} />
             <Route path="/catalog" element={<Protected><Catalog /></Protected>} />
             <Route path="/quotes" element={<Protected><Quotes /></Protected>} />
+            <Route path="/quote-builder" element={<Protected><QuoteBuilder /></Protected>} />
+            <Route path="/products-catalog" element={<Protected adminOnly><ProductsCatalog /></Protected>} />
             <Route path="/equipment" element={<Protected adminOnly><Equipment /></Protected>} />
             <Route path="/machinery" element={<Protected adminOnly><Machinery /></Protected>} />
             <Route path="/fixed-costs" element={<Protected adminOnly><FixedCosts /></Protected>} />
@@ -73,6 +79,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
+        </CartProvider>
         <Toaster position="top-right" />
       </AuthProvider>
     </div>

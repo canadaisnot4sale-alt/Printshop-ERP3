@@ -1,9 +1,11 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext";
 import {
   LayoutGrid, FileText, BookOpen, Ruler, Sticker, Printer, Settings as Cog, LogOut,
   Shirt, Sparkles, Scissors, PanelTop, Type, Users as UsersIcon, FolderOpen,
   Coffee, Disc, BookMarked, Cpu, Receipt, LineChart, Droplet, Boxes, Truck, ReceiptText, PiggyBank,
+  ShoppingCart, Package,
 } from "lucide-react";
 
 const NAV = [
@@ -22,7 +24,9 @@ const NAV = [
   { to: "/roll-stickers", label: "Roll Stickers", icon: Disc, testid: "nav-roll-stickers" },
   { to: "/catalog", label: "Price Catalog", icon: BookMarked, testid: "nav-catalog" },
   { to: "/quotes", label: "My Quotes", icon: FolderOpen, testid: "nav-quotes" },
+  { to: "/quote-builder", label: "Quote Builder", icon: ShoppingCart, testid: "nav-quote-builder" },
   { section: "Business", admin: true },
+  { to: "/products-catalog", label: "Products", icon: Package, testid: "nav-products", admin: true },
   { to: "/financials", label: "Financials", icon: LineChart, testid: "nav-financials", admin: true },
   { to: "/profit-dashboard", label: "Profit & Loss", icon: PiggyBank, testid: "nav-profit-dashboard", admin: true },
   { to: "/machinery", label: "Machinery", icon: Cpu, testid: "nav-machinery", admin: true },
@@ -41,6 +45,7 @@ const ROLE_LABEL = { admin: "Administrator", client: "Client (Retail)", reseller
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
+  const cart = useCart();
   const nav = useNavigate();
   const isAdmin = user?.role === "admin";
 
@@ -73,7 +78,10 @@ export default function Layout({ children }) {
                 }
               >
                 <n.icon size={16} />
-                {n.label}
+                <span>{n.label}</span>
+                {n.to === "/quote-builder" && cart && cart.items.length ? (
+                  <span data-testid="cart-badge" className="ml-auto bg-[#2495D3] text-white text-[10px] font-bold rounded-full px-2 py-0.5 num">{cart.items.length}</span>
+                ) : null}
               </NavLink>
             )
           )}

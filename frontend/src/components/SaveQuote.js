@@ -1,12 +1,19 @@
 import { useState } from "react";
 import api, { apiErr } from "@/lib/api";
+import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Save, Printer } from "lucide-react";
+import { Save, Printer, ShoppingCart } from "lucide-react";
+
+const priceOf = (s) => {
+  if (!s) return 0;
+  const t = s.total || {};
+  return s.retail_total ?? s.customer_price ?? s.selling_price ?? t.selling_price ?? s.wholesale_total ?? s.wholesale_price ?? 0;
+};
 
 export function SaveQuoteBar({ module, title, summary, inputs, disabled }) {
   const [open, setOpen] = useState(false);
@@ -14,6 +21,12 @@ export function SaveQuoteBar({ module, title, summary, inputs, disabled }) {
   const [customerEmail, setCustomerEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const cart = useCart();
+
+  const addToQuote = () => {
+    cart.addItem({ module, title, price: Number(priceOf(summary) || 0), summary, inputs: inputs || {} });
+    toast.success("Added to quote");
+  };
 
   const save = async () => {
     setSaving(true);
@@ -28,6 +41,9 @@ export function SaveQuoteBar({ module, title, summary, inputs, disabled }) {
 
   return (
     <div className="flex gap-2 print:hidden">
+      <Button data-testid="add-to-quote-button" onClick={addToQuote} disabled={disabled} variant="outline" size="sm" className="rounded-sm">
+        <ShoppingCart size={15} className="mr-1.5" /> Add to quote
+      </Button>
       <Button data-testid="save-quote-button" onClick={() => setOpen(true)} disabled={disabled} variant="outline" size="sm" className="rounded-sm">
         <Save size={15} className="mr-1.5" /> Save
       </Button>

@@ -1521,6 +1521,7 @@ async def config(user=Depends(get_current_user)):
         "big_sheets": {k: list(v) for k, v in BIG_SHEETS.items()},
         "channel_heights": CHANNEL_HEIGHTS,
         "roles": ROLES,
+        "product_categories": PRODUCT_CATEGORIES,
         "role": user.get("role"),
     }
 
@@ -2017,11 +2018,14 @@ class QuoteIn(BaseModel):
     customer_name: str = ""
     customer_email: str = ""
     notes: str = ""
+    quote_type: str = "single"
+    items: List[dict] = []
 
 @api_router.post("/quotes")
 async def save_quote(body: QuoteIn, user=Depends(get_current_user)):
     doc = {"module": body.module, "title": body.title, "summary": body.summary, "inputs": body.inputs,
            "customer_name": body.customer_name, "customer_email": body.customer_email, "notes": body.notes,
+           "quote_type": body.quote_type, "items": body.items,
            "user_id": user["id"], "user_email": user["email"], "created_at": now_iso()}
     res = await db.quotes.insert_one(doc)
     doc["_id"] = res.inserted_id
@@ -2040,6 +2044,65 @@ async def delete_quote(quote_id: str, user=Depends(get_current_user)):
         q["user_id"] = user["id"]
     await db.quotes.delete_one(q)
     return {"ok": True}
+
+# ---------------- Product catalog (quote -> product) ----------------
+PRODUCT_CATEGORIES = ["Business Cards", "Flyers", "Brochures", "Booklets", "Postcards",
+                      "Banners", "Signs", "Stickers", "Labels", "Decals", "Apparel",
+                      "Posters", "Packaging", "Other"]
+
+class CatalogProduct(BaseModel):
+    name: str
+    category: str = "Other"
+    module: str = ""
+    price: float = 0.0
+    description: str = ""
+    published: bool = False
+    source_quote_id: Optional[str] = None
+    specs: dict = {}
+
+@api_router.get("/catalog-products")
+async def list_catalog_products(user=Depends(get_current_user)):
+    q = {} if user.get("role") == "admin" else {"published": True}
+    items = await db.catalog_products.find(q).sort("name", 1).to_list(2000)
+    return [clean(i) for i in items]
+
+@api_router.post("/catalog-products")
+async def create_catalog_product(body: CatalogProduct, user=Depends(require_admin)):
+    doc = body.model_dump()
+    doc["created_at"] = now_iso()
+    res = await db.catalog_products.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return clean(doc)
+
+@api_router.put("/catalog-products/{pid}")
+async def update_catalog_product(pid: str, body: CatalogProduct, user=Depends(require_admin)):
+    await db.catalog_products.update_one({"_id": ObjectId(pid)}, {"$set": body.model_dump()})
+    return clean(await db.catalog_products.find_one({"_id": ObjectId(pid)}))
+
+@api_router.delete("/catalog-products/{pid}")
+async def delete_catalog_product(pid: str, user=Depends(require_admin)):
+    await db.catalog_products.delete_one({"_id": ObjectId(pid)})
+    return {"ok": True}
+
+class ToProductIn(BaseModel):
+    name: str
+    category: str = "Other"
+    price: float = 0.0
+    description: str = ""
+    published: bool = False
+
+@api_router.post("/quotes/{quote_id}/to-product")
+async def quote_to_product(quote_id: str, body: ToProductIn, user=Depends(require_admin)):
+    q = await db.quotes.find_one({"_id": ObjectId(quote_id)})
+    if not q:
+        raise HTTPException(404, "Quote not found")
+    doc = body.model_dump()
+    doc.update({"module": q.get("module", ""), "source_quote_id": quote_id,
+                "specs": {"summary": q.get("summary", {}), "inputs": q.get("inputs", {})},
+                "created_at": now_iso()})
+    res = await db.catalog_products.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return clean(doc)
 
 def _fmt(v):
     try:
@@ -2065,10 +2128,22 @@ def build_quote_html(quote: dict, role: str) -> str:
     retail = pick("retail_total", "customer_price", "selling_price")
     wholesale = pick("wholesale_total", "wholesale_price")
     rows = ""
-    if retail is not None:
-        rows += f'<tr><td style="padding:8px 0;color:#334155;">Retail price</td><td style="padding:8px 0;text-align:right;font-weight:700;color:#2495D3;">{_fmt(retail)}</td></tr>'
-    if wholesale is not None:
-        rows += f'<tr><td style="padding:8px 0;color:#334155;">Wholesale price</td><td style="padding:8px 0;text-align:right;font-weight:700;color:#2495D3;">{_fmt(wholesale)}</td></tr>'
+    items = quote.get("items") or []
+    if items:
+        rows += '<tr><td colspan="2" style="padding:6px 0;"><table width="100%" cellpadding="0" cellspacing="0">'
+        for it in items:
+            rows += (f'<tr><td style="padding:6px 0;color:#334155;">{it.get("module","")} · {it.get("title","")}'
+                     f' × {it.get("qty",1)}</td><td style="padding:6px 0;text-align:right;color:#0a0a0a;">'
+                     f'{_fmt((it.get("price") or 0) * (it.get("qty") or 1))}</td></tr>')
+        rows += '</table></td></tr>'
+        combined = sum((it.get("price") or 0) * (it.get("qty") or 1) for it in items)
+        rows += (f'<tr><td style="padding:10px 0;color:#0a0a0a;font-weight:700;border-top:2px solid #2495D3;">Total</td>'
+                 f'<td style="padding:10px 0;text-align:right;font-weight:800;color:#2495D3;border-top:2px solid #2495D3;">{_fmt(combined)}</td></tr>')
+    else:
+        if retail is not None:
+            rows += f'<tr><td style="padding:8px 0;color:#334155;">Retail price</td><td style="padding:8px 0;text-align:right;font-weight:700;color:#2495D3;">{_fmt(retail)}</td></tr>'
+        if wholesale is not None:
+            rows += f'<tr><td style="padding:8px 0;color:#334155;">Wholesale price</td><td style="padding:8px 0;text-align:right;font-weight:700;color:#2495D3;">{_fmt(wholesale)}</td></tr>'
     notes = f'<p style="color:#64748b;font-size:13px;margin-top:16px;">{quote.get("notes")}</p>' if quote.get("notes") else ""
     cust = quote.get("customer_name") or "Customer"
     return f"""
