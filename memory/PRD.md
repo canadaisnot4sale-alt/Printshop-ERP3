@@ -48,6 +48,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - P2: True multi-job 2D nesting visualization; split cost UI for shared sections.
 - P2: Brute-force login lockout; dark mode; split server.py into modules.
 
+## Implemented (2026-07-19) — v13 Ink in quoting + PDF
+- Large Format & Direct Print calculators now have an admin-only "Machine & Ink" picker (InkPicker): choose which machine fabricates the job + coverage % → ink cost is added into base before markup, so it flows into Retail/Wholesale/unit prices. Machine+coverage saved in quote inputs (survives Re-quote). LF shows an explicit ink line; DP shows an "Ink (machine)" cost row. Verified: LF Mimaki@50% +$40 (retail 158.40→278.40); DP LEJ-640FT@100% +$30 (retail 232.80).
+- Backend /calc/largeformat & /calc/directprint accept machine_id + ink_coverage_pct.
+- Ink Estimator now accepts **PDF** (pypdfium2 renders page 1 → CMYK density). Verified full-color PDF → 100% coverage. requirements.txt updated (pypdfium2).
+- Verified: iteration_10 frontend 100% + non-admin gating (picker hidden for reseller).
+
 ## Implemented (2026-07-19) — v12 Business Control · Phase 2a (Ink Estimator)
 - NEW admin **Ink / Toner Estimator** (/ink-estimator): 3-layer ink cost strategy.
   1. Coverage-based estimate (25/50/75/100% buttons + slider) — works with no file.
