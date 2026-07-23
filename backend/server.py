@@ -1162,6 +1162,9 @@ async def profit_dashboard(months: int = 6, user=Depends(require_admin)):
     machines = await db.machines.find().to_list(500)
     machines_monthly = sum(machine_computed(clean(m), oh_hours)["monthly_cost"] for m in machines)
     monthly_overhead = round(overhead + machines_monthly, 2)
+    mk = s.get("retail_markup_pct", 200) or 0
+    margin = mk / (100 + mk) if (100 + mk) else 0
+    break_even_revenue = round(monthly_overhead / margin, 2) if margin else 0
 
     months = max(1, min(months, 24))
     now = datetime.now(timezone.utc)
@@ -1199,6 +1202,8 @@ async def profit_dashboard(months: int = 6, user=Depends(require_admin)):
                        "overhead": monthly_overhead, "total_cost": round(pur + monthly_overhead, 2),
                        "net_profit": net, "quotes": b["quotes"]})
     return {"monthly_overhead": monthly_overhead, "series": series,
+            "break_even_revenue": break_even_revenue,
+            "gross_margin_pct": round(margin * 100, 1),
             "current": series[-1] if series else None}
 
 @api_router.get("/finance/summary")

@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { Metric } from "@/components/Metric";
 import { money } from "@/lib/format";
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid,
+  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, ReferenceLine,
 } from "recharts";
 import { TrendingUp, TrendingDown, Receipt, Landmark, FileText } from "lucide-react";
 
@@ -25,6 +25,8 @@ export default function ProfitDashboard() {
   const cur = data?.current;
   const chart = (data?.series || []).map((s) => ({ ...s, name: label(s.month) }));
   const profit = (cur?.net_profit ?? 0) >= 0;
+  const breakEven = data?.break_even_revenue ?? 0;
+  const gap = Math.max(0, breakEven - (cur?.revenue ?? 0));
 
   return (
     <div data-testid="profit-dashboard-page">
@@ -51,7 +53,17 @@ export default function ProfitDashboard() {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-5">
-          <h3 className="font-head font-bold mb-4">Revenue vs cost vs net profit</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-head font-bold">Revenue vs cost vs net profit</h3>
+            {breakEven > 0 && (
+              <div className="text-xs text-slate-500" data-testid="pnl-breakeven-note">
+                Break-even: <span className="num font-semibold text-slate-800">{money(breakEven)}</span>/mo
+                {gap > 0
+                  ? <> · <span className="text-red-600 num">{money(gap)}</span> more to quote this month</>
+                  : <> · <span className="text-emerald-600">covered ✓</span></>}
+              </div>
+            )}
+          </div>
           <ResponsiveContainer width="100%" height={360}>
             <ComposedChart data={chart} margin={{ left: 10, right: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eef2f6" vertical={false} />
@@ -59,6 +71,10 @@ export default function ProfitDashboard() {
               <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} fontSize={11} stroke="#94a3b8" />
               <Tooltip formatter={(v) => money(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
+              {breakEven > 0 && (
+                <ReferenceLine y={breakEven} stroke="#dc2626" strokeDasharray="5 4"
+                  label={{ value: `Break-even ${money(breakEven)}`, position: "insideTopRight", fill: "#dc2626", fontSize: 11 }} />
+              )}
               <Bar dataKey="revenue" name="Quoted revenue" fill="#2495D3" radius={[4, 4, 0, 0]} />
               <Bar dataKey="total_cost" name="Total cost" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
               <Line dataKey="net_profit" name="Net profit" stroke="#059669" strokeWidth={2.5} dot={{ r: 3 }} />

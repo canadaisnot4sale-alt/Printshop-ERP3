@@ -52,6 +52,7 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - NEW admin-only **Profit & Loss** page (/profit-dashboard, nav "Profit & Loss"): monthly **quoted revenue** (from quotes) vs **purchases** (pre-tax = subtotal+shipping) vs **fixed monthly overhead** (fixed costs + machines) → **net profit**.
 - KPIs (revenue, purchases, overhead, net profit red/green) + recharts **ComposedChart** (bars: quoted revenue & total cost; line: net profit) + monthly table. Range selector 6/12 months. Endpoint GET /api/finance/profit-dashboard?months=N (require_admin).
 - NOTE: "revenue" = QUOTED this month (estimates), not confirmed sales — confirmed sales arrive with the e-commerce/orders phase (P2). Verified iteration_14 = 100% backend + frontend, admin-gated.
+- **v18.1 Break-even line**: profit-dashboard now returns break_even_revenue (= monthly_overhead / gross_margin) + gross_margin_pct. Chart shows a red dashed **Break-even reference line** and a header note "X more to quote this month" (or "covered ✓"). Verified: break-even $36,956.91 @66.7% margin, no console errors.
 
 
 - NEW admin-only **Profitability panel** rendered by the shared PricingPanel (Metric.js) → appears in ALL 11 calculators AND the quote-detail dialog, WITHOUT changing any quoted price (visibility-only, per user choice).
