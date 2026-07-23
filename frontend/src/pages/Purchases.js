@@ -15,6 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Upload, FileText, Trash2, Download, Receipt, Landmark, Loader2 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+} from "recharts";
+
+const BAR_COLORS = ["#2495D3", "#1E7AA9", "#5BB4E0", "#0F5A82", "#8CCEC", "#134E6F"];
 
 const CATEGORIES = ["sheet", "roll", "ink", "laminate", "substrate", "other"];
 const MODULES = [
@@ -24,6 +29,7 @@ const MODULES = [
 
 export default function Purchases() {
   const [items, setItems] = useState([]);
+  const [summary, setSummary] = useState({ quarters: [], by_supplier: [] });
   const [filters, setFilters] = useState({ supplier: "", date_from: "", date_to: "" });
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -38,6 +44,8 @@ export default function Purchases() {
     if (filters.date_to) params.date_to = filters.date_to;
     const { data } = await api.get("/purchases", { params });
     setItems(data);
+    const { data: s } = await api.get("/purchases/summary", { params });
+    setSummary(s);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filters]);
 
@@ -160,6 +168,50 @@ export default function Purchases() {
             <Button variant="ghost" onClick={() => setFilters({ supplier: "", date_from: "", date_to: "" })} className="rounded-lg text-slate-500">Clear</Button>
           )}
         </div>
+
+        {items.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" data-testid="purchases-tax-summary">
+            <div className="bg-white border border-slate-200 rounded-xl p-5">
+              <h3 className="font-head font-bold mb-3">Quarterly tax summary <span className="text-[11px] font-normal text-slate-400">(BC GST/PST)</span></h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[10px] font-mono uppercase tracking-widest text-slate-500">
+                    <th className="text-left py-2">Quarter</th>
+                    <th className="text-right py-2">Subtotal</th>
+                    <th className="text-right py-2">GST</th>
+                    <th className="text-right py-2">PST</th>
+                    <th className="text-right py-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.quarters.map((qz) => (
+                    <tr key={qz.period} data-testid="tax-quarter-row" className="border-b border-slate-50">
+                      <td className="py-2 font-medium">{qz.period}</td>
+                      <td className="py-2 text-right num">{money(qz.subtotal)}</td>
+                      <td className="py-2 text-right num text-slate-600">{money(qz.gst)}</td>
+                      <td className="py-2 text-right num text-slate-600">{money(qz.pst)}</td>
+                      <td className="py-2 text-right num font-semibold text-[#2495D3]">{money(qz.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5">
+              <h3 className="font-head font-bold mb-3">Spend by supplier</h3>
+              <ResponsiveContainer width="100%" height={Math.max(160, summary.by_supplier.length * 46)}>
+                <BarChart data={summary.by_supplier} layout="vertical" margin={{ left: 10, right: 20 }}>
+                  <XAxis type="number" tickFormatter={(v) => `$${v}`} fontSize={11} stroke="#94a3b8" />
+                  <YAxis type="category" dataKey="company" width={110} fontSize={11} stroke="#64748b" />
+                  <Tooltip formatter={(v) => money(v)} cursor={{ fill: "#f1f5f9" }} />
+                  <Bar dataKey="total" radius={[0, 6, 6, 0]}>
+                    {summary.by_supplier.map((_, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
           <table className="w-full text-sm">

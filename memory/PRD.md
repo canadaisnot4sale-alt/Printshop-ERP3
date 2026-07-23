@@ -54,6 +54,7 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Purchase History** page (/purchases, admin): metrics (total spend, GST paid, PST paid), supplier + date-range filters, per-row delete, and **CSV export** (GET /api/purchases/export.csv) for taxes.
 - Verified against the user's 3 real invoices (Alfa Paper, Spicers, Grimco) — parse + create/update + list + CSV all correct. iteration_12 = 8/8 backend + 100% frontend.
 - NOTE: quantities stored as-is (e.g. Alfa "M Sheets" = thousands, not expanded). EMERGENT_LLM_KEY added to backend/.env.
+- **v16.1 Tax dashboard**: GET /api/purchases/summary returns quarterly GST/PST/subtotal/total breakdown + spend grouped by supplier (respects supplier/date filters). Purchases page now shows a **Quarterly tax summary** table (BC GST/PST, ready for filing) + a **Spend by supplier** horizontal bar chart (recharts). Verified aggregation by curl.
 
 
 - **Ink consumption applies per brand+technology**: calibrating one machine's ml/ft² now auto-propagates to all sibling machines of the same brand + category (e.g. all Roland eco-solvent large-format, or all Roland UV directprint, or all Mimaki). Endpoints /api/ink/calibrate and /api/ink/calibrate-file return `siblings_updated`; InkEstimator toast reports how many siblings were updated.

@@ -1041,6 +1041,45 @@ async def list_purchases(supplier: Optional[str] = None, date_from: Optional[str
     items = await db.purchases.find(q).sort("date", -1).to_list(2000)
     return [clean(i) for i in items]
 
+@api_router.get("/purchases/summary")
+async def purchases_summary(supplier: Optional[str] = None, date_from: Optional[str] = None,
+                            date_to: Optional[str] = None, user=Depends(require_admin)):
+    """Quarterly GST/PST tax summary + spend grouped by supplier."""
+    q = {}
+    if supplier:
+        q["supplier.company"] = {"$regex": supplier, "$options": "i"}
+    if date_from or date_to:
+        q["date"] = {}
+        if date_from:
+            q["date"]["$gte"] = date_from
+        if date_to:
+            q["date"]["$lte"] = date_to
+    items = await db.purchases.find(q).to_list(5000)
+    quarters = {}
+    suppliers = {}
+    for i in items:
+        d = i.get("date") or ""
+        try:
+            yr = int(d[:4]); mo = int(d[5:7]); qtr = (mo - 1) // 3 + 1
+            period = f"{yr}-Q{qtr}"
+        except Exception:
+            yr, qtr, period = 0, 0, "Unknown"
+        qg = quarters.setdefault(period, {"period": period, "year": yr, "quarter": qtr,
+                                          "subtotal": 0.0, "gst": 0.0, "pst": 0.0,
+                                          "shipping": 0.0, "total": 0.0, "count": 0})
+        for k in ["subtotal", "gst", "pst", "shipping", "total"]:
+            qg[k] = round(qg[k] + (i.get(k) or 0), 2)
+        qg["count"] += 1
+        comp = (i.get("supplier") or {}).get("company") or "Unknown"
+        sg = suppliers.setdefault(comp, {"company": comp, "total": 0.0, "gst": 0.0, "pst": 0.0, "count": 0})
+        sg["total"] = round(sg["total"] + (i.get("total") or 0), 2)
+        sg["gst"] = round(sg["gst"] + (i.get("gst") or 0), 2)
+        sg["pst"] = round(sg["pst"] + (i.get("pst") or 0), 2)
+        sg["count"] += 1
+    q_list = sorted(quarters.values(), key=lambda x: (x["year"], x["quarter"]), reverse=True)
+    s_list = sorted(suppliers.values(), key=lambda x: x["total"], reverse=True)
+    return {"quarters": q_list, "by_supplier": s_list}
+
 @api_router.get("/purchases/export.csv")
 async def export_purchases_csv(supplier: Optional[str] = None, date_from: Optional[str] = None,
                                date_to: Optional[str] = None, user=Depends(require_admin)):
