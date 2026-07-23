@@ -2293,6 +2293,45 @@ async def _send_order_paid_email(order: dict):
     except Exception as e:
         logger.error(f"Order paid email error: {e}")
 
+async def _send_admin_order_paid_email(order: dict):
+    admins = await db.users.find({"role": "admin"}).to_list(50)
+    to = [a.get("email") for a in admins if a.get("email")]
+    if not to:
+        return
+    rows = "".join(
+        f"<tr><td style='padding:6px 0;border-bottom:1px solid #eee'>{i.get('name','')}</td>"
+        f"<td style='padding:6px 0;border-bottom:1px solid #eee;text-align:right'>{i.get('qty')}</td>"
+        f"<td style='padding:6px 0;border-bottom:1px solid #eee;text-align:right'>{_fmt(i.get('line_total'))}</td></tr>"
+        for i in (order.get("items") or [])
+    )
+    html = f"""
+    <div style='font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a'>
+      <h2 style='color:#16a34a;margin-bottom:4px'>New paid order 💰</h2>
+      <p style='color:#64748b;font-size:14px'>{order.get('customer_name','')} ({order.get('user_email','')}) just paid an order. Time to produce.</p>
+      <table style='width:100%;border-collapse:collapse;font-size:14px;margin-top:12px'>
+        <thead><tr style='text-align:left;color:#94a3b8;font-size:11px;text-transform:uppercase'>
+          <th style='padding-bottom:6px'>Product</th><th style='text-align:right'>Qty</th><th style='text-align:right'>Total</th>
+        </tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+      <p style='text-align:right;font-weight:bold;font-size:16px;margin-top:12px'>Total: {_fmt(order.get('total'))}</p>
+      {f"<p style='color:#64748b;font-size:13px'>Notes: {order.get('notes')}</p>" if order.get('notes') else ""}
+    </div>"""
+    payload = {
+        "to": to,
+        "subject": f"New paid order — {order.get('customer_name','')} · {_fmt(order.get('total'))}",
+        "html": html,
+        "from_name": os.environ["EMAIL_FROM_NAME"],
+        "contact_email": order.get("user_email") or to[0],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
+                                     headers={"X-Email-Key": os.environ["EMERGENT_EMAIL_KEY"]}, json=payload)
+        resp.raise_for_status()
+    except Exception as e:
+        logger.error(f"Admin order paid email error: {e}")
+
 async def _mark_paid(session_id, order_id=None):
     await db.payment_transactions.update_one(
         {"session_id": session_id, "payment_status": {"$ne": "paid"}},
@@ -2305,6 +2344,7 @@ async def _mark_paid(session_id, order_id=None):
         if order and order.get("status") != "paid":
             await db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": {"status": "paid"}})
             await _send_order_paid_email(order)
+            await _send_admin_order_paid_email(order)
 
 @api_router.get("/payments/status/{session_id}")
 async def payment_status(session_id: str):
