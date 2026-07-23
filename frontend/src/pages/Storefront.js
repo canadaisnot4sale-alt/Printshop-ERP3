@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ShoppingBag, Plus, Minus, Trash2, Store } from "lucide-react";
+import { ShoppingBag, Plus, Minus, Trash2, Store, CreditCard } from "lucide-react";
 
 export default function Storefront() {
   const { user } = useAuth();
@@ -34,15 +34,20 @@ export default function Storefront() {
   const total = entries.reduce((a, [, v]) => a + priceOf(v.product) * v.qty, 0);
   const count = entries.reduce((a, [, v]) => a + v.qty, 0);
 
-  const placeOrder = async () => {
+  const placeOrder = async (thenPay = false) => {
     setPlacing(true);
     try {
-      await api.post("/orders", {
+      const { data: order } = await api.post("/orders", {
         items: entries.map(([id, v]) => ({ product_id: id, qty: v.qty })),
         notes,
       });
-      toast.success("Order placed!");
       setCart({}); setNotes(""); setOpen(false);
+      if (thenPay) {
+        const { data } = await api.post("/payments/checkout", { order_id: order.id, origin_url: window.location.origin });
+        window.location.href = data.checkout_url;
+        return;
+      }
+      toast.success("Order placed!");
       nav("/orders");
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
     finally { setPlacing(false); }
@@ -115,8 +120,11 @@ export default function Storefront() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} className="rounded-lg">Keep shopping</Button>
-            <Button onClick={placeOrder} disabled={placing || count === 0} className="bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg" data-testid="place-order-button">
+            <Button variant="outline" onClick={() => placeOrder(false)} disabled={placing || count === 0} className="rounded-lg" data-testid="place-order-button">
               {placing ? "Placing…" : "Place order"}
+            </Button>
+            <Button onClick={() => placeOrder(true)} disabled={placing || count === 0} className="bg-emerald-600 hover:bg-emerald-700 rounded-lg" data-testid="place-and-pay-button">
+              <CreditCard size={16} className="mr-1.5" /> {placing ? "…" : "Place & pay"}
             </Button>
           </DialogFooter>
         </DialogContent>

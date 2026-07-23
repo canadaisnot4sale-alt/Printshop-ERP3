@@ -34,6 +34,7 @@ import QuoteBuilder from "@/pages/QuoteBuilder";
 import ProductsCatalog from "@/pages/ProductsCatalog";
 import Storefront from "@/pages/Storefront";
 import Orders from "@/pages/Orders";
+import PaymentReturn from "@/pages/PaymentReturn";
 
 function Protected({ children, adminOnly }) {
   const { user, ready } = useAuth();
@@ -69,6 +70,8 @@ function App() {
             <Route path="/products-catalog" element={<Protected adminOnly><ProductsCatalog /></Protected>} />
             <Route path="/store" element={<Protected><Storefront /></Protected>} />
             <Route path="/orders" element={<Protected><Orders /></Protected>} />
+            <Route path="/payment/success" element={<Protected><PaymentReturn /></Protected>} />
+            <Route path="/payment/cancel" element={<Protected><PaymentReturn /></Protected>} />
             <Route path="/equipment" element={<Protected adminOnly><Equipment /></Protected>} />
             <Route path="/machinery" element={<Protected adminOnly><Machinery /></Protected>} />
             <Route path="/fixed-costs" element={<Protected adminOnly><FixedCosts /></Protected>} />

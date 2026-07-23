@@ -18,6 +18,7 @@ import jwt
 import bcrypt
 import secrets
 import httpx
+import stripe
 
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 
@@ -2240,7 +2241,7 @@ async def create_checkout(body: CheckoutIn, user=Depends(get_current_user)):
     if amount <= 0:
         raise HTTPException(400, "Order total must be greater than 0")
     session = stripe.checkout.Session.create(
-        line_items=[{"price_data": {"currency": "usd", "unit_amount": int(round(amount * 100)),
+        line_items=[{"price_data": {"currency": "cad", "unit_amount": int(round(amount * 100)),
                      "product_data": {"name": f"Order · {order.get('customer_name', '')}".strip(" ·")}},
                      "quantity": 1}],
         mode="payment",
@@ -2250,7 +2251,7 @@ async def create_checkout(body: CheckoutIn, user=Depends(get_current_user)):
     )
     await db.payment_transactions.insert_one({
         "session_id": session.id, "order_id": body.order_id, "user_id": user["id"],
-        "amount": amount, "currency": "usd", "status": "initiated",
+        "amount": amount, "currency": "cad", "status": "initiated",
         "payment_status": "pending", "created_at": now_iso(), "updated_at": now_iso()})
     return {"checkout_url": session.url, "session_id": session.id}
 

@@ -11,7 +11,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { Printer, FileText } from "lucide-react";
+import { toast } from "sonner";
+import { Printer, FileText, CreditCard } from "lucide-react";
+import { apiErr } from "@/lib/api";
 
 const STATUS = { pending: "bg-amber-100 text-amber-700", paid: "bg-blue-100 text-blue-700", fulfilled: "bg-emerald-100 text-emerald-700", cancelled: "bg-slate-100 text-slate-500" };
 
@@ -20,9 +22,18 @@ export default function Orders() {
   const isAdmin = user?.role === "admin";
   const [orders, setOrders] = useState([]);
   const [detail, setDetail] = useState(null);
+  const [paying, setPaying] = useState(null);
 
   const load = () => api.get("/orders").then(({ data }) => setOrders(data));
   useEffect(() => { load(); }, []);
+
+  const pay = async (order) => {
+    setPaying(order.id);
+    try {
+      const { data } = await api.post("/payments/checkout", { order_id: order.id, origin_url: window.location.origin });
+      window.location.href = data.checkout_url;
+    } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); setPaying(null); }
+  };
 
   const setStatus = async (id, status) => { await api.put(`/orders/${id}/status`, { status }); load(); if (detail?.id === id) setDetail({ ...detail, status }); };
 
@@ -54,6 +65,9 @@ export default function Orders() {
                     <Badge className={`${STATUS[o.status] || "bg-slate-100"} border-0 text-[10px]`} data-testid="order-status">{o.status}</Badge>
                   </td>
                   <td className="px-4 py-2.5 text-right">
+                    {o.status === "pending" && (
+                      <button onClick={() => pay(o)} disabled={paying === o.id} className="p-1.5 text-slate-400 hover:text-emerald-600 mr-1" title="Pay now" data-testid="order-pay"><CreditCard size={15} /></button>
+                    )}
                     <button onClick={() => setDetail(o)} className="p-1.5 text-slate-400 hover:text-[#2495D3]" data-testid="order-view"><FileText size={15} /></button>
                   </td>
                 </tr>
@@ -111,7 +125,14 @@ export default function Orders() {
                 </SelectContent>
               </Select>
             ) : <span />}
-            <Button variant="outline" onClick={() => window.print()} className="rounded-lg" data-testid="invoice-print"><Printer size={15} className="mr-1.5" /> Print</Button>
+            <div className="flex gap-2">
+              {detail?.status === "pending" && (
+                <Button onClick={() => pay(detail)} disabled={paying === detail.id} className="bg-emerald-600 hover:bg-emerald-700 rounded-lg" data-testid="invoice-pay">
+                  <CreditCard size={15} className="mr-1.5" /> {paying === detail.id ? "Redirecting…" : "Pay now"}
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => window.print()} className="rounded-lg" data-testid="invoice-print"><Printer size={15} className="mr-1.5" /> Print</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
