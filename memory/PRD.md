@@ -78,6 +78,18 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Dynamic product pricing from BoM**: CatalogProduct gained optional retail/wholesale markup overrides. `compute_product_pricing()` computes unit cost = Σ(material.unit_cost × qty_per_unit) and derives retail/wholesale from markups. list_catalog_products + create_order use it → changing a material cost re-prices every product built from it automatically. Products without a BoM keep manual price.
 - **Per-PRODUCT waste**: each BoM line has `waste_per_order` (once per order) + `waste_per_unit` (× qty), used by deduct_inventory_for_order. Smart SUGGESTION: GET /api/products/waste-suggestion averages waste from similar products (same category/module) and pre-fills the BoM row on material pick.
 - Verified iteration_20 = backend 7/7 + frontend 100%. No bugs.
+
+## Implemented (2026-06) — v25 Machine Maintenance & Service Log (post-deploy)
+- Removed the duplicate **"Equipment"** page (Administration); consolidated into **"Machinery"** (Business). Verified no calculator/ink/profit flow depended on it (all use `/machines`).
+- New per-machine **Maintenance & Service Log** inside /machinery (component MachineMaintenance.js):
+  - Log entries (service/part/cleaning/repair/other) with supplier, part #, cost, date; **invoice upload to Emergent object storage** (POST /api/upload/invoice, GET /api/files/{id}/download with ?auth= or Bearer). Files tracked in `files` collection (soft-delete).
+  - **Cleaning cost** = technician hourly rate × time chosen via slider + presets (15/30/45/60/90/120 min); rate default from Settings.technician_hourly_rate ($65), editable per entry.
+  - **Recurring schedules** (parts every 1/2/3/6/12/24 mo) + non-recurring one-time toggle → computes next-due, raises **in-app reminders** (overdue/due-soon) with badge + list (GET /api/machines/maintenance/alerts).
+  - **Year-end tax report** (GET /api/machines/maintenance/tax-report?year=) totaling deductible maintenance per machine + by type.
+  - Collections: machine_logs, machine_schedules, files. Settings.technician_hourly_rate added (Settings page "Maintenance & Labor" group).
+  - Storage init at startup; requests added to requirements. Silenced benign ResizeObserver overlay + added DialogDescription for a11y.
+- Verified iteration_22 = backend 9/9 + frontend 100%. No bugs.
+
 - **Profit margin per product** in Product Catalog: each BoM product row shows `cost · margin ($ and %)` (green positive / red negative), a red "BELOW COST" badge + tinted row when price < material cost, and a "Below cost" KPI. Products without a BoM show "manual price". Verified iteration_21 = frontend 100%.
 
 ### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).

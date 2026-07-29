@@ -10,7 +10,7 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { AlertTriangle, Plus, Trash2, FileText, Wrench, Sparkles, Clock, Bell, Receipt, Upload } from "lucide-react";
 
@@ -332,7 +332,7 @@ function ScheduleDialog({ machineId, onClose, onSaved }) {
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-md" data-testid="schedule-dialog">
-        <DialogHeader><DialogTitle>Add scheduled part</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Add scheduled part</DialogTitle><DialogDescription>Set up a part or task with its replacement frequency to get reminders.</DialogDescription></DialogHeader>
         <div className="space-y-3">
           <div><Label className="text-xs">Part / task name</Label><Input value={f.part_name} onChange={(e) => set("part_name", e.target.value)} placeholder="e.g. Wiper blade, filter, full service" className="rounded-lg mt-1" data-testid="sched-name" /></div>
           <div className="flex items-center gap-3 rounded-lg border border-slate-200 p-3">

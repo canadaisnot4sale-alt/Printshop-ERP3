@@ -13,6 +13,15 @@ const queryClient = new QueryClient({
   },
 });
 
+// Silence benign ResizeObserver loop errors (from Radix Slider/Select) that trip the CRA dev overlay
+const _roError = "ResizeObserver loop";
+window.addEventListener("error", (e) => {
+  if (e.message && e.message.includes(_roError)) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }
+});
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
