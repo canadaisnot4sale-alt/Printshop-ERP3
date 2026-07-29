@@ -10,7 +10,6 @@ import PaperPrinting from "@/pages/PaperPrinting";
 import Booklet from "@/pages/Booklet";
 import LargeFormat from "@/pages/LargeFormat";
 import Stickers from "@/pages/Stickers";
-import Equipment from "@/pages/Equipment";
 import Settings from "@/pages/Settings";
 import DTF from "@/pages/DTF";
 import Embroidery from "@/pages/Embroidery";
@@ -72,7 +71,6 @@ function App() {
             <Route path="/orders" element={<Protected><Orders /></Protected>} />
             <Route path="/payment/success" element={<Protected><PaymentReturn /></Protected>} />
             <Route path="/payment/cancel" element={<Protected><PaymentReturn /></Protected>} />
-            <Route path="/equipment" element={<Protected adminOnly><Equipment /></Protected>} />
             <Route path="/machinery" element={<Protected adminOnly><Machinery /></Protected>} />
             <Route path="/fixed-costs" element={<Protected adminOnly><FixedCosts /></Protected>} />
             <Route path="/financials" element={<Protected adminOnly><Financials /></Protected>} />

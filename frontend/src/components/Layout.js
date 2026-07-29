@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import {
-  LayoutGrid, FileText, BookOpen, Ruler, Sticker, Printer, Settings as Cog, LogOut,
+  LayoutGrid, FileText, BookOpen, Ruler, Sticker, Settings as Cog, LogOut,
   Shirt, Sparkles, Scissors, PanelTop, Type, Users as UsersIcon, FolderOpen,
   Coffee, Disc, BookMarked, Cpu, Receipt, LineChart, Droplet, Boxes, Truck, ReceiptText, PiggyBank,
   ShoppingCart, Package, Store, ClipboardList,
@@ -38,7 +38,6 @@ const NAV = [
   { to: "/fixed-costs", label: "Fixed Costs", icon: Receipt, testid: "nav-fixed-costs", admin: true },
   { to: "/ink-estimator", label: "Ink Estimator", icon: Droplet, testid: "nav-ink-estimator", admin: true },
   { section: "Administration", admin: true },
-  { to: "/equipment", label: "Equipment", icon: Printer, testid: "nav-equipment", admin: true },
   { to: "/users", label: "Users", icon: UsersIcon, testid: "nav-users", admin: true },
   { to: "/settings", label: "Settings", icon: Cog, testid: "nav-settings", admin: true },
 ];
