@@ -1,0 +1,29 @@
+{
+  "summary": "Tested new Machine Maintenance & Service Log feature (backend + frontend) end-to-end on /machinery. All backend endpoints and full UI flow work: invoice upload/download, part log, cleaning log with slider/preset/rate → $32.50, recurring schedule with computed_next_due + overdue status, alerts banner with badge/alert-row, non-recurring toggle swaps interval+last_done for a single due-date field, tax report groups per machine with by_type breakdown, Settings has 'Maintenance & Labor' with 'Technician hourly rate'. Old 'Equipment' nav entry is gone; /equipment redirects to dashboard.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Machinery /machinery (maintenance dialogs)", "issues": ["Benign 'ResizeObserver loop completed with undelivered notifications' errors from Radix Slider/Select trigger the CRA red dev overlay which visually blocks the page in the preview build. Consider silencing via window error handler or upgrading @radix-ui/react-slider."]},
+    {"screen": "Dialogs", "issues": ["Console warning: Missing Description or aria-describedby for DialogContent (log-dialog, schedule-dialog). A11y nit — add DialogDescription."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_machine_maintenance.py", "/app/test_reports/pytest/machine_maint.xml"],
+  "action_items": [
+    "(Optional) Suppress ResizeObserver dev overlay noise in preview builds; add DialogDescription to LogDialog & ScheduleDialog for a11y."
+  ],
+  "critical_code_review_comments": [
+    "MachineMaintenance.js is ~369 lines; ok for now but LogDialog/ScheduleDialog could be split into own files.",
+    "invoiceUrl() reads localStorage token and embeds in URL query string — fine, matches backend ?auth= support; but the link opens in new tab exposing token in referrer/logs. Consider signed short-lived URL.",
+    "_schedule_status stores next_due only when non-recurring; computed_next_due is response-only. For recurring rows the DB doesn't cache next_due — acceptable but sorting/filtering by due-date at DB level not possible.",
+    "Tax report iterates all logs in-memory (limit 5000). For long-term use add index on machine_logs.date and paginate."
+  ],
+  "updated_files": ["/app/backend/tests/test_machine_maintenance.py (new)"],
+  "success_rate": {"backend": "100% (9/9 pytest)", "frontend": "100% (all flows verified)"},
+  "test_credentials": "admin@printandsave.ca / admin123",
+  "seed_data_creation": "Created 2 TEST_UI_ log rows + 1 TEST_UI_ schedule during UI test; all cleaned up at end. Backend pytest also cleaned up its artifacts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Feature is production-ready. Backend test file at /app/backend/tests/test_machine_maintenance.py can be re-run with `REACT_APP_BACKEND_URL=... pytest`. Uses machine[0] from /api/machines; be aware it may pick a real machine — logs are cleaned up on teardown."
+}

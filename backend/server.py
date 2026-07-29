@@ -5,7 +5,7 @@ import os
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Form, File, UploadFile
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Form, File, UploadFile, Header, Query
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, BeforeValidator, EmailStr
@@ -19,8 +19,49 @@ import bcrypt
 import secrets
 import httpx
 import stripe
+import uuid
+import requests
 
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+APP_NAME = "printandsave"
+_storage_key = None
+
+def init_storage():
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ["EMERGENT_LLM_KEY"]}, timeout=30)
+    resp.raise_for_status()
+    _storage_key = resp.json()["storage_key"]
+    return _storage_key
+
+def storage_put(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    resp = requests.put(f"{STORAGE_URL}/objects/{path}",
+                        headers={"X-Storage-Key": key, "Content-Type": content_type},
+                        data=data, timeout=120)
+    if resp.status_code == 403:
+        globals()["_storage_key"] = None
+        key = init_storage()
+        resp = requests.put(f"{STORAGE_URL}/objects/{path}",
+                            headers={"X-Storage-Key": key, "Content-Type": content_type},
+                            data=data, timeout=120)
+    resp.raise_for_status()
+    return resp.json()
+
+def storage_get(path: str):
+    key = init_storage()
+    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    if resp.status_code == 403:
+        globals()["_storage_key"] = None
+        key = init_storage()
+        resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
+MIME_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif",
+              "webp": "image/webp", "pdf": "application/pdf", "csv": "text/csv", "txt": "text/plain"}
 
 # ---------------- DB ----------------
 mongo_url = os.environ['MONGO_URL']
@@ -354,6 +395,7 @@ class Settings(BaseModel):
     open_hours_per_month: float = 188.0
     default_maintenance_pct_year: float = 2.0
     owner_salary_monthly: float = 0.0
+    technician_hourly_rate: float = 65.0
 
 SHEET_SIZES = {
     "8.5x11": (8.5, 11), "8.5x14": (8.5, 14), "11x17": (11, 17),
@@ -800,6 +842,204 @@ async def update_machine(mid: str, body: Machine, user=Depends(require_admin)):
 async def delete_machine(mid: str, user=Depends(require_admin)):
     await db.machines.delete_one({"_id": ObjectId(mid)})
     return {"ok": True}
+
+# ---------------- File uploads (invoices) ----------------
+@api_router.post("/upload/invoice")
+async def upload_invoice(file: UploadFile = File(...), user=Depends(require_admin)):
+    ext = (file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin")
+    ctype = file.content_type or MIME_TYPES.get(ext, "application/octet-stream")
+    path = f"{APP_NAME}/invoices/{uuid.uuid4()}.{ext}"
+    data = await file.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 15MB).")
+    result = storage_put(path, data, ctype)
+    fid = str(uuid.uuid4())
+    await db.files.insert_one({
+        "id": fid, "storage_path": result["path"], "original_filename": file.filename,
+        "content_type": ctype, "size": result.get("size", len(data)),
+        "is_deleted": False, "created_at": now_iso(),
+    })
+    return {"file_id": fid, "filename": file.filename,
+            "url": f"/api/files/{fid}/download", "size": result.get("size", len(data))}
+
+@api_router.get("/files/{file_id}/download")
+async def download_file(file_id: str, authorization: str = Header(None), auth: str = Query(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+    elif auth:
+        token = auth
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except Exception:
+        raise HTTPException(401, "Invalid token")
+    rec = await db.files.find_one({"id": file_id, "is_deleted": False})
+    if not rec:
+        raise HTTPException(404, "File not found")
+    data, ctype = storage_get(rec["storage_path"])
+    return Response(content=data, media_type=rec.get("content_type", ctype),
+                    headers={"Content-Disposition": f'inline; filename="{rec.get("original_filename","file")}"'})
+
+# ---------------- Machine maintenance logs ----------------
+LOG_TYPES = ["service", "part", "cleaning", "repair", "other"]
+
+class MachineLog(BaseModel):
+    machine_id: str = ""
+    type: str = "service"                 # service | part | cleaning | repair | other
+    title: str = ""
+    description: str = ""
+    supplier: str = ""
+    part_number: str = ""
+    cost: float = 0.0
+    date: str = ""                        # ISO date (YYYY-MM-DD)
+    cleaning_minutes: float = 0.0
+    cleaning_rate: float = 0.0            # $/hr used for this cleaning entry
+    invoice_file_id: str = ""
+    invoice_filename: str = ""
+
+def _log_total(doc: dict) -> float:
+    if doc.get("type") == "cleaning":
+        return round((doc.get("cleaning_minutes") or 0) / 60.0 * (doc.get("cleaning_rate") or 0), 2)
+    return round(doc.get("cost") or 0.0, 2)
+
+def _enrich_log(doc: dict) -> dict:
+    c = clean(doc)
+    c["total"] = _log_total(c)
+    if c.get("invoice_file_id"):
+        c["invoice_url"] = f"/api/files/{c['invoice_file_id']}/download"
+    return c
+
+@api_router.get("/machines/{mid}/logs")
+async def list_machine_logs(mid: str, user=Depends(require_admin)):
+    items = await db.machine_logs.find({"machine_id": mid, "is_deleted": {"$ne": True}}).sort("date", -1).to_list(1000)
+    return [_enrich_log(i) for i in items]
+
+@api_router.post("/machines/{mid}/logs")
+async def create_machine_log(mid: str, body: MachineLog, user=Depends(require_admin)):
+    doc = body.model_dump()
+    doc["machine_id"] = mid
+    doc["date"] = doc.get("date") or now_iso()[:10]
+    doc["is_deleted"] = False
+    doc["created_at"] = now_iso()
+    res = await db.machine_logs.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return _enrich_log(doc)
+
+@api_router.delete("/machine-logs/{log_id}")
+async def delete_machine_log(log_id: str, user=Depends(require_admin)):
+    await db.machine_logs.update_one({"_id": ObjectId(log_id)}, {"$set": {"is_deleted": True}})
+    return {"ok": True}
+
+# ---------------- Machine maintenance schedules (recurring parts) ----------------
+class MachineSchedule(BaseModel):
+    machine_id: str = ""
+    part_name: str
+    recurring: bool = True
+    interval_months: int = 3              # used only when recurring
+    last_done: str = ""                   # ISO date
+    next_due: str = ""                    # used for one-time (recurring=false)
+    est_cost: float = 0.0
+    notes: str = ""
+
+def _add_months(date_str: str, months: int) -> str:
+    try:
+        d = datetime.fromisoformat(date_str[:10])
+    except Exception:
+        return ""
+    m = d.month - 1 + months
+    y = d.year + m // 12
+    mo = m % 12 + 1
+    day = min(d.day, [31, 29 if y % 4 == 0 and (y % 100 != 0 or y % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1])
+    return datetime(y, mo, day).date().isoformat()
+
+def _schedule_status(sch: dict) -> dict:
+    c = clean(sch)
+    if c.get("recurring"):
+        nd = _add_months(c.get("last_done", ""), int(c.get("interval_months") or 0)) if c.get("last_done") else ""
+    else:
+        nd = c.get("next_due", "")
+    c["computed_next_due"] = nd
+    today = datetime.now(timezone.utc).date()
+    status = "ok"
+    days = None
+    if nd:
+        try:
+            due = datetime.fromisoformat(nd).date()
+            days = (due - today).days
+            if days < 0:
+                status = "overdue"
+            elif days <= 14:
+                status = "due-soon"
+        except Exception:
+            pass
+    c["days_until_due"] = days
+    c["status"] = status
+    return c
+
+@api_router.get("/machines/{mid}/schedules")
+async def list_machine_schedules(mid: str, user=Depends(require_admin)):
+    items = await db.machine_schedules.find({"machine_id": mid, "is_deleted": {"$ne": True}}).to_list(500)
+    return [_schedule_status(i) for i in items]
+
+@api_router.post("/machines/{mid}/schedules")
+async def create_machine_schedule(mid: str, body: MachineSchedule, user=Depends(require_admin)):
+    doc = body.model_dump()
+    doc["machine_id"] = mid
+    doc["is_deleted"] = False
+    doc["created_at"] = now_iso()
+    res = await db.machine_schedules.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return _schedule_status(doc)
+
+@api_router.put("/machine-schedules/{sid}")
+async def update_machine_schedule(sid: str, body: MachineSchedule, user=Depends(require_admin)):
+    await db.machine_schedules.update_one({"_id": ObjectId(sid)}, {"$set": body.model_dump()})
+    return _schedule_status(await db.machine_schedules.find_one({"_id": ObjectId(sid)}))
+
+@api_router.delete("/machine-schedules/{sid}")
+async def delete_machine_schedule(sid: str, user=Depends(require_admin)):
+    await db.machine_schedules.update_one({"_id": ObjectId(sid)}, {"$set": {"is_deleted": True}})
+    return {"ok": True}
+
+# ---------------- Maintenance alerts + tax report ----------------
+@api_router.get("/machines/maintenance/alerts")
+async def maintenance_alerts(user=Depends(require_admin)):
+    scheds = await db.machine_schedules.find({"is_deleted": {"$ne": True}}).to_list(1000)
+    machines = {str(m["_id"]): m.get("name") for m in await db.machines.find().to_list(500)}
+    alerts = []
+    for s in scheds:
+        st = _schedule_status(s)
+        if st["status"] in ("overdue", "due-soon"):
+            st["machine_name"] = machines.get(st.get("machine_id"), "—")
+            alerts.append(st)
+    alerts.sort(key=lambda x: (x["status"] != "overdue", x.get("days_until_due") if x.get("days_until_due") is not None else 9999))
+    return {"count": len(alerts), "overdue": sum(1 for a in alerts if a["status"] == "overdue"),
+            "due_soon": sum(1 for a in alerts if a["status"] == "due-soon"), "alerts": alerts}
+
+@api_router.get("/machines/maintenance/tax-report")
+async def maintenance_tax_report(year: int = None, user=Depends(require_admin)):
+    year = year or datetime.now(timezone.utc).year
+    machines = {str(m["_id"]): clean(m) for m in await db.machines.find().to_list(500)}
+    logs = await db.machine_logs.find({"is_deleted": {"$ne": True}}).to_list(5000)
+    per_machine = {}
+    grand = 0.0
+    by_type = {}
+    for l in logs:
+        if not (l.get("date", "")[:4] == str(year)):
+            continue
+        mid = l.get("machine_id")
+        amt = _log_total(l)
+        grand += amt
+        pm = per_machine.setdefault(mid, {"machine_id": mid, "machine_name": machines.get(mid, {}).get("name", "—"),
+                                          "total": 0.0, "by_type": {}})
+        pm["total"] = round(pm["total"] + amt, 2)
+        pm["by_type"][l.get("type", "other")] = round(pm["by_type"].get(l.get("type", "other"), 0) + amt, 2)
+        by_type[l.get("type", "other")] = round(by_type.get(l.get("type", "other"), 0) + amt, 2)
+    return {"year": year, "grand_total": round(grand, 2), "by_type": by_type,
+            "machines": sorted(per_machine.values(), key=lambda x: -x["total"])}
+
 
 @api_router.get("/fixed-costs")
 async def list_fixed_costs(user=Depends(require_admin)):
@@ -2655,6 +2895,11 @@ async def startup():
     await calibrate_default_ink()
     await unify_materials_clean()
     await seed_materials()
+    try:
+        init_storage()
+        logger.info("Object storage initialized")
+    except Exception as e:
+        logger.error(f"Storage init failed: {e}")
 
 async def unify_materials_clean():
     """One-time: drop legacy per-module material tables and reset central materials so the

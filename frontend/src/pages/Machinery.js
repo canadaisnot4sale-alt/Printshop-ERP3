@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import api from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
+import MachineMaintenance from "@/components/MachineMaintenance";
 import { Metric } from "@/components/Metric";
 import { money } from "@/lib/format";
-import { Cpu, DollarSign, Clock, Wallet } from "lucide-react";
+import { Cpu, DollarSign, Clock, Wallet, Wrench } from "lucide-react";
 
 const CATS = ["largeformat", "directprint", "laser", "laserprint", "finishing", "other"];
 
@@ -35,6 +37,8 @@ const columns = [
 
 export default function Machinery() {
   const [items, setItems] = useState([]);
+  const [techRate, setTechRate] = useState(65);
+  useEffect(() => { api.get("/settings").then(({ data }) => setTechRate(data.technician_hourly_rate ?? 65)).catch(() => {}); }, []);
   const invest = items.reduce((a, m) => a + (m.purchase_price || 0), 0);
   const monthly = items.reduce((a, m) => a + (m.monthly_cost || 0), 0);
   const lease = items.reduce((a, m) => a + (m.acquisition === "leased" ? (m.lease_monthly || 0) : 0), 0);
@@ -51,6 +55,15 @@ export default function Machinery() {
         </div>
         <CrudManager endpoint="machines" fields={fields} columns={columns} prefix="machine" onChange={setItems} />
         <p className="text-xs text-slate-400">Monthly cost = (lease OR straight-line depreciation) + maintenance. Hourly cost = monthly ÷ productive hours (per-machine, else shop default). Ink/toner is charged per job in the calculators.</p>
+
+        <div className="pt-4 border-t border-slate-200">
+          <div className="flex items-center gap-2 mb-4">
+            <Wrench size={18} className="text-[#2495D3]" />
+            <h2 className="font-head font-bold text-lg">Maintenance & Service Log</h2>
+          </div>
+          <p className="text-xs text-slate-400 mb-4 -mt-2">Track every service, part replacement and cleaning per machine, attach invoices, get reminders for recurring parts, and roll it all into a year-end tax-deductible report.</p>
+          <MachineMaintenance machines={items} technicianRate={techRate} />
+        </div>
       </div>
     </div>
   );

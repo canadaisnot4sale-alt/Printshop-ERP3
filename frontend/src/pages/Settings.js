@@ -109,6 +109,12 @@ const GROUPS = [
       { name: "rollsticker_stickers_per_min", label: "Stickers / minute" },
     ],
   },
+  {
+    title: "Maintenance & Labor",
+    fields: [
+      { name: "technician_hourly_rate", label: "Technician hourly rate (CAD/hr)" },
+    ],
+  },
 ];
 
 export default function Settings() {
