@@ -10,6 +10,7 @@ import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/compo
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { InkPicker } from "@/components/InkPicker";
 import { useRequote } from "@/lib/useRequote";
+import { useDefaultSheetSize } from "@/lib/useDefaultSheetSize";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,8 @@ export default function DirectPrint() {
   const [sel, setSel] = useState(null);
 
   useEffect(() => { api.get("/config").then((r) => setSheetSizes(Object.keys(r.data.big_sheets))); }, []);
+  // Default Sheet size to the size of this module's DEFAULT material (unless re-quoting)
+  useDefaultSheetSize("/sheet-materials?module=direct-print", setSheetSize);
 
   const calc = async () => {
     try {
@@ -94,7 +97,7 @@ export default function DirectPrint() {
                   <Label className="text-xs">Sheet size</Label>
                   <Select value={sheetSize} onValueChange={setSheetSize}>
                     <SelectTrigger data-testid="dp-sheet-size" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>{sheetSizes.map((s) => <SelectItem key={s} value={s}>{s} ft</SelectItem>)}</SelectContent>
+                    <SelectContent>{[...new Set([...sheetSizes, ...(sheetSize ? [sheetSize] : [])])].map((s) => <SelectItem key={s} value={s}>{s} ft</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="flex items-center justify-between pt-6">

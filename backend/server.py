@@ -718,6 +718,7 @@ def map_material(collection, m, default_module=None):
     is_def = bool(default_module and default_module in (m.get("default_modules") or []))
     base = {"id": m.get("id"), "name": m.get("name"), "code": m.get("code", ""),
             "unit_cost": uc, "unit": m.get("unit"), "stock_qty": m.get("stock_qty", 0),
+            "size": m.get("size", ""),
             "linked_material_id": m.get("id"), "linked_material_name": m.get("name"),
             "linked_stock_qty": m.get("stock_qty", 0), "modules": m.get("modules", []),
             "is_default": is_def, "default_modules": m.get("default_modules", [])}

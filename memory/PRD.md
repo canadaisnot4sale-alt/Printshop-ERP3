@@ -106,6 +106,11 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v29 Miscellaneous material category + default-material sheet size
+- **New "Miscellaneous" material category** in /materials (Unit=Each): fields Quantity (pieces) + Total price; auto `unit_cost = total_price / qty`, `stock = qty`. Backend Material gained `misc_qty`, `misc_price`. Verified example: 2Inch Silver Carbon Steel Buckle Hangers (Amazon Ca, B0DRN7B32R) → unit_cost $0.1399/ea (11.19/80), stock 80.
+- **Sheet Size defaults to the module's DEFAULT material size** across all sheet-size modules (Paper Printing, Direct Print, Channel Letters) via shared hook `lib/useDefaultSheetSize.js`. Skips on Re-quote. Backend `map_material` now includes `size` in every per-module view. Set 100lb uncoated Cover size=12x18 (was empty) in PREVIEW db.
+- NOTE (data is per-environment): to reflect in PRODUCTION, redeploy AND ensure each module's default material has a Size set in the production Materials page.
+
 ## Explained + implemented (2026-06) — v28 Retail/Wholesale visibility + overrides
 - Retail = finish_cost × (1 + retail_markup%, default 200 → ×3); Wholesale = finish_cost × (1 + wholesale_markup%, default 100 → ×2). Markups editable in Settings > Markups (apply system-wide: materials, products, quotes). NO calc change per user request.
 - Materials table now shows **both Retail and Wholesale** columns. Material form shows a **live pricing preview** (Finish cost / Retail / Wholesale) + 4 inputs: Retail override, Wholesale override (separate), Retail markup %, Wholesale markup % (labels show the ×multiplier). Added Material.wholesale_price_override; compute_material honors it. Verified iteration_28 (backend 5/5 + frontend 100%).

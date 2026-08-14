@@ -7,6 +7,7 @@ import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { useRequote } from "@/lib/useRequote";
+import { useDefaultSheetSize } from "@/lib/useDefaultSheetSize";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,6 +23,8 @@ export default function ChannelLetters() {
   const [sel, setSel] = useState(null);
 
   useEffect(() => { api.get("/config").then((r) => setSheetSizes(Object.keys(r.data.big_sheets))); }, []);
+  // Default Sheet size to the size of this module's DEFAULT material (unless re-quoting)
+  useDefaultSheetSize("/sheet-materials?module=channel-letters", setSheetSize);
 
   const calc = async () => {
     try {
@@ -53,7 +56,7 @@ export default function ChannelLetters() {
             <Label className="text-xs">Sheet size</Label>
             <Select value={sheetSize} onValueChange={setSheetSize}>
               <SelectTrigger data-testid="cl-sheet-size" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>{sheetSizes.map((s) => <SelectItem key={s} value={s}>{s} ft</SelectItem>)}</SelectContent>
+              <SelectContent>{[...new Set([...sheetSizes, ...(sheetSize ? [sheetSize] : [])])].map((s) => <SelectItem key={s} value={s}>{s} ft</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <Button data-testid="calc-cl-button" onClick={calc} className="w-full mt-5 bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
