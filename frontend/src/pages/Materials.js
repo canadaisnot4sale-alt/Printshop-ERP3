@@ -133,6 +133,12 @@ export default function Materials() {
       payload.unit_cost = Number((Number(form.price_per_box || 0) / Number(form.sheets_per_box)).toFixed(4));
       payload.stock_qty = Number(form.num_boxes || 0) * Number(form.sheets_per_box);
     }
+    // Auto-derive numeric sheet dimensions from the Size field (e.g. "12x18 in" -> 12 x 18)
+    const dims = String(form.size || "").match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
+    if (dims && (!Number(payload.sheet_width) || !Number(payload.sheet_height))) {
+      payload.sheet_width = Number(dims[1]);
+      payload.sheet_height = Number(dims[2]);
+    }
     try {
       if (editId) await api.put(`/materials/${editId}`, payload);
       else await api.post("/materials", payload);
@@ -407,17 +413,15 @@ export default function Materials() {
               </div>
             </div>
 
-            {(has("paper", "booklet", "laser") || has("large-format", "stickers") || has("direct-print", "channel-letters") || has("roll-stickers")) && (
+            {((has("paper", "booklet", "laser") && !isPaper) || has("large-format", "stickers") || has("direct-print", "channel-letters") || has("roll-stickers")) && (
               <div data-testid="material-module-specs">
                 <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Module specs</div>
-                {has("paper", "booklet", "laser") && (
+                {has("paper", "booklet", "laser") && !isPaper && (
                   <div className="grid grid-cols-3 gap-4 mb-3">
                     <div><Label className="text-xs">Sheet width (in)</Label>
-                      <Input data-testid="material-field-sheet_width" type="number" value={form.sheet_width} onChange={(e) => set("sheet_width", e.target.value)} className="rounded-lg mt-1" /></div>
+                      <Input data-testid="material-field-sheet_width" type="number" value={form.sheet_width} onChange={(e) => set("sheet_width", e.target.value)} className="rounded-lg mt-1" placeholder="auto from Size" /></div>
                     <div><Label className="text-xs">Sheet height (in)</Label>
-                      <Input data-testid="material-field-sheet_height" type="number" value={form.sheet_height} onChange={(e) => set("sheet_height", e.target.value)} className="rounded-lg mt-1" /></div>
-                    <div><Label className="text-xs">Sheets per box</Label>
-                      <Input data-testid="material-field-sheets_per_box" type="number" value={form.sheets_per_box} onChange={(e) => set("sheets_per_box", e.target.value)} className="rounded-lg mt-1" /></div>
+                      <Input data-testid="material-field-sheet_height" type="number" value={form.sheet_height} onChange={(e) => set("sheet_height", e.target.value)} className="rounded-lg mt-1" placeholder="auto from Size" /></div>
                   </div>
                 )}
                 {has("large-format", "stickers") && (
