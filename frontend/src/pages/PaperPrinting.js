@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import api, { apiErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
@@ -73,8 +74,22 @@ export default function PaperPrinting() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const location = useLocation();
   const loadProducts = () => api.get("/products").then((r) => { setProducts(r.data); if (!productId && r.data[0]) setProductId(r.data[0].id); });
   useEffect(() => { loadProducts(); /* eslint-disable-next-line */ }, []);
+
+  // Default Sheet Size to the size of this module's DEFAULT paper material (unless re-quoting)
+  useEffect(() => {
+    if (location.state?.requote) return;
+    api.get("/paper-stocks?module=paper").then((r) => {
+      const def = (r.data || []).find((m) => m.is_default) || (r.data || [])[0];
+      const mt = String(def?.size || "").match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
+      if (mt) setSheet(`${mt[1]}x${mt[2]}`);
+    }).catch(() => {});
+    /* eslint-disable-next-line */
+  }, []);
+
+  const sheetOpts = [...new Set([...SHEETS, ...(sheet ? [sheet] : [])])];
 
   const calc = async () => {
     if (!productId) return toast.error("Select a product");
@@ -126,7 +141,7 @@ export default function PaperPrinting() {
               <Label className="text-xs">Sheet Size</Label>
               <Select value={sheet} onValueChange={setSheet}>
                 <SelectTrigger data-testid="sheet-select" className="rounded-lg mt-1 mb-4"><SelectValue /></SelectTrigger>
-                <SelectContent>{SHEETS.map((s) => <SelectItem key={s} value={s}>{s}"</SelectItem>)}</SelectContent>
+                <SelectContent>{sheetOpts.map((s) => <SelectItem key={s} value={s}>{s}"</SelectItem>)}</SelectContent>
               </Select>
 
               <Label className="text-xs">Print Side</Label>
