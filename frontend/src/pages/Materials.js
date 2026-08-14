@@ -31,7 +31,7 @@ const BLANK = {
   unit_cost: 0, labor_minutes: 0, machine_id: "", ink_coverage_pct: 0,
   click_cost: 0.055, num_boxes: 1, price_per_box: 0,
   roll_cost: 0, roll_qty: 1, printable_height: 0, waste_linear_ft: 1,
-  price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
+  price_override: "", wholesale_price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
   roll_width: 0, printable_width: 0, min_linear_feet: 1, material_type: "",
@@ -46,7 +46,7 @@ const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct
   "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
-const OPT_NUMS = ["price_override", "retail_markup_pct", "wholesale_markup_pct"];
+const OPT_NUMS = ["price_override", "wholesale_price_override", "retail_markup_pct", "wholesale_markup_pct"];
 
 export default function Materials() {
   const [items, setItems] = useState([]);
@@ -59,6 +59,7 @@ export default function Materials() {
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
   const [catFilter, setCatFilter] = useState("all");
+  const [defMk, setDefMk] = useState({ retail: 200, wholesale: 100 });
 
   const load = async () => {
     const { data } = await api.get("/materials");
@@ -68,6 +69,7 @@ export default function Materials() {
     load();
     api.get("/machines").then(({ data }) => setMachines(data)).catch(() => {});
     api.get("/suppliers").then(({ data }) => setSuppliers(data)).catch(() => {});
+    api.get("/settings").then(({ data }) => setDefMk({ retail: data.retail_markup_pct ?? 200, wholesale: data.wholesale_markup_pct ?? 100 })).catch(() => {});
   }, []);
 
   const catOptions = [...new Set([...CATEGORIES, ...extraCats, ...(form.category ? [form.category] : [])])];
@@ -115,6 +117,13 @@ export default function Materials() {
   const rollWasteSqft = Number(form.waste_linear_ft || 0) * (rollWidthIn / 12);
   const rollStock = Number(form.roll_qty || 0) * rollAreaSqft;
 
+  // Live pricing preview (retail/wholesale)
+  const baseCost = isPaper ? paperUnitCost : (isRoll ? rollMatPerSqft : Number(form.unit_cost || 0));
+  const rMk = form.retail_markup_pct === "" || form.retail_markup_pct == null ? defMk.retail : Number(form.retail_markup_pct);
+  const wMk = form.wholesale_markup_pct === "" || form.wholesale_markup_pct == null ? defMk.wholesale : Number(form.wholesale_markup_pct);
+  const retailLive = Number(form.price_override) > 0 ? Number(form.price_override) : baseCost * (1 + rMk / 100);
+  const wholesaleLive = Number(form.wholesale_price_override) > 0 ? Number(form.wholesale_price_override) : baseCost * (1 + wMk / 100);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const has = (...mods) => mods.some((m) => form.modules.includes(m));
   const toggleModule = (m) =>
@@ -129,6 +138,7 @@ export default function Materials() {
       ...BLANK, ...it,
       machine_id: it.machine_id || "",
       price_override: it.price_override ?? "",
+      wholesale_price_override: it.wholesale_price_override ?? "",
       retail_markup_pct: it.retail_markup_pct ?? "",
       wholesale_markup_pct: it.wholesale_markup_pct ?? "",
       modules: it.modules || [],
@@ -237,6 +247,7 @@ export default function Materials() {
                 <th className="text-right px-4 py-2.5">Unit cost</th>
                 <th className="text-right px-4 py-2.5">Finish cost</th>
                 <th className="text-right px-4 py-2.5">Retail</th>
+                <th className="text-right px-4 py-2.5">Wholesale</th>
                 <th className="text-center px-4 py-2.5">Stock</th>
                 <th className="w-20"></th>
               </tr>
@@ -267,6 +278,7 @@ export default function Materials() {
                   <td className="px-4 py-2.5 text-right num">{money(m.unit_cost)}</td>
                   <td className="px-4 py-2.5 text-right num font-semibold">{money(m.finish_cost)}</td>
                   <td className="px-4 py-2.5 text-right num text-[#2495D3]">{money(m.selling_price)}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-wholesale">{money(m.wholesale_price)}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-center gap-1">
                       <button data-testid="material-stock-minus" onClick={() => adjust(m.id, -1)} className="p-1 text-slate-400 hover:text-red-500"><Minus size={13} /></button>
@@ -435,10 +447,28 @@ export default function Materials() {
                   <div><Label className="text-xs">Ink coverage (%)</Label>
                     <Input type="number" value={form.ink_coverage_pct} onChange={(e) => set("ink_coverage_pct", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
-                <div><Label className="text-xs">Price override ($)</Label>
+                <div><Label className="text-xs">Retail override ($)</Label>
                   <Input data-testid="material-field-price_override" type="number" value={form.price_override} onChange={(e) => set("price_override", e.target.value)} className="rounded-lg mt-1" placeholder="auto" /></div>
-                <div><Label className="text-xs">Retail markup %</Label>
-                  <Input type="number" value={form.retail_markup_pct} onChange={(e) => set("retail_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder="default" /></div>
+                <div><Label className="text-xs">Wholesale override ($)</Label>
+                  <Input data-testid="material-field-wholesale_override" type="number" value={form.wholesale_price_override} onChange={(e) => set("wholesale_price_override", e.target.value)} className="rounded-lg mt-1" placeholder="auto" /></div>
+                <div><Label className="text-xs">Retail markup % (×{(1 + (rMk / 100)).toFixed(1)})</Label>
+                  <Input data-testid="material-field-retail_markup" type="number" value={form.retail_markup_pct} onChange={(e) => set("retail_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder={`default ${defMk.retail}`} /></div>
+                <div><Label className="text-xs">Wholesale markup % (×{(1 + (wMk / 100)).toFixed(1)})</Label>
+                  <Input data-testid="material-field-wholesale_markup" type="number" value={form.wholesale_markup_pct} onChange={(e) => set("wholesale_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder={`default ${defMk.wholesale}`} /></div>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-3" data-testid="material-pricing-preview">
+                <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Finish cost</div>
+                  <div className="num text-lg font-bold mt-1">{money(baseCost)}</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Retail</div>
+                  <div className="num text-lg font-bold text-[#2495D3] mt-1" data-testid="preview-retail">{money(retailLive)}</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Wholesale</div>
+                  <div className="num text-lg font-bold text-slate-600 mt-1" data-testid="preview-wholesale">{money(wholesaleLive)}</div>
+                </div>
               </div>
               {isPaper && (
                 <div className="mt-3 grid grid-cols-3 gap-3" data-testid="paper-printed-cost">

@@ -1,0 +1,24 @@
+{
+  "summary": "Verified Materials page enhancements: table now shows Retail + Wholesale columns; edit modal has live pricing preview with 4 editable inputs (Retail override, Wholesale override, Retail markup %, Wholesale markup %) and markup labels display multiplier (×3.0 / ×2.0). All backend PUT + compute logic for wholesale_price_override and per-material markups verified via pytest (5/5 passing). Frontend UI + integration confirmed via Playwright.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_materials_pricing.py",
+    "/app/test_reports/pytest/materials_pricing.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Materials PUT endpoint requires full body (name required) — clients must send merged object, which the frontend already does. Acceptable but PATCH-style partial updates would be nicer.",
+    "server.py is very large (>2000 lines) — consider splitting into modules (materials/settings/quotes) for maintainability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_materials_pricing.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@printandsave.ca / admin123",
+  "seed_data_creation": "None. Preserved existing 2 materials (paper 100lb uncoated Cover + roll 3641 Matte Vinyl). Any overrides set during testing were reverted (Cancel used, no Save). Stock on roll accidentally decremented to 0 during selector confusion then restored to 1 (final inventory value $415.72 verified).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Materials page fully functional. Data-testids present: material-row, material-wholesale, material-edit, material-pricing-preview, preview-retail, preview-wholesale, material-field-price_override, material-field-wholesale_override, material-field-retail_markup, material-field-wholesale_markup. Note: PUT /api/materials/{id} requires full body incl 'name'; send merged object.",
+  "rca of the issue": "N/A — no issues found."
+}

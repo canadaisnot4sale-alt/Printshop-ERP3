@@ -258,7 +258,8 @@ class Material(BaseModel):
     labor_minutes: float = 0.0                   # labor to finish one unit
     machine_id: Optional[str] = None             # machine that fabricates (ink + hourly)
     ink_coverage_pct: float = 0.0
-    price_override: Optional[float] = None       # manual selling price
+    price_override: Optional[float] = None       # manual RETAIL price
+    wholesale_price_override: Optional[float] = None  # manual WHOLESALE price
     retail_markup_pct: Optional[float] = None    # per-material override
     wholesale_markup_pct: Optional[float] = None
     modules: List[str] = []                      # cross-module usage flags
@@ -1108,7 +1109,10 @@ def compute_material(m, biz_hourly, machines_by_id, s):
     override = m.get("price_override")
     has_override = override is not None and override > 0
     selling_price = round(override, 2) if has_override else retail_price
-    below_cost = bool(has_override and override < finish_cost)
+    w_override = m.get("wholesale_price_override")
+    if w_override is not None and w_override > 0:
+        wholesale_price = round(w_override, 2)
+    below_cost = bool((has_override and override < finish_cost) or (w_override and w_override < finish_cost))
     stock = m.get("stock_qty") or 0.0
     rp = m.get("reorder_point") or 0.0
     low_stock = stock <= rp
