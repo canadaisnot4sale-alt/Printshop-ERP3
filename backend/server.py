@@ -279,6 +279,8 @@ class Material(BaseModel):
     color: str = ""                                # substrate color/finish
     sheet_price: float = 0.0                       # substrate: price per full sheet
     sheet_qty: float = 0.0                         # substrate: sheets on hand
+    misc_qty: float = 0.0                          # miscellaneous: pieces on hand (stock)
+    misc_price: float = 0.0                        # miscellaneous: total price paid for the qty
     roll_width: float = 0.0                       # large-format / roll-stickers
     printable_width: float = 0.0
     min_linear_feet: float = 1.0

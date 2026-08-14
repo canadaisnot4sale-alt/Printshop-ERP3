@@ -17,7 +17,7 @@ import {
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Minus, Package, AlertTriangle, Boxes, Star } from "lucide-react";
 
-const CATEGORIES = ["paper", "roll", "substrate"];
+const CATEGORIES = ["paper", "roll", "substrate", "miscellaneous"];
 const UNITS = ["sheet", "sqft", "each"];
 const MODULES = [
   "paper", "booklet", "large-format", "stickers", "dtf", "embroidery",
@@ -32,6 +32,7 @@ const BLANK = {
   click_cost: 0.055, num_boxes: 1, price_per_box: 0,
   roll_cost: 0, roll_qty: 1, printable_height: 0, waste_linear_ft: 1,
   color: "", sheet_price: 0, sheet_qty: 1,
+  misc_qty: 1, misc_price: 0,
   price_override: "", wholesale_price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
@@ -44,7 +45,7 @@ const BLANK = {
 const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct",
   "click_cost", "num_boxes", "price_per_box",
   "roll_cost", "roll_qty", "printable_height", "waste_linear_ft",
-  "sheet_price", "sheet_qty",
+  "sheet_price", "sheet_qty", "misc_qty", "misc_price",
   "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
@@ -79,6 +80,7 @@ export default function Materials() {
   const isPaper = form.category === "paper";
   const isSubstrate = form.category === "substrate";
   const isRoll = form.category === "roll";
+  const isMisc = form.category === "miscellaneous";
 
   const pickCategory = (v) => {
     if (v === "__add__") {
@@ -86,7 +88,7 @@ export default function Materials() {
       if (nc) { setExtraCats((c) => [...c, nc]); set("category", nc); }
       return;
     }
-    const unitByCat = { paper: "sheet", roll: "roll", substrate: "sqft" };
+    const unitByCat = { paper: "sheet", roll: "roll", substrate: "sqft", miscellaneous: "each" };
     setForm((f) => ({ ...f, category: v, unit: unitByCat[v] || f.unit }));
   };
   const pickUnit = (v) => {
@@ -124,8 +126,12 @@ export default function Materials() {
   const subArea = Number(form.sheet_area_sqft) > 0 ? Number(form.sheet_area_sqft) : (subDims ? Number(subDims[1]) * Number(subDims[2]) : 0);
   const subMatPerSqft = subArea > 0 ? Number(form.sheet_price || 0) / subArea : 0;
 
+  // Miscellaneous live calc (per-piece cost from total price / quantity)
+  const miscUnitCost = Number(form.misc_qty) > 0 ? Number(form.misc_price || 0) / Number(form.misc_qty) : 0;
+  const miscStock = Number(form.misc_qty || 0);
+
   // Live pricing preview (retail/wholesale)
-  const baseCost = isPaper ? paperUnitCost : (isRoll ? rollMatPerSqft : (isSubstrate ? subMatPerSqft : Number(form.unit_cost || 0)));
+  const baseCost = isPaper ? paperUnitCost : (isRoll ? rollMatPerSqft : (isSubstrate ? subMatPerSqft : (isMisc ? miscUnitCost : Number(form.unit_cost || 0))));
   const rMk = form.retail_markup_pct === "" || form.retail_markup_pct == null ? defMk.retail : Number(form.retail_markup_pct);
   const wMk = form.wholesale_markup_pct === "" || form.wholesale_markup_pct == null ? defMk.wholesale : Number(form.wholesale_markup_pct);
   const retailLive = Number(form.price_override) > 0 ? Number(form.price_override) : baseCost * (1 + rMk / 100);
@@ -180,6 +186,10 @@ export default function Materials() {
       payload.sheet_area_sqft = area;
       payload.unit_cost = area > 0 ? Number((Number(form.sheet_price || 0) / area).toFixed(4)) : Number(form.unit_cost || 0);
       payload.stock_qty = Number(form.sheet_qty || 0);
+    }
+    if (form.category === "miscellaneous") {
+      payload.unit_cost = Number(form.misc_qty) > 0 ? Number((Number(form.misc_price || 0) / Number(form.misc_qty)).toFixed(4)) : Number(form.unit_cost || 0);
+      payload.stock_qty = Number(form.misc_qty || 0);
     }
     // Auto-derive numeric sheet dimensions from the Size field (e.g. "12x18 in" -> 12 x 18)
     const dims = String(form.size || "").match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
@@ -416,6 +426,10 @@ export default function Materials() {
                       <Input data-testid="material-field-material_type" value={form.material_type} onChange={(e) => set("material_type", e.target.value)} className="rounded-lg mt-1" placeholder="vinyl / banner" /></div>
                   </>
                 )}
+                {isMisc && (
+                  <div><Label className="text-xs">Quantity (pieces)</Label>
+                    <Input data-testid="material-field-misc_qty" type="number" value={form.misc_qty} onChange={(e) => set("misc_qty", e.target.value)} className="rounded-lg mt-1" placeholder="80" /></div>
+                )}
               </div>
               {isPaper && (
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="paper-stock-hint">
@@ -432,18 +446,27 @@ export default function Materials() {
                   Sheet area <span className="num font-semibold">{subArea.toFixed(1)}</span> ft² · cost <span className="num font-semibold">{money(subMatPerSqft)}</span>/ft² · stock <span className="num font-semibold">{Number(form.sheet_qty || 0)}</span> sheet(s)
                 </div>
               )}
+              {isMisc && (
+                <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="misc-stock-hint">
+                  Auto: unit cost <span className="num font-semibold">{money(miscUnitCost)}</span>/each · stock <span className="num font-semibold">{miscStock}</span> pc
+                </div>
+              )}
             </div>
 
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Cost & pricing</div>
               <div className="grid grid-cols-3 gap-4">
-                {!isPaper && !isRoll && !isSubstrate && (
+                {!isPaper && !isRoll && !isSubstrate && !isMisc && (
                   <div><Label className="text-xs">Unit cost ($)</Label>
                     <Input data-testid="material-field-unit_cost" type="number" value={form.unit_cost} onChange={(e) => set("unit_cost", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
                 {isSubstrate && (
                   <div><Label className="text-xs">Price per sheet ($)</Label>
                     <Input data-testid="material-field-sheet_price" type="number" value={form.sheet_price} onChange={(e) => set("sheet_price", e.target.value)} className="rounded-lg mt-1" /></div>
+                )}
+                {isMisc && (
+                  <div><Label className="text-xs">Total price ($)</Label>
+                    <Input data-testid="material-field-misc_price" type="number" value={form.misc_price} onChange={(e) => set("misc_price", e.target.value)} className="rounded-lg mt-1" placeholder="11.19" /></div>
                 )}
                 {isRoll && (
                   <>
@@ -472,7 +495,7 @@ export default function Materials() {
                   <div><Label className="text-xs">Waste / order (linear ft)</Label>
                     <Input data-testid="material-field-waste_linear_ft" type="number" step="0.5" value={form.waste_linear_ft} onChange={(e) => set("waste_linear_ft", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
-                {!isPaper && !isRoll && !isSubstrate && (
+                {!isPaper && !isRoll && !isSubstrate && !isMisc && (
                   <div><Label className="text-xs">Ink coverage (%)</Label>
                     <Input type="number" value={form.ink_coverage_pct} onChange={(e) => set("ink_coverage_pct", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
