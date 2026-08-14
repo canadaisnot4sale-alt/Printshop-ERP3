@@ -276,6 +276,9 @@ class Material(BaseModel):
     roll_qty: float = 0.0                          # roll: number of rolls on hand
     printable_height: float = 0.0                  # roll: usable printable length (inches) for layout
     waste_linear_ft: float = 0.0                   # roll: linear feet (across width) wasted per order
+    color: str = ""                                # substrate color/finish
+    sheet_price: float = 0.0                       # substrate: price per full sheet
+    sheet_qty: float = 0.0                         # substrate: sheets on hand
     roll_width: float = 0.0                       # large-format / roll-stickers
     printable_width: float = 0.0
     min_linear_feet: float = 1.0

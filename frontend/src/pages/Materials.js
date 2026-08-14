@@ -31,6 +31,7 @@ const BLANK = {
   unit_cost: 0, labor_minutes: 0, machine_id: "", ink_coverage_pct: 0,
   click_cost: 0.055, num_boxes: 1, price_per_box: 0,
   roll_cost: 0, roll_qty: 1, printable_height: 0, waste_linear_ft: 1,
+  color: "", sheet_price: 0, sheet_qty: 1,
   price_override: "", wholesale_price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
@@ -43,6 +44,7 @@ const BLANK = {
 const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct",
   "click_cost", "num_boxes", "price_per_box",
   "roll_cost", "roll_qty", "printable_height", "waste_linear_ft",
+  "sheet_price", "sheet_qty",
   "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
@@ -117,8 +119,13 @@ export default function Materials() {
   const rollWasteSqft = Number(form.waste_linear_ft || 0) * (rollWidthIn / 12);
   const rollStock = Number(form.roll_qty || 0) * rollAreaSqft;
 
+  // Substrate live calc
+  const subDims = String(form.size || "").match(/(\d+(?:\.\d+)?)\s*(?:ft)?\s*[x×]\s*(\d+(?:\.\d+)?)/i);
+  const subArea = Number(form.sheet_area_sqft) > 0 ? Number(form.sheet_area_sqft) : (subDims ? Number(subDims[1]) * Number(subDims[2]) : 0);
+  const subMatPerSqft = subArea > 0 ? Number(form.sheet_price || 0) / subArea : 0;
+
   // Live pricing preview (retail/wholesale)
-  const baseCost = isPaper ? paperUnitCost : (isRoll ? rollMatPerSqft : Number(form.unit_cost || 0));
+  const baseCost = isPaper ? paperUnitCost : (isRoll ? rollMatPerSqft : (isSubstrate ? subMatPerSqft : Number(form.unit_cost || 0)));
   const rMk = form.retail_markup_pct === "" || form.retail_markup_pct == null ? defMk.retail : Number(form.retail_markup_pct);
   const wMk = form.wholesale_markup_pct === "" || form.wholesale_markup_pct == null ? defMk.wholesale : Number(form.wholesale_markup_pct);
   const retailLive = Number(form.price_override) > 0 ? Number(form.price_override) : baseCost * (1 + rMk / 100);
@@ -166,6 +173,13 @@ export default function Materials() {
       payload.stock_qty = Number(form.roll_qty || 0);
       payload.waste_per_order = Number((Number(form.waste_linear_ft || 0) * (w / 12)).toFixed(3));
       if (!Number(form.min_linear_feet)) payload.min_linear_feet = 1;
+    }
+    if (form.category === "substrate") {
+      const d = String(form.size || "").match(/(\d+(?:\.\d+)?)\s*(?:ft)?\s*[x×]\s*(\d+(?:\.\d+)?)/i);
+      const area = Number(form.sheet_area_sqft) > 0 ? Number(form.sheet_area_sqft) : (d ? Number(d[1]) * Number(d[2]) : 0);
+      payload.sheet_area_sqft = area;
+      payload.unit_cost = area > 0 ? Number((Number(form.sheet_price || 0) / area).toFixed(4)) : Number(form.unit_cost || 0);
+      payload.stock_qty = Number(form.sheet_qty || 0);
     }
     // Auto-derive numeric sheet dimensions from the Size field (e.g. "12x18 in" -> 12 x 18)
     const dims = String(form.size || "").match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
@@ -383,8 +397,14 @@ export default function Materials() {
                   </>
                 )}
                 {isSubstrate && (
-                  <div><Label className="text-xs">Sheet area (ft²)</Label>
-                    <Input data-testid="material-field-sheet_area" type="number" value={form.sheet_area_sqft} onChange={(e) => set("sheet_area_sqft", e.target.value)} className="rounded-lg mt-1" /></div>
+                  <>
+                    <div><Label className="text-xs">Sheet area (ft²)</Label>
+                      <Input data-testid="material-field-sheet_area" type="number" value={form.sheet_area_sqft} onChange={(e) => set("sheet_area_sqft", e.target.value)} className="rounded-lg mt-1" placeholder="auto from Size" /></div>
+                    <div><Label className="text-xs">Quantity (sheets)</Label>
+                      <Input data-testid="material-field-sheet_qty" type="number" value={form.sheet_qty} onChange={(e) => set("sheet_qty", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Color / finish</Label>
+                      <Input data-testid="material-field-color" value={form.color} onChange={(e) => set("color", e.target.value)} className="rounded-lg mt-1" placeholder="Mirror" /></div>
+                  </>
                 )}
                 {isRoll && (
                   <>
@@ -407,14 +427,23 @@ export default function Materials() {
                   Roll width <span className="num font-semibold">{rollWidthIn}"</span> · 1 roll = <span className="num font-semibold">{rollAreaSqft.toFixed(1)}</span> ft² · stock <span className="num font-semibold">{Number(form.roll_qty || 0)}</span> roll(s) · layout uses printable {form.printable_width}"×{form.printable_height}"
                 </div>
               )}
+              {isSubstrate && (
+                <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="substrate-stock-hint">
+                  Sheet area <span className="num font-semibold">{subArea.toFixed(1)}</span> ft² · cost <span className="num font-semibold">{money(subMatPerSqft)}</span>/ft² · stock <span className="num font-semibold">{Number(form.sheet_qty || 0)}</span> sheet(s)
+                </div>
+              )}
             </div>
 
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Cost & pricing</div>
               <div className="grid grid-cols-3 gap-4">
-                {!isPaper && !isRoll && (
+                {!isPaper && !isRoll && !isSubstrate && (
                   <div><Label className="text-xs">Unit cost ($)</Label>
                     <Input data-testid="material-field-unit_cost" type="number" value={form.unit_cost} onChange={(e) => set("unit_cost", e.target.value)} className="rounded-lg mt-1" /></div>
+                )}
+                {isSubstrate && (
+                  <div><Label className="text-xs">Price per sheet ($)</Label>
+                    <Input data-testid="material-field-sheet_price" type="number" value={form.sheet_price} onChange={(e) => set("sheet_price", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
                 {isRoll && (
                   <>
@@ -443,7 +472,7 @@ export default function Materials() {
                   <div><Label className="text-xs">Waste / order (linear ft)</Label>
                     <Input data-testid="material-field-waste_linear_ft" type="number" step="0.5" value={form.waste_linear_ft} onChange={(e) => set("waste_linear_ft", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
-                {!isPaper && !isRoll && (
+                {!isPaper && !isRoll && !isSubstrate && (
                   <div><Label className="text-xs">Ink coverage (%)</Label>
                     <Input type="number" value={form.ink_coverage_pct} onChange={(e) => set("ink_coverage_pct", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
@@ -456,6 +485,23 @@ export default function Materials() {
                 <div><Label className="text-xs">Wholesale markup % (×{(1 + (wMk / 100)).toFixed(1)})</Label>
                   <Input data-testid="material-field-wholesale_markup" type="number" value={form.wholesale_markup_pct} onChange={(e) => set("wholesale_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder={`default ${defMk.wholesale}`} /></div>
               </div>
+              {isSubstrate && (
+                <div className="mt-3 grid grid-cols-3 gap-3" data-testid="substrate-cost">
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Material / ft²</div>
+                    <div className="num text-lg font-bold mt-1" data-testid="substrate-material-sqft">{money(subMatPerSqft)}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Material / sheet</div>
+                    <div className="num text-lg font-bold mt-1">{money(Number(form.sheet_price || 0))}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Printed / ft² (100%)</div>
+                    <div className="num text-lg font-bold text-[#2495D3] mt-1" data-testid="substrate-printed-sqft">{money(subMatPerSqft + inkPerSqft)}</div>
+                  </div>
+                  <div className="col-span-3 text-[11px] text-slate-500">{selMachine ? `Ink from ${selMachine.name} @ 100% coverage.` : "Select a machine to add ink cost per ft²."}</div>
+                </div>
+              )}
               <div className="mt-3 grid grid-cols-3 gap-3" data-testid="material-pricing-preview">
                 <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
                   <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Finish cost</div>
@@ -487,8 +533,7 @@ export default function Materials() {
                 </div>
               )}
               {isRoll && (
-                <div className="mt-3 grid grid-cols-3 gap-3" data-testid="roll-printed-cost">
-                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                <div className="mt-3 grid grid-cols-3 gap-3" data-testid="roll-printed-cost">                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
                     <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Material / ft²</div>
                     <div className="num text-lg font-bold mt-1" data-testid="roll-material-sqft">{money(rollMatPerSqft)}</div>
                   </div>

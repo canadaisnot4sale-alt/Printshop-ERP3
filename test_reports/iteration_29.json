@@ -1,0 +1,30 @@
+{
+  "summary": "Verified Substrate category in Materials form end-to-end. Backend Mirror Acrylic material (unit_cost/ft² 7.0478, stock 1, retail $21.14, wholesale $14.10) confirmed via /api/materials and /api/sheet-materials?module=direct-print. Frontend: Materials page lists 3 rows including Mirror Acrylic with correct Retail/Wholesale; new 'Substrate (1)' category chip present; New Material modal → category=substrate shows all substrate-specific fields (sheet_area, sheet_qty, color, sheet_price) with paper/roll fields hidden; supplier-preset-select present; substrate-stock-hint live-computes '32.0 ft² · $7.05/ft² · 1 sheet(s)' from Size='4x8 ft' + sheet_price=225.53 + sheet_qty=1; substrate-cost panel shows Material/ft² $7.05, Material/sheet $225.53, Printed/ft² $7.05. Paper and Roll category forms still render their respective fields (regression OK). Direct Print (/direct-print) Sheet Materials tab lists 'Mirror Acrylic  CMYK  $7.05  Yes' and Compare Materials picks Mirror Acrylic as BEST for a 4x8 sheet.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Materials modal (substrate)", "issues": ["Unit auto-fills to 'sqft' when category=substrate (see Materials.js line 89: unitByCat.substrate='sqft'), but the review request specifies 'Unit=sheet' for substrate. Backend-saved Mirror Acrylic has unit='sheet' (saved via curl), creating an inconsistency between UI default and backend record. Cosmetic only — pricing math and stock still work correctly since sheet_price/sheet_area drives unit_cost."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_unified_materials_v2.py",
+    "/app/backend/tests/test_materials_pricing.py"
+  ],
+  "action_items": [
+    "Consider changing unitByCat.substrate from 'sqft' to 'sheet' in /app/frontend/src/pages/Materials.js:89 to match the spec and backend-stored unit."
+  ],
+  "critical_code_review_comments": [
+    "Materials.js unitByCat maps substrate→'sqft' but backend stores substrate materials with unit='sheet' — inconsistency between UI default and persisted data model.",
+    "server.py exceeds 2000 lines — recommend modularizing (materials/quotes/settings/estimators)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@printandsave.ca / admin123",
+  "seed_data_creation": "None created. Existing seeded materials preserved: paper '100lb uncoated Cover', roll '3641 Matte Vinyl 52\"', substrate 'Mirror Acrylic'. New Material modal was opened for verification only and Cancelled — no duplicates saved.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Substrate category fully functional. Key testids: material-field-category, material-field-size, material-field-sheet_area, material-field-sheet_qty, material-field-color, material-field-sheet_price, substrate-stock-hint, substrate-cost, substrate-material-sqft, substrate-printed-sqft, supplier-preset-select, catfilter-substrate. Category filter shows counts: All(3), Paper(1), Roll(1), Substrate(1). Direct Print testids for regression: tab-sheet-materials, calc-dp-button. Do NOT delete Mirror Acrylic / 100lb uncoated Cover / 3641 Matte Vinyl.",
+  "rca of the issue": "N/A — no functional issues found."
+}
