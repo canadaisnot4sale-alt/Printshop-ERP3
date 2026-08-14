@@ -152,7 +152,7 @@ export default function Materials() {
       const area = (w / 12) * (Number(form.printable_height || 0) / 12);
       payload.roll_width = w;
       payload.unit_cost = area > 0 ? Number((Number(form.roll_cost || 0) / area).toFixed(4)) : Number(form.unit_cost || 0);
-      payload.stock_qty = Number(form.roll_qty || 0) * area;
+      payload.stock_qty = Number(form.roll_qty || 0);
       payload.waste_per_order = Number((Number(form.waste_linear_ft || 0) * (w / 12)).toFixed(3));
       if (!Number(form.min_linear_feet)) payload.min_linear_feet = 1;
     }
@@ -372,7 +372,7 @@ export default function Materials() {
               )}
               {isRoll && (
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="roll-stock-hint">
-                  Roll width <span className="num font-semibold">{rollWidthIn}"</span> · area <span className="num font-semibold">{rollAreaSqft.toFixed(1)}</span> ft² · stock <span className="num font-semibold">{rollStock.toFixed(0)}</span> ft² · layout uses printable {form.printable_width}"×{form.printable_height}"
+                  Roll width <span className="num font-semibold">{rollWidthIn}"</span> · 1 roll = <span className="num font-semibold">{rollAreaSqft.toFixed(1)}</span> ft² · stock <span className="num font-semibold">{Number(form.roll_qty || 0)}</span> roll(s) · layout uses printable {form.printable_width}"×{form.printable_height}"
                 </div>
               )}
             </div>
@@ -460,15 +460,24 @@ export default function Materials() {
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Inventory</div>
               <div className="grid grid-cols-3 gap-4">
-                <div><Label className="text-xs">Stock qty</Label>
-                  <Input data-testid="material-field-stock_qty" type="number" value={form.stock_qty} onChange={(e) => set("stock_qty", e.target.value)} className="rounded-lg mt-1" /></div>
-                <div><Label className="text-xs">Reorder point</Label>
+                {!isRoll && (
+                  <div><Label className="text-xs">Stock qty</Label>
+                    <Input data-testid="material-field-stock_qty" type="number" value={form.stock_qty} onChange={(e) => set("stock_qty", e.target.value)} className="rounded-lg mt-1" /></div>
+                )}
+                <div><Label className="text-xs">Reorder point{isRoll ? " (rolls)" : ""}</Label>
                   <Input data-testid="material-field-reorder_point" type="number" value={form.reorder_point} onChange={(e) => set("reorder_point", e.target.value)} className="rounded-lg mt-1" /></div>
-                <div><Label className="text-xs">Reorder target</Label>
+                <div><Label className="text-xs">Reorder target{isRoll ? " (rolls)" : ""}</Label>
                   <Input data-testid="material-field-reorder_target" type="number" value={form.reorder_target} onChange={(e) => set("reorder_target", e.target.value)} className="rounded-lg mt-1" /></div>
-                <div><Label className="text-xs">Waste per order ({form.unit})</Label>
-                  <Input data-testid="material-field-waste_per_order" type="number" step="0.1" value={form.waste_per_order} onChange={(e) => set("waste_per_order", e.target.value)} className="rounded-lg mt-1" /></div>
+                {!isRoll && (
+                  <div><Label className="text-xs">Waste per order ({form.unit})</Label>
+                    <Input data-testid="material-field-waste_per_order" type="number" step="0.1" value={form.waste_per_order} onChange={(e) => set("waste_per_order", e.target.value)} className="rounded-lg mt-1" /></div>
+                )}
               </div>
+              {isRoll && (
+                <div className="text-[11px] text-slate-400 mt-1" data-testid="roll-inventory-note">
+                  Stock is tracked in <b>rolls</b> (set via "Quantity (rolls)" above → {Number(form.roll_qty || 0)} roll(s)). Waste is set as linear feet above (≈ {rollWasteSqft.toFixed(2)} ft² per order). Reorder point = level that triggers a reorder; reorder target = level to restock up to.
+                </div>
+              )}
             </div>
 
             <div>
