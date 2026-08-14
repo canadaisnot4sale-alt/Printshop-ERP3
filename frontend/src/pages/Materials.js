@@ -17,28 +17,30 @@ import {
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Minus, Package, AlertTriangle, Boxes, Star } from "lucide-react";
 
-const CATEGORIES = ["sheet", "roll", "ink", "laminate", "substrate", "other"];
-const UNITS = ["sheet", "sqft", "roll", "each"];
+const CATEGORIES = ["paper", "roll", "substrate"];
+const UNITS = ["sheet", "sqft", "each"];
 const MODULES = [
   "paper", "booklet", "large-format", "stickers", "dtf", "embroidery",
   "laser", "direct-print", "channel-letters", "sublimation", "roll-stickers",
 ];
 
 const BLANK = {
-  name: "", code: "", category: "sheet",
+  name: "", code: "", category: "paper",
   supplier_company: "", supplier_contact: "", supplier_phone: "", supplier_email: "",
-  unit: "sheet", size: "", gramage: "", weight: "", sheet_area_sqft: 0,
+  unit: "sheet", size: "", weight: "", sheet_area_sqft: 0,
   unit_cost: 0, labor_minutes: 0, machine_id: "", ink_coverage_pct: 0,
+  click_cost: 0.055, num_boxes: 1, price_per_box: 0,
   price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
   roll_width: 0, printable_width: 0, min_linear_feet: 1, material_type: "",
   sticker_compatible: false, cnc_capable: true, channel_capable: false,
   pieces_per_roll: 0, sticker_w: 0, sticker_h: 0,
-  stock_qty: 0, reorder_point: 0, reorder_target: 0, waste_per_order: 0, notes: "",
+  stock_qty: 0, reorder_point: 0, reorder_target: 0, waste_per_order: 1, notes: "",
 };
 
 const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct",
+  "click_cost", "num_boxes", "price_per_box",
   "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
@@ -47,6 +49,10 @@ const OPT_NUMS = ["price_override", "retail_markup_pct", "wholesale_markup_pct"]
 export default function Materials() {
   const [items, setItems] = useState([]);
   const [machines, setMachines] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [extraCats, setExtraCats] = useState([]);
+  const [extraUnits, setExtraUnits] = useState([]);
+  const [savePreset, setSavePreset] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
@@ -58,7 +64,41 @@ export default function Materials() {
   useEffect(() => {
     load();
     api.get("/machines").then(({ data }) => setMachines(data)).catch(() => {});
+    api.get("/suppliers").then(({ data }) => setSuppliers(data)).catch(() => {});
   }, []);
+
+  const catOptions = [...new Set([...CATEGORIES, ...extraCats, ...(form.category ? [form.category] : [])])];
+  const unitOptions = [...new Set([...UNITS, ...extraUnits, ...(form.unit ? [form.unit] : [])])];
+  const isPaper = form.category === "paper";
+  const isSubstrate = form.category === "substrate";
+
+  const pickCategory = (v) => {
+    if (v === "__add__") {
+      const nc = window.prompt("New category name")?.trim().toLowerCase();
+      if (nc) { setExtraCats((c) => [...c, nc]); set("category", nc); }
+      return;
+    }
+    set("category", v);
+  };
+  const pickUnit = (v) => {
+    if (v === "__add__") {
+      const nu = window.prompt("New unit name")?.trim().toLowerCase();
+      if (nu) { setExtraUnits((u) => [...u, nu]); set("unit", nu); }
+      return;
+    }
+    set("unit", v);
+  };
+  const loadSupplier = (id) => {
+    const s = suppliers.find((x) => x.id === id);
+    if (s) setForm((f) => ({ ...f, supplier_company: s.company, supplier_contact: s.contact || "", supplier_phone: s.phone || "", supplier_email: s.email || "" }));
+  };
+
+  // Live paper cost preview
+  const paperUnitCost = isPaper && form.sheets_per_box > 0 ? Number(form.price_per_box || 0) / Number(form.sheets_per_box) : Number(form.unit_cost || 0);
+  const clickCost = Number(form.click_cost || 0);
+  const printed1 = paperUnitCost + clickCost;
+  const printed2 = paperUnitCost + clickCost * 2;
+  const paperStock = isPaper ? Number(form.num_boxes || 0) * Number(form.sheets_per_box || 0) : Number(form.stock_qty || 0);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const has = (...mods) => mods.some((m) => form.modules.includes(m));
@@ -89,9 +129,17 @@ export default function Materials() {
     NUMS.forEach((k) => (payload[k] = Number(payload[k] || 0)));
     OPT_NUMS.forEach((k) => (payload[k] = payload[k] === "" || payload[k] == null ? null : Number(payload[k])));
     payload.machine_id = form.machine_id || null;
+    if (form.category === "paper" && Number(form.sheets_per_box) > 0) {
+      payload.unit_cost = Number((Number(form.price_per_box || 0) / Number(form.sheets_per_box)).toFixed(4));
+      payload.stock_qty = Number(form.num_boxes || 0) * Number(form.sheets_per_box);
+    }
     try {
       if (editId) await api.put(`/materials/${editId}`, payload);
       else await api.post("/materials", payload);
+      if (savePreset && form.supplier_company.trim()) {
+        await api.post("/suppliers", { company: form.supplier_company, contact: form.supplier_contact, phone: form.supplier_phone, email: form.supplier_email }).catch(() => {});
+        api.get("/suppliers").then(({ data }) => setSuppliers(data)).catch(() => {});
+      }
       toast.success("Material saved");
       setOpen(false);
       load();
@@ -210,15 +258,31 @@ export default function Materials() {
               <div><Label className="text-xs">Code</Label>
                 <Input data-testid="material-field-code" value={form.code} onChange={(e) => set("code", e.target.value)} className="rounded-lg mt-1" /></div>
               <div><Label className="text-xs">Category</Label>
-                <Select value={form.category} onValueChange={(v) => set("category", v)}>
+                <Select value={form.category} onValueChange={pickCategory}>
                   <SelectTrigger data-testid="material-field-category" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {catOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    <SelectItem value="__add__" data-testid="category-add">＋ Add category…</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Supplier</div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Supplier</div>
+                <div className="flex items-center gap-2">
+                  {suppliers.length > 0 && (
+                    <Select onValueChange={loadSupplier}>
+                      <SelectTrigger className="rounded-lg h-7 text-xs w-44" data-testid="supplier-preset-select"><SelectValue placeholder="Load preset…" /></SelectTrigger>
+                      <SelectContent>{suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.company}</SelectItem>)}</SelectContent>
+                    </Select>
+                  )}
+                  <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer" data-testid="supplier-save-toggle">
+                    <Switch checked={savePreset} onCheckedChange={setSavePreset} /> Save preset
+                  </label>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div><Label className="text-xs">Company</Label>
                   <Input data-testid="material-field-supplier_company" value={form.supplier_company} onChange={(e) => set("supplier_company", e.target.value)} className="rounded-lg mt-1" /></div>
@@ -235,29 +299,49 @@ export default function Materials() {
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Specs</div>
               <div className="grid grid-cols-3 gap-4">
                 <div><Label className="text-xs">Unit</Label>
-                  <Select value={form.unit} onValueChange={(v) => set("unit", v)}>
+                  <Select value={form.unit} onValueChange={pickUnit}>
                     <SelectTrigger data-testid="material-field-unit" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      {unitOptions.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                      <SelectItem value="__add__" data-testid="unit-add">＋ Add unit…</SelectItem>
+                    </SelectContent>
                   </Select>
                 </div>
                 <div><Label className="text-xs">Size</Label>
-                  <Input value={form.size} onChange={(e) => set("size", e.target.value)} className="rounded-lg mt-1" placeholder="4x8 ft" /></div>
-                <div><Label className="text-xs">Gramage</Label>
-                  <Input value={form.gramage} onChange={(e) => set("gramage", e.target.value)} className="rounded-lg mt-1" /></div>
+                  <Input data-testid="material-field-size" value={form.size} onChange={(e) => set("size", e.target.value)} className="rounded-lg mt-1" placeholder={isPaper ? "12x18 in" : "4x8 ft"} /></div>
                 <div><Label className="text-xs">Weight</Label>
-                  <Input value={form.weight} onChange={(e) => set("weight", e.target.value)} className="rounded-lg mt-1" /></div>
-                <div><Label className="text-xs">Sheet area (ft²)</Label>
-                  <Input type="number" value={form.sheet_area_sqft} onChange={(e) => set("sheet_area_sqft", e.target.value)} className="rounded-lg mt-1" /></div>
+                  <Input data-testid="material-field-weight" value={form.weight} onChange={(e) => set("weight", e.target.value)} className="rounded-lg mt-1" placeholder={isPaper ? "100 lb cover" : ""} /></div>
+                {isPaper && (
+                  <>
+                    <div><Label className="text-xs">Sheets per box</Label>
+                      <Input data-testid="material-field-sheets_per_box" type="number" value={form.sheets_per_box} onChange={(e) => set("sheets_per_box", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Number of boxes</Label>
+                      <Input data-testid="material-field-num_boxes" type="number" value={form.num_boxes} onChange={(e) => set("num_boxes", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Price per box ($)</Label>
+                      <Input data-testid="material-field-price_per_box" type="number" value={form.price_per_box} onChange={(e) => set("price_per_box", e.target.value)} className="rounded-lg mt-1" /></div>
+                  </>
+                )}
+                {isSubstrate && (
+                  <div><Label className="text-xs">Sheet area (ft²)</Label>
+                    <Input data-testid="material-field-sheet_area" type="number" value={form.sheet_area_sqft} onChange={(e) => set("sheet_area_sqft", e.target.value)} className="rounded-lg mt-1" /></div>
+                )}
               </div>
+              {isPaper && (
+                <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="paper-stock-hint">
+                  Auto: unit cost <span className="num font-semibold">{money(paperUnitCost)}</span>/sheet · stock <span className="num font-semibold">{paperStock}</span> sheets
+                </div>
+              )}
             </div>
 
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Cost & pricing</div>
               <div className="grid grid-cols-3 gap-4">
-                <div><Label className="text-xs">Unit cost ($)</Label>
-                  <Input data-testid="material-field-unit_cost" type="number" value={form.unit_cost} onChange={(e) => set("unit_cost", e.target.value)} className="rounded-lg mt-1" /></div>
+                {!isPaper && (
+                  <div><Label className="text-xs">Unit cost ($)</Label>
+                    <Input data-testid="material-field-unit_cost" type="number" value={form.unit_cost} onChange={(e) => set("unit_cost", e.target.value)} className="rounded-lg mt-1" /></div>
+                )}
                 <div><Label className="text-xs">Labor (min)</Label>
-                  <Input type="number" value={form.labor_minutes} onChange={(e) => set("labor_minutes", e.target.value)} className="rounded-lg mt-1" /></div>
+                  <Input data-testid="material-field-labor" type="number" value={form.labor_minutes} onChange={(e) => set("labor_minutes", e.target.value)} className="rounded-lg mt-1" /></div>
                 <div><Label className="text-xs">Machine</Label>
                   <Select value={form.machine_id || "none"} onValueChange={(v) => set("machine_id", v === "none" ? "" : v)}>
                     <SelectTrigger data-testid="material-field-machine" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
@@ -267,13 +351,34 @@ export default function Materials() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Ink coverage (%)</Label>
-                  <Input type="number" value={form.ink_coverage_pct} onChange={(e) => set("ink_coverage_pct", e.target.value)} className="rounded-lg mt-1" /></div>
+                {isPaper ? (
+                  <div><Label className="text-xs">Click cost / side ($)</Label>
+                    <Input data-testid="material-field-click_cost" type="number" step="0.001" value={form.click_cost} onChange={(e) => set("click_cost", e.target.value)} className="rounded-lg mt-1" /></div>
+                ) : (
+                  <div><Label className="text-xs">Ink coverage (%)</Label>
+                    <Input type="number" value={form.ink_coverage_pct} onChange={(e) => set("ink_coverage_pct", e.target.value)} className="rounded-lg mt-1" /></div>
+                )}
                 <div><Label className="text-xs">Price override ($)</Label>
                   <Input data-testid="material-field-price_override" type="number" value={form.price_override} onChange={(e) => set("price_override", e.target.value)} className="rounded-lg mt-1" placeholder="auto" /></div>
                 <div><Label className="text-xs">Retail markup %</Label>
                   <Input type="number" value={form.retail_markup_pct} onChange={(e) => set("retail_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder="default" /></div>
               </div>
+              {isPaper && (
+                <div className="mt-3 grid grid-cols-3 gap-3" data-testid="paper-printed-cost">
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Blank sheet</div>
+                    <div className="num text-lg font-bold mt-1">{money(paperUnitCost)}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Printed 1 side</div>
+                    <div className="num text-lg font-bold text-[#2495D3] mt-1" data-testid="printed-1side">{money(printed1)}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Printed 2 sides</div>
+                    <div className="num text-lg font-bold text-[#2495D3] mt-1" data-testid="printed-2side">{money(printed2)}</div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>

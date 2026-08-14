@@ -268,6 +268,9 @@ class Material(BaseModel):
     sheet_width: float = 0.0                      # paper/laser sheet imposition (inches)
     sheet_height: float = 0.0
     sheets_per_box: float = 0.0                   # paper cost helper
+    num_boxes: float = 0.0                        # paper: boxes on hand (stock = num_boxes * sheets_per_box)
+    price_per_box: float = 0.0                    # paper: box price (unit_cost = price_per_box / sheets_per_box)
+    click_cost: float = 0.055                     # paper: press click cost per printed side
     roll_width: float = 0.0                       # large-format / roll-stickers
     printable_width: float = 0.0
     min_linear_feet: float = 1.0
@@ -1136,6 +1139,32 @@ async def list_materials(user=Depends(get_current_user)):
                 m.pop(k, None)
         out.append(m)
     return out
+
+class SupplierPreset(BaseModel):
+    company: str
+    contact: str = ""
+    phone: str = ""
+    email: str = ""
+
+@api_router.get("/suppliers")
+async def list_suppliers(user=Depends(require_admin)):
+    return [clean(s) for s in await db.suppliers.find().sort("company", 1).to_list(500)]
+
+@api_router.post("/suppliers")
+async def create_supplier(body: SupplierPreset, user=Depends(require_admin)):
+    doc = body.model_dump()
+    existing = await db.suppliers.find_one({"company": {"$regex": f"^{doc['company']}$", "$options": "i"}})
+    if existing:
+        await db.suppliers.update_one({"_id": existing["_id"]}, {"$set": doc})
+        return clean(await db.suppliers.find_one({"_id": existing["_id"]}))
+    doc["created_at"] = now_iso()
+    res = await db.suppliers.insert_one(doc)
+    return clean(await db.suppliers.find_one({"_id": res.inserted_id}))
+
+@api_router.delete("/suppliers/{sid}")
+async def delete_supplier(sid: str, user=Depends(require_admin)):
+    await db.suppliers.delete_one({"_id": ObjectId(sid)})
+    return {"ok": True}
 
 async def _apply_default_modules(doc_id, default_modules):
     """Ensure only one material is the default per module: unset the given modules from others."""

@@ -1,0 +1,30 @@
+{
+  "summary": "Tested category-driven Materials form (Paper focus) end-to-end. Backend: 4/4 pytest passed (supplier presets GET/POST upsert, paper material CRUD with num_boxes/price_per_box/click_cost, /api/paper-stocks?module=paper). Frontend: full UI flow validated — category default paper; Paper/Roll/Substrate + add-category option; paper specs (sheets_per_box, num_boxes, price_per_box) with live paper-stock-hint showing $0.25/sheet & 400; click_cost field (Ink coverage hidden for paper); paper-printed-cost panel shows $0.31 (1 side) and $0.36 (2 sides) with click 0.055; waste_per_order default = 1; unit options sheet/sqft/each + add-unit (no 'roll' preset); gramage field absent; save produces row with stock 400; supplier preset (Save toggle) persists and is loadable via supplier-preset-select which auto-fills company; switching category → substrate shows sheet_area & hides paper fields; roll hides both. Regression: /paper calculator loads and /api/paper-stocks returns '100lb uncoated text' as default. Cleanup performed for TEST_UI_* material and supplier preset kept (Alfa Paper + TEST_UI_Supplier remain — TEST_UI_Supplier should be removed by main if not needed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_materials_paper_v23.py",
+    "/app/test_reports/pytest/materials_v23.xml"
+  ],
+  "action_items": [
+    "(Nit) Materials.js has DUPLICATE data-testid=\"material-field-sheets_per_box\" at line 317 (Paper specs) and line 420 (module-specs when 'paper' module toggled). If both render simultaneously, strict Playwright selectors will fail — I used .first() to work around. Consider renaming the module-specs one to material-field-sheets_per_box_alt or removing it since paper specs already cover it.",
+    "(Optional cleanup) TEST_UI_Supplier preset remains in /api/suppliers from UI test (attempt to delete was not exposed via UI in current build). Main can DELETE /api/suppliers/{id} to remove."
+  ],
+  "critical_code_review_comments": [
+    "Materials.js duplicate data-testid \"material-field-sheets_per_box\" (lines 317 & 420) — testability risk.",
+    "Backend POST /api/suppliers upserts by case-insensitive company name; regex uses raw company text — a company name containing regex meta-chars (e.g., 'A+B Paper') will break the lookup. Escape via re.escape.",
+    "Materials.js save() computes paper unit_cost/stock client-side only; if a caller POSTs a paper material directly to /api/materials without those fields, server will store 0. Consider server-side derivation for consistency.",
+    "Materials.js is 492 lines — Dialog form is a candidate for extraction into MaterialForm.jsx."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (all flows verified)"},
+  "test_credentials": "admin@printandsave.ca / admin123",
+  "seed_data_creation": "Created and deleted TEST_UI_paper material; created TEST_UI_Supplier supplier preset (still present — safe to leave or delete). Existing '100lb uncoated text' + 'Alfa Paper' preset untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Materials category-driven form is production-ready. Backend regression file: /app/backend/tests/test_materials_paper_v23.py. Duplicate data-testid on sheets_per_box is a known nit — use .first() in Playwright."
+}

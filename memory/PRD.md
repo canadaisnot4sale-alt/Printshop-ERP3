@@ -90,6 +90,14 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
   - Storage init at startup; requests added to requirements. Silenced benign ResizeObserver overlay + added DialogDescription for a11y.
 - Verified iteration_22 = backend 9/9 + frontend 100%. No bugs.
 
+## Implemented (2026-06) — v26 Category-driven material form + supplier presets (Paper focus)
+- **Materials vs Purchases** clarified for user: Materials = master catalog + inventory (single source of truth); Purchases = buying/invoice events that auto-update a material's cost + stock (or create it, incl. PDF parse).
+- Material form is now **category-driven**: Categories Paper/Roll/Substrate + custom "＋ Add category"; Unit sheet/sqft/each + custom "＋ Add unit" (removed "roll"); **Gramage removed** (Weight kept — same property, lb↔gsm); Sheet area (ft²) shown only for Substrate.
+- **PAPER category** specs: Size, Weight, Sheets per box, Number of boxes, Price per box. **Auto**: unit_cost = price_per_box/sheets_per_box; stock = num_boxes×sheets_per_box (live hint). Cost&Pricing shows Machine + **Click cost/side** (Ink coverage hidden for paper) + live **printed-cost panel** (Blank / Printed 1 side = paper+click / Printed 2 sides = paper+2·click). Labor left 0 for paper (option a). Waste per order defaults to 1.
+- **Supplier presets**: new `suppliers` collection + GET/POST(upsert)/DELETE /api/suppliers; form has "Save preset" toggle + "Load preset…" dropdown that auto-fills company/contact/phone/email.
+- Backend Material fields added: num_boxes, price_per_box, click_cost. Registered real example material "100lb uncoated text" (Alfa Paper).
+- Verified iteration_23 = backend 4/4 + frontend 100%. No bugs.
+
 - **Profit margin per product** in Product Catalog: each BoM product row shows `cost · margin ($ and %)` (green positive / red negative), a red "BELOW COST" badge + tinted row when price < material cost, and a "Below cost" KPI. Products without a BoM show "manual price". Verified iteration_21 = frontend 100%.
 
 ### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).
