@@ -103,6 +103,8 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - Live panel: **Material $/ft²**, **Ink $/ft² (100%)** = selected machine's ink_ml_per_sqft_full × ink_cost_per_ml, **Printed $/ft²** = material+ink. Roll fields added to Material model (roll_cost, roll_qty, printable_height, waste_linear_ft).
 - Registered real example: "#20 (3641MV52) 3641 Matte Vinyl 52\"" (Grimco) → $0.3196/ft², 675 ft² stock, waste 4.5 ft².
 - Verified iteration_25 = frontend 100% (after fixing a missing Specs block found in iteration_24). No bugs.
+- **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
+- **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
 - **Profit margin per product** in Product Catalog: each BoM product row shows `cost · margin ($ and %)` (green positive / red negative), a red "BELOW COST" badge + tinted row when price < material cost, and a "Below cost" KPI. Products without a BoM show "manual price". Verified iteration_21 = frontend 100%.
 

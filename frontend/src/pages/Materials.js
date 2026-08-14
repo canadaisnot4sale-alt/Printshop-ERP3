@@ -58,6 +58,7 @@ export default function Materials() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
+  const [catFilter, setCatFilter] = useState("all");
 
   const load = async () => {
     const { data } = await api.get("/materials");
@@ -193,6 +194,8 @@ export default function Materials() {
     return a + (m.stock_qty || 0) * perUnit;
   }, 0);
   const defaults = items.filter((m) => (m.default_modules || []).length > 0).length;
+  const cats = [...new Set(items.map((m) => m.category).filter(Boolean))].sort();
+  const filtered = catFilter === "all" ? items : items.filter((m) => m.category === catFilter);
 
   return (
     <div data-testid="materials-page">
@@ -211,6 +214,20 @@ export default function Materials() {
           <Metric icon={Package} label="Inventory value" value={money(invValue)} />
         </div>
 
+        <div className="flex items-center gap-2" data-testid="material-category-filter">
+          <span className="text-[11px] font-mono uppercase tracking-widest text-slate-400">Filter</span>
+          <button onClick={() => setCatFilter("all")} data-testid="catfilter-all"
+            className={`text-xs rounded-full px-3 py-1 border transition-colors ${catFilter === "all" ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
+            All ({items.length})
+          </button>
+          {cats.map((c) => (
+            <button key={c} onClick={() => setCatFilter(c)} data-testid={`catfilter-${c}`}
+              className={`text-xs rounded-full px-3 py-1 border capitalize transition-colors ${catFilter === c ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
+              {c} ({items.filter((m) => m.category === c).length})
+            </button>
+          ))}
+        </div>
+
         <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
           <table className="w-full text-sm">
             <thead>
@@ -225,7 +242,7 @@ export default function Materials() {
               </tr>
             </thead>
             <tbody>
-              {items.map((m) => (
+              {filtered.map((m) => (
                 <tr key={m.id} data-testid="material-row"
                   className={`border-b border-slate-100 hover:bg-slate-50 ${m.below_cost ? "bg-red-50/60" : ""}`}>
                   <td className="px-4 py-2.5">
@@ -266,8 +283,8 @@ export default function Materials() {
                   </td>
                 </tr>
               ))}
-              {items.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No materials yet.</td></tr>
+              {filtered.length === 0 && (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{items.length === 0 ? "No materials yet." : "No materials in this category."}</td></tr>
               )}
             </tbody>
           </table>
