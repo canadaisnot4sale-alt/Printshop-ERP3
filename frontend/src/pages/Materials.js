@@ -188,7 +188,10 @@ export default function Materials() {
   };
 
   const lowCount = items.filter((m) => m.low_stock).length;
-  const invValue = items.reduce((a, m) => a + (m.stock_qty || 0) * (m.unit_cost || 0), 0);
+  const invValue = items.reduce((a, m) => {
+    const perUnit = m.category === "roll" ? (m.roll_cost || 0) : (m.unit_cost || 0);
+    return a + (m.stock_qty || 0) * perUnit;
+  }, 0);
   const defaults = items.filter((m) => (m.default_modules || []).length > 0).length;
 
   return (
