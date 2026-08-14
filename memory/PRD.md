@@ -98,6 +98,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - Backend Material fields added: num_boxes, price_per_box, click_cost. Registered real example material "100lb uncoated text" (Alfa Paper).
 - Verified iteration_23 = backend 4/4 + frontend 100%. No bugs.
 
+## Implemented (2026-06) — v27 ROLL category form (large-format materials)
+- Roll category form: Unit auto='roll'; Specs = Printable width, Printable height/length, Material type; Cost&Pricing = Roll cost, Quantity (rolls), Machine (ink source), Waste/order (linear ft). Auto: roll_width parsed from Size; unit_cost(price_per_sqft)=roll_cost/roll_area; stock=rolls×area; waste_per_order(sqft)=linear_ft×roll_width_ft.
+- Live panel: **Material $/ft²**, **Ink $/ft² (100%)** = selected machine's ink_ml_per_sqft_full × ink_cost_per_ml, **Printed $/ft²** = material+ink. Roll fields added to Material model (roll_cost, roll_qty, printable_height, waste_linear_ft).
+- Registered real example: "#20 (3641MV52) 3641 Matte Vinyl 52\"" (Grimco) → $0.3196/ft², 675 ft² stock, waste 4.5 ft².
+- Verified iteration_25 = frontend 100% (after fixing a missing Specs block found in iteration_24). No bugs.
+
 - **Profit margin per product** in Product Catalog: each BoM product row shows `cost · margin ($ and %)` (green positive / red negative), a red "BELOW COST" badge + tinted row when price < material cost, and a "Below cost" KPI. Products without a BoM show "manual price". Verified iteration_21 = frontend 100%.
 
 ### P2b remaining: PayPal at checkout (needs user's PayPal Client ID + Secret).

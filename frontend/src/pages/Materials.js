@@ -30,6 +30,7 @@ const BLANK = {
   unit: "sheet", size: "", weight: "", sheet_area_sqft: 0,
   unit_cost: 0, labor_minutes: 0, machine_id: "", ink_coverage_pct: 0,
   click_cost: 0.055, num_boxes: 1, price_per_box: 0,
+  roll_cost: 0, roll_qty: 1, printable_height: 0, waste_linear_ft: 1,
   price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
@@ -41,6 +42,7 @@ const BLANK = {
 
 const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct",
   "click_cost", "num_boxes", "price_per_box",
+  "roll_cost", "roll_qty", "printable_height", "waste_linear_ft",
   "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
@@ -71,6 +73,7 @@ export default function Materials() {
   const unitOptions = [...new Set([...UNITS, ...extraUnits, ...(form.unit ? [form.unit] : [])])];
   const isPaper = form.category === "paper";
   const isSubstrate = form.category === "substrate";
+  const isRoll = form.category === "roll";
 
   const pickCategory = (v) => {
     if (v === "__add__") {
@@ -78,7 +81,8 @@ export default function Materials() {
       if (nc) { setExtraCats((c) => [...c, nc]); set("category", nc); }
       return;
     }
-    set("category", v);
+    const unitByCat = { paper: "sheet", roll: "roll", substrate: "sqft" };
+    setForm((f) => ({ ...f, category: v, unit: unitByCat[v] || f.unit }));
   };
   const pickUnit = (v) => {
     if (v === "__add__") {
@@ -99,6 +103,16 @@ export default function Materials() {
   const printed1 = paperUnitCost + clickCost;
   const printed2 = paperUnitCost + clickCost * 2;
   const paperStock = isPaper ? Number(form.num_boxes || 0) * Number(form.sheets_per_box || 0) : Number(form.stock_qty || 0);
+
+  // Roll live calc
+  const rollWidthIn = Number((String(form.size || "").match(/(\d+(?:\.\d+)?)/) || [])[1]) || Number(form.roll_width || 0);
+  const rollAreaSqft = (rollWidthIn / 12) * (Number(form.printable_height || 0) / 12);
+  const rollMatPerSqft = rollAreaSqft > 0 ? Number(form.roll_cost || 0) / rollAreaSqft : 0;
+  const selMachine = machines.find((m) => m.id === form.machine_id);
+  const inkPerSqft = selMachine ? (selMachine.ink_ml_per_sqft_full || 10) * (selMachine.ink_cost_per_ml || 0.25) : 0;
+  const rollPrintedPerSqft = rollMatPerSqft + inkPerSqft;
+  const rollWasteSqft = Number(form.waste_linear_ft || 0) * (rollWidthIn / 12);
+  const rollStock = Number(form.roll_qty || 0) * rollAreaSqft;
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const has = (...mods) => mods.some((m) => form.modules.includes(m));
@@ -132,6 +146,15 @@ export default function Materials() {
     if (form.category === "paper" && Number(form.sheets_per_box) > 0) {
       payload.unit_cost = Number((Number(form.price_per_box || 0) / Number(form.sheets_per_box)).toFixed(4));
       payload.stock_qty = Number(form.num_boxes || 0) * Number(form.sheets_per_box);
+    }
+    if (form.category === "roll") {
+      const w = Number((String(form.size || "").match(/(\d+(?:\.\d+)?)/) || [])[1]) || Number(form.roll_width || 0);
+      const area = (w / 12) * (Number(form.printable_height || 0) / 12);
+      payload.roll_width = w;
+      payload.unit_cost = area > 0 ? Number((Number(form.roll_cost || 0) / area).toFixed(4)) : Number(form.unit_cost || 0);
+      payload.stock_qty = Number(form.roll_qty || 0) * area;
+      payload.waste_per_order = Number((Number(form.waste_linear_ft || 0) * (w / 12)).toFixed(3));
+      if (!Number(form.min_linear_feet)) payload.min_linear_feet = 1;
     }
     // Auto-derive numeric sheet dimensions from the Size field (e.g. "12x18 in" -> 12 x 18)
     const dims = String(form.size || "").match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
@@ -331,10 +354,25 @@ export default function Materials() {
                   <div><Label className="text-xs">Sheet area (ft²)</Label>
                     <Input data-testid="material-field-sheet_area" type="number" value={form.sheet_area_sqft} onChange={(e) => set("sheet_area_sqft", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
+                {isRoll && (
+                  <>
+                    <div><Label className="text-xs">Printable width (in)</Label>
+                      <Input data-testid="material-field-printable_width" type="number" value={form.printable_width} onChange={(e) => set("printable_width", e.target.value)} className="rounded-lg mt-1" placeholder="52" /></div>
+                    <div><Label className="text-xs">Printable height / length (in)</Label>
+                      <Input data-testid="material-field-printable_height" type="number" value={form.printable_height} onChange={(e) => set("printable_height", e.target.value)} className="rounded-lg mt-1" placeholder="1800" /></div>
+                    <div><Label className="text-xs">Material type</Label>
+                      <Input data-testid="material-field-material_type" value={form.material_type} onChange={(e) => set("material_type", e.target.value)} className="rounded-lg mt-1" placeholder="vinyl / banner" /></div>
+                  </>
+                )}
               </div>
               {isPaper && (
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="paper-stock-hint">
                   Auto: unit cost <span className="num font-semibold">{money(paperUnitCost)}</span>/sheet · stock <span className="num font-semibold">{paperStock}</span> sheets
+                </div>
+              )}
+              {isRoll && (
+                <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="roll-stock-hint">
+                  Roll width <span className="num font-semibold">{rollWidthIn}"</span> · area <span className="num font-semibold">{rollAreaSqft.toFixed(1)}</span> ft² · stock <span className="num font-semibold">{rollStock.toFixed(0)}</span> ft² · layout uses printable {form.printable_width}"×{form.printable_height}"
                 </div>
               )}
             </div>
@@ -342,13 +380,21 @@ export default function Materials() {
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Cost & pricing</div>
               <div className="grid grid-cols-3 gap-4">
-                {!isPaper && (
+                {!isPaper && !isRoll && (
                   <div><Label className="text-xs">Unit cost ($)</Label>
                     <Input data-testid="material-field-unit_cost" type="number" value={form.unit_cost} onChange={(e) => set("unit_cost", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
+                {isRoll && (
+                  <>
+                    <div><Label className="text-xs">Roll cost ($)</Label>
+                      <Input data-testid="material-field-roll_cost" type="number" value={form.roll_cost} onChange={(e) => set("roll_cost", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Quantity (rolls)</Label>
+                      <Input data-testid="material-field-roll_qty" type="number" value={form.roll_qty} onChange={(e) => set("roll_qty", e.target.value)} className="rounded-lg mt-1" /></div>
+                  </>
+                )}
                 <div><Label className="text-xs">Labor (min)</Label>
                   <Input data-testid="material-field-labor" type="number" value={form.labor_minutes} onChange={(e) => set("labor_minutes", e.target.value)} className="rounded-lg mt-1" /></div>
-                <div><Label className="text-xs">Machine</Label>
+                <div><Label className="text-xs">Machine{isRoll ? " (ink source)" : ""}</Label>
                   <Select value={form.machine_id || "none"} onValueChange={(v) => set("machine_id", v === "none" ? "" : v)}>
                     <SelectTrigger data-testid="material-field-machine" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -357,10 +403,15 @@ export default function Materials() {
                     </SelectContent>
                   </Select>
                 </div>
-                {isPaper ? (
+                {isPaper && (
                   <div><Label className="text-xs">Click cost / side ($)</Label>
                     <Input data-testid="material-field-click_cost" type="number" step="0.001" value={form.click_cost} onChange={(e) => set("click_cost", e.target.value)} className="rounded-lg mt-1" /></div>
-                ) : (
+                )}
+                {isRoll && (
+                  <div><Label className="text-xs">Waste / order (linear ft)</Label>
+                    <Input data-testid="material-field-waste_linear_ft" type="number" step="0.5" value={form.waste_linear_ft} onChange={(e) => set("waste_linear_ft", e.target.value)} className="rounded-lg mt-1" /></div>
+                )}
+                {!isPaper && !isRoll && (
                   <div><Label className="text-xs">Ink coverage (%)</Label>
                     <Input type="number" value={form.ink_coverage_pct} onChange={(e) => set("ink_coverage_pct", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
@@ -382,6 +433,25 @@ export default function Materials() {
                   <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
                     <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Printed 2 sides</div>
                     <div className="num text-lg font-bold text-[#2495D3] mt-1" data-testid="printed-2side">{money(printed2)}</div>
+                  </div>
+                </div>
+              )}
+              {isRoll && (
+                <div className="mt-3 grid grid-cols-3 gap-3" data-testid="roll-printed-cost">
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Material / ft²</div>
+                    <div className="num text-lg font-bold mt-1" data-testid="roll-material-sqft">{money(rollMatPerSqft)}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Ink / ft² (100%)</div>
+                    <div className="num text-lg font-bold text-amber-600 mt-1" data-testid="roll-ink-sqft">{money(inkPerSqft)}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Printed / ft²</div>
+                    <div className="num text-lg font-bold text-[#2495D3] mt-1" data-testid="roll-printed-sqft">{money(rollPrintedPerSqft)}</div>
+                  </div>
+                  <div className="col-span-3 text-[11px] text-slate-500">
+                    {selMachine ? `Ink from ${selMachine.name}: ${(selMachine.ink_ml_per_sqft_full || 10)} ml/ft² × $${selMachine.ink_cost_per_ml || 0.25}/ml @ 100% coverage.` : "Select a machine to compute ink cost per ft²."} Waste per order ≈ <span className="num font-semibold">{rollWasteSqft.toFixed(2)} ft²</span> ({form.waste_linear_ft} linear ft × {rollWidthIn}" width).
                   </div>
                 </div>
               )}

@@ -271,6 +271,10 @@ class Material(BaseModel):
     num_boxes: float = 0.0                        # paper: boxes on hand (stock = num_boxes * sheets_per_box)
     price_per_box: float = 0.0                    # paper: box price (unit_cost = price_per_box / sheets_per_box)
     click_cost: float = 0.055                     # paper: press click cost per printed side
+    roll_cost: float = 0.0                        # roll: price of one full roll
+    roll_qty: float = 0.0                          # roll: number of rolls on hand
+    printable_height: float = 0.0                  # roll: usable printable length (inches) for layout
+    waste_linear_ft: float = 0.0                   # roll: linear feet (across width) wasted per order
     roll_width: float = 0.0                       # large-format / roll-stickers
     printable_width: float = 0.0
     min_linear_feet: float = 1.0

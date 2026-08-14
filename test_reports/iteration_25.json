@@ -1,0 +1,35 @@
+{
+  "summary": "Retest of ROLL category form on /materials after re-adding isRoll Specs block. All bugs from iteration_24 are FIXED. Roll Specs (printable_width/printable_height/material_type + roll-stock-hint) now render, roll-material-sqft correctly shows $0.32 (NOT $0.00), machine selection populates ink/printed sqft, save persists row with stock 675 and module large-format, and /api/roll-materials includes the new material with price_per_sqft ≈ 0.32. Paper regression intact.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    "Login admin@printandsave.ca/admin123 → /materials",
+    "New material → Category=roll → Roll Specs (printable_width, printable_height, material_type) + roll-stock-hint all present (data-testid count=1 each)",
+    "Size=54x50yds, printable_height=1800, roll_cost=215.72, roll_qty=1 → hint text: 'Roll width 54\" · area 675.0 ft² · stock 675 ft² · layout uses printable 0\"×1800\"'",
+    "roll-material-sqft displays $0.32 (bug from iteration_24 fixed)",
+    "Machine selection → roll-ink-sqft=$2.50, roll-printed-sqft=$2.82 (material $0.32 + ink $2.50)",
+    "Waste/order linear ft default 1 → footer area shows '4.50 ft²'",
+    "Name=TEST_Roll_LF2, code=TEST_R_LF2, supplier company=Grimco, module=large-format, Save → toast 'Material saved', row persists with stock 675 in materials table",
+    "GET /api/roll-materials → TEST_Roll_LF2 present with price_per_sqft=0.3196, roll_width=54, printable_width=52, stock_qty=675, modules=[large-format]",
+    "Regression: Paper category form shows sheet Specs (Unit=sheet, Size, Weight, Sheets/box, Number of boxes) and Printed 1 side / Printed 2 sides panels; no roll-only printable_width field in paper form",
+    "Cleaned up TEST_Roll_54x50 and TEST_Roll_LF2 test materials after verification"
+  ],
+  "observations": [
+    "printable_width input remains 0 (placeholder) after typing size; width parsed correctly from size string for hint calc and API (backend returns printable_width=52 from 54 - 2 padding). Not a bug per requirements.",
+    "TEST_Roll_LF2 not visible on /large-format Estimating tab by default (requires clicking 'Compare Materials' or Roll Materials tab). API confirms availability."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100%"},
+  "test_credentials": "admin@printandsave.ca / admin123 (from request)",
+  "seed_data_creation": "Created 2 test rolls during testing; both deleted after verification via /api/materials DELETE",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration_24 bug (missing isRoll Specs → $0.00 material sqft) is fixed. Roll form fully functional end-to-end including /api/roll-materials mapping."
+}

@@ -1,0 +1,33 @@
+{
+  "summary": "Tested Roll category form on Materials page. CRITICAL BUG: the Roll 'Specs' branch is NOT rendered — the required inputs material-field-printable_height, material-field-printable_width, material-field-material_type and the roll-stock-hint element are all missing from the isRoll=true render path. As a result the UI cannot compute Material $/ft² (stays $0.00), stock, or waste_per_order for a roll material because printable_height is unreachable via UI. The Cost & Pricing side (roll_cost, roll_qty, machine (ink source), waste_linear_ft) IS present, unit auto-sets to 'roll' correctly, paper-only fields (sheets_per_box) are correctly hidden, roll-printed-cost panel renders with roll-material-sqft / roll-ink-sqft / roll-printed-sqft cells, and the footer note '≈ 4.50 ft²' for waste_linear_ft=1 × 54\" width is correct (uses rollWidthIn parsed from Size). Backend curl and roll-materials list endpoint work — the already-persisted '#20 (3641MV52) 3641 Matte Vinyl 52\"' shows in /api/roll-materials?module=large-format with price_per_sqft=0.3196 and printable_width=52. Paper regression intact (/api/paper-stocks default '100lb uncoated Cover' unchanged).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Materials.js Roll Specs branch", "issue": "Missing isRoll block in the Specs section. Required inputs printable_width (in), printable_height (in), material_type, and the roll-stock-hint bubble are never rendered when category='roll'. printable_width/material_type only appear if the user separately toggles the 'large-format' module in the module list, and printable_height has NO input anywhere in the file (grep confirms zero occurrences of data-testid=\"material-field-printable_height\" and zero of data-testid=\"roll-stock-hint\").", "selector": "[data-testid=material-field-printable_height], [data-testid=material-field-printable_width], [data-testid=material-field-material_type], [data-testid=roll-stock-hint]", "priority": "CRITICAL"},
+      {"component": "Materials.js Roll computation", "issue": "Because printable_height cannot be entered via UI, rollAreaSqft evaluates to 0 for any UI-created roll → Material/ft² panel shows $0.00 (verified in browser: after entering size=54x50yds, roll_cost=215.72, roll_qty=1, the roll-material-sqft cell displayed '$0.00' instead of $0.32). Save would also persist unit_cost=0 and stock_qty=0 for the material.", "selector": "[data-testid=roll-material-sqft]", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_materials_paper_v23.py"
+  ],
+  "action_items": [
+    "Add an isRoll spec block in Materials.js Specs grid (around line 353, next to isPaper/isSubstrate) with three inputs: material-field-printable_width (form.printable_width), material-field-printable_height (form.printable_height), material-field-material_type (form.material_type). Follow the same styling as the paper block.",
+    "Below the Specs grid, when isRoll is true, add a roll-stock-hint bubble mirroring paper-stock-hint. Example content: `Auto: roll width <rollWidthIn>\" · area ≈ <rollAreaSqft.toFixed(0)> ft² · stock ≈ <rollStock.toFixed(0)> ft²` using the already-computed rollWidthIn/rollAreaSqft/rollStock variables (they exist at lines 108-115).",
+    "Verify that after adding printable_height input, entering 1800 (as per the test spec) with size=54x50yds & roll_cost=215.72 produces roll-material-sqft = $0.32 and roll-stock-hint area/stock ≈ 675 ft²."
+  ],
+  "critical_code_review_comments": [
+    "Materials.js lines 108-115 compute rollWidthIn/rollAreaSqft/rollMatPerSqft/rollStock but there's no input for form.printable_height in the isRoll UI path → dead computation for UI users. Only direct API POST can trigger correct values (which is how the pre-seeded '#20 3641MV52' material was created).",
+    "The Roll-only Specs (printable_width, printable_height, material_type) leak into module-specs for 'large-format'/'stickers' modules — this dual location will cause confusion once the isRoll block is added. Consider hiding printable_width/material_type from the module-specs block when isRoll to avoid duplicate data-testid selectors.",
+    "Materials.js is now 551 lines — extraction to MaterialForm.jsx increasingly warranted."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (curl regression clean)", "frontend": "40% — Roll form Cost/Pricing UI works but Specs branch missing, so end-to-end Roll flow is blocked in UI"},
+  "test_credentials": "admin@printandsave.ca / admin123 (pns_token in localStorage)",
+  "seed_data_creation": "No new data created via UI (bug blocked save-and-verify). Pre-existing '#20 (3641MV52) 3641 Matte Vinyl 52\"' (Grimco, roll) from prior curl test + '100lb uncoated Cover' (paper) remain — both preserved as instructed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "After main adds isRoll Specs block + roll-stock-hint, retest full UI flow: category=roll → unit auto=roll → fill size=54x50yds, printable_height=1800, roll_cost=215.72, roll_qty=1 → expect roll-stock-hint area≈675 ft²/stock≈675, roll-material-sqft≈$0.32, waste footer ≈4.50 ft². Select a machine → roll-ink-sqft > 0. Save with module=large-format → row stock=675, then verify /large-format calculator lists it with price_per_sqft≈0.32.",
+  "rca of the issue": "In Materials.js the pickCategory helper correctly sets category='roll' and unit='roll' but the Specs JSX (lines 327-363) only branches on isPaper and isSubstrate — no isRoll branch was added when the roll form work was implemented. The computed variables rollWidthIn/rollAreaSqft/rollMatPerSqft/rollStock (lines 108-115) and the save() logic (lines 150-158) all reference form.printable_height, but no input renders that field for the user. Reproduction: login → /materials → New material → Category=roll → observe that between Weight and the Cost&Pricing section only Unit/Size/Weight appear (no printable_width, no printable_height, no material_type, no roll-stock-hint). Fix: add an `{isRoll && (<>...three Inputs...</>)}` block after the isSubstrate block and a `{isRoll && <div data-testid='roll-stock-hint'>...</div>}` bubble below the grid."
+}
