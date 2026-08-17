@@ -540,15 +540,30 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
     cps = stock.get("cost_per_sheet")
     if cps is None:
         cps = (stock["cost_per_box"] / stock["sheets_per_box"]) if stock.get("sheets_per_box") else 0
+    # Per-sheet SELLING price of the paper: its Retail/Wholesale (incl. markup or manual override).
+    # Falls back to marking up the raw cost if not supplied by the caller.
+    retail_ps = stock.get("retail_per_sheet")
+    if retail_ps is None:
+        retail_ps = markup_price(cps, retail_pct)
+    whole_ps = stock.get("wholesale_per_sheet")
+    if whole_ps is None:
+        whole_ps = markup_price(cps, whole_pct)
     rows = []
     for q in qtys:
         sheets = math.ceil(q / n_up) if n_up else 0
-        material = round(sheets * cps, 2)
+        material = round(sheets * cps, 2)                       # true material cost (for margin)
         cost_40 = round(sheets * settings["click_4_0"], 2)
         cost_44 = round(sheets * settings["click_4_4"], 2)
         lam = round(sheets * settings["lamination_per_sheet"], 2) if laminate else 0.0
-        base_40 = material + cost_40 + lam
+        base_40 = material + cost_40 + lam                      # true production cost
         base_44 = material + cost_44 + lam
+        paper_retail = round(sheets * retail_ps, 2)             # paper sold at its own retail/override
+        paper_whole = round(sheets * whole_ps, 2)
+        # Paper priced at retail/wholesale; printing (click) + lamination marked up on top.
+        cust_40 = round(paper_retail + markup_price(cost_40 + lam, retail_pct), 2)
+        cust_44 = round(paper_retail + markup_price(cost_44 + lam, retail_pct), 2)
+        ws_40 = round(paper_whole + markup_price(cost_40 + lam, whole_pct), 2)
+        ws_44 = round(paper_whole + markup_price(cost_44 + lam, whole_pct), 2)
         rows.append({
             "qty": q, "sheets": sheets, "n_up": n_up,
             "material_cost": material, "cost_4_0": cost_40, "cost_4_4": cost_44,
@@ -556,14 +571,14 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
             "base_cost_4_0": round(base_40, 2), "base_cost_4_4": round(base_44, 2),
             "unit_cost_4_0": round(base_40 / q, 4) if q else 0,
             "unit_cost_4_4": round(base_44 / q, 4) if q else 0,
-            "customer_price_4_0": markup_price(base_40, retail_pct),
-            "customer_price_4_4": markup_price(base_44, retail_pct),
-            "wholesale_price_4_0": markup_price(base_40, whole_pct),
-            "wholesale_price_4_4": markup_price(base_44, whole_pct),
-            "retail_unit_4_0": round(markup_price(base_40, retail_pct) / q, 4) if q else 0,
-            "retail_unit_4_4": round(markup_price(base_44, retail_pct) / q, 4) if q else 0,
-            "wholesale_unit_4_0": round(markup_price(base_40, whole_pct) / q, 4) if q else 0,
-            "wholesale_unit_4_4": round(markup_price(base_44, whole_pct) / q, 4) if q else 0,
+            "customer_price_4_0": cust_40,
+            "customer_price_4_4": cust_44,
+            "wholesale_price_4_0": ws_40,
+            "wholesale_price_4_4": ws_44,
+            "retail_unit_4_0": round(cust_40 / q, 4) if q else 0,
+            "retail_unit_4_4": round(cust_44 / q, 4) if q else 0,
+            "wholesale_unit_4_0": round(ws_40 / q, 4) if q else 0,
+            "wholesale_unit_4_4": round(ws_44 / q, 4) if q else 0,
         })
     layout = {"bin_width": sw, "used_length": sh, "placements": gl["placements"], "rotated": gl["rotated"], "gutter": gutter}
     return {"n_up": n_up, "sheet": sheet_key, "cost_per_sheet": round(cps, 4), "rows": rows, "layout": layout,
@@ -1926,10 +1941,30 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
         raise HTTPException(404, "Product not found")
     product = clean(product)
     stocks = await materials_by_ids("paper_stocks", body.stock_ids, module="paper")
+    # Attach each paper's own per-sheet Retail/Wholesale price (markup or manual override honored)
+    biz = await _business_hourly(settings)
+    mbi = await _machines_by_id(settings)
+    ids = []
+    for st in stocks:
+        try:
+            ids.append(ObjectId(st["id"]))
+        except Exception:
+            pass
+    raw = {str(d["_id"]): clean(d) for d in await db.materials.find({"_id": {"$in": ids}}).to_list(500)} if ids else {}
+    for st in stocks:
+        d = raw.get(st["id"])
+        if d:
+            cm = compute_material(d, biz, mbi, settings)
+            st["retail_per_sheet"] = cm.get("selling_price")
+            st["wholesale_per_sheet"] = cm.get("wholesale_price")
     results = []
     for st in stocks:
         quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key)
         results.append({"stock": st, "quote": quote})
+    # per-sheet price helpers were only needed for pricing; drop before returning (avoid role leakage)
+    for st in stocks:
+        st.pop("retail_per_sheet", None)
+        st.pop("wholesale_per_sheet", None)
     results.sort(key=lambda r: r["quote"]["rows"][3]["customer_price_4_4"] if r["quote"]["rows"] else 0)
     return scrub({"product": product, "sheet_key": body.sheet_key, "results": results, "qtys": STANDARD_QTYS}, user["role"])
 

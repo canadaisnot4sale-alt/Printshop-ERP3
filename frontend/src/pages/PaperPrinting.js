@@ -19,20 +19,6 @@ import { Calculator, Layers, FileStack, DollarSign, Tag } from "lucide-react";
 
 const SHEETS = ["8.5x11", "8.5x14", "11x17", "12x18", "13x19"];
 
-const stockFields = [
-  { name: "name", label: "Name", type: "text", full: true },
-  { name: "size", label: "Size", type: "text", default: "13x19" },
-  { name: "sheets_per_box", label: "Sheets / Box", type: "number", default: 500 },
-  { name: "cost_per_box", label: "Cost / Box (CAD)", type: "number" },
-  { name: "linked_material_id", label: "Link to Materials DB (cost from purchases)", type: "material-link", full: true },
-];
-const stockCols = [
-  { name: "name", label: "Name" }, { name: "size", label: "Size", mono: true },
-  { name: "sheets_per_box", label: "Sheets/Box", mono: true },
-  { name: "cost_per_box", label: "Cost/Box", mono: true, render: (i) => money(i.cost_per_box) },
-  { name: "cost_per_sheet", label: "Cost/Sheet", mono: true, render: (i) => money(i.cost_per_sheet) },
-  { name: "linked", label: "Linked", render: (i) => i.linked_material_name || "—" },
-];
 const prodFields = [
   { name: "name", label: "Product Name", type: "text", full: true },
   { name: "finished_w", label: "Finished W (in)", type: "number", default: 3.5 },
@@ -74,8 +60,10 @@ export default function PaperPrinting() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const [paperMats, setPaperMats] = useState([]);
   const loadProducts = () => api.get("/products").then((r) => { setProducts(r.data); if (!productId && r.data[0]) setProductId(r.data[0].id); });
-  useEffect(() => { loadProducts(); /* eslint-disable-next-line */ }, []);
+  const loadPaperMats = () => api.get("/materials").then((r) => setPaperMats((r.data || []).filter((m) => (m.modules || []).includes("paper")))).catch(() => {});
+  useEffect(() => { loadProducts(); if (isAdmin) loadPaperMats(); /* eslint-disable-next-line */ }, []);
   // Default Sheet Size to the size of this module's DEFAULT paper material (unless re-quoting)
   useDefaultSheetSize("/paper-stocks?module=paper", setSheet);
 
@@ -230,7 +218,51 @@ export default function PaperPrinting() {
           </TabsContent>
 
           <TabsContent value="stocks" className="mt-6">
-            {isAdmin && <CrudManager endpoint="paper-stocks" fields={stockFields} columns={stockCols} prefix="stock" readOnly />}
+            {isAdmin && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-slate-500">Reference view · paper stocks read from the central Materials DB (prices honor any overrides).</p>
+                  <a href="/materials" className="text-xs text-[#2495D3] hover:underline" data-testid="manage-materials-link">Manage in Materials →</a>
+                </div>
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-mono uppercase tracking-widest text-slate-500">
+                        <th className="text-left px-4 py-2.5">Paper</th>
+                        <th className="text-right px-4 py-2.5">Unit cost</th>
+                        <th className="text-right px-4 py-2.5">Finish cost</th>
+                        <th className="text-right px-4 py-2.5">Printed 1 side</th>
+                        <th className="text-right px-4 py-2.5">Printed 2 sides</th>
+                        <th className="text-right px-4 py-2.5">Retail</th>
+                        <th className="text-right px-4 py-2.5">Wholesale</th>
+                        <th className="text-center px-4 py-2.5">Stock</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paperMats.map((m) => (
+                        <tr key={m.id} data-testid="paper-stock-row" className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-4 py-2.5">
+                            <div className="font-medium flex items-center gap-2">
+                              {m.name}
+                              {(m.default_modules || []).includes("paper") && <span className="bg-amber-100 text-amber-700 text-[10px] rounded px-1.5 py-0.5" data-testid="paper-stock-default-badge">DEFAULT</span>}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono">{m.size || "—"}</div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right num">{money(m.unit_cost)}</td>
+                          <td className="px-4 py-2.5 text-right num font-semibold">{money(m.finish_cost)}</td>
+                          <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="paper-stock-printed-1">{money((m.finish_cost || 0) + (m.click_cost ?? 0.055))}</td>
+                          <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="paper-stock-printed-2">{money((m.finish_cost || 0) + 2 * (m.click_cost ?? 0.055))}</td>
+                          <td className="px-4 py-2.5 text-right num text-[#2495D3]">{money(m.selling_price)}</td>
+                          <td className="px-4 py-2.5 text-right num text-slate-600">{money(m.wholesale_price)}</td>
+                          <td className="px-4 py-2.5 text-center num">{m.stock_qty}</td>
+                        </tr>
+                      ))}
+                      {paperMats.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No paper materials assigned to this module. Add one in Materials.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </TabsContent>
           <TabsContent value="products" className="mt-6">
             {isAdmin && <CrudManager endpoint="products" fields={prodFields} columns={prodCols} prefix="product" onChange={setProducts} />}

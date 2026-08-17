@@ -106,6 +106,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v30 Paper Stocks pricing view + material-priced quotes
+- **Paper Printing → Paper Stocks tab** is now a rich read-only table mirroring the Materials overview: Unit cost, Finish cost, Printed 1 side, Printed 2 sides, Retail, Wholesale, Stock (prices honor overrides; DEFAULT badge). Reads from central /materials (admin tab). Removed old CrudManager stock view.
+- **Materials overview**: added Printed 1 side / Printed 2 sides columns (paper = finish + click / finish + 2×click; other categories show "—").
+- **Paper quote pricing changed (user-approved)**: the paper's per-sheet price now uses its OWN Retail/Wholesale (markup or manual override), NOT raw-cost×markup. Printing (click 4/0·4/4) + lamination are marked up on top. Formula: RETAIL = sheets×paper_retail + markup(click+lam, retail%); WHOLESALE = sheets×paper_wholesale + markup(click+lam, ws%). Override is per-sheet. Verified: 100lb Cover ($4.00 retail/$2.50 ws override), 100pc 4/4, 12x18 (2-up, 50 sheets) → Retail $224.00, Wholesale $141.00, base cost $33.00.
+- Backend: paper_quote reworked; calc_paper enriches each stock with retail_per_sheet/wholesale_per_sheet via compute_material (dropped before return to avoid role leakage).
+
 ## Implemented (2026-06) — v29 Miscellaneous material category + default-material sheet size
 - **New "Miscellaneous" material category** in /materials (Unit=Each): fields Quantity (pieces) + Total price; auto `unit_cost = total_price / qty`, `stock = qty`. Backend Material gained `misc_qty`, `misc_price`. Verified example: 2Inch Silver Carbon Steel Buckle Hangers (Amazon Ca, B0DRN7B32R) → unit_cost $0.1399/ea (11.19/80), stock 80.
 - **Sheet Size defaults to the module's DEFAULT material size** across all sheet-size modules (Paper Printing, Direct Print, Channel Letters) via shared hook `lib/useDefaultSheetSize.js`. Skips on Re-quote. Backend `map_material` now includes `size` in every per-module view. Set 100lb uncoated Cover size=12x18 (was empty) in PREVIEW db.
