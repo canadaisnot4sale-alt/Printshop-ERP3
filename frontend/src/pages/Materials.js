@@ -303,8 +303,8 @@ export default function Materials() {
                   </td>
                   <td className="px-4 py-2.5 text-right num">{money(m.unit_cost)}</td>
                   <td className="px-4 py-2.5 text-right num font-semibold">{money(m.finish_cost)}</td>
-                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-1">{money((m.finish_cost || 0) + (m.click_cost ?? 0.055))}</td>
-                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-2">{money((m.finish_cost || 0) + 2 * (m.click_cost ?? 0.055))}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-1">{m.category === "paper" ? money((m.finish_cost || 0) + (m.click_cost ?? 0.055)) : "—"}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-2">{m.category === "paper" ? money((m.finish_cost || 0) + 2 * (m.click_cost ?? 0.055)) : "—"}</td>
                   <td className="px-4 py-2.5 text-right num text-[#2495D3]">{money(m.selling_price)}</td>
                   <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-wholesale">{money(m.wholesale_price)}</td>
                   <td className="px-4 py-2.5">
