@@ -280,6 +280,8 @@ class Material(BaseModel):
     lam_width_in: float = 0.0                     # paper laminate/foil: roll width (in)
     lam_length_ft: float = 0.0                    # paper laminate/foil: roll length (ft)
     lam_roll_cost: float = 0.0                    # paper laminate/foil: cost per roll
+    lam_stock_ft: float = 0.0                     # paper laminate/foil: linear feet on hand
+    lam_reorder_ft: float = 0.0                   # paper laminate/foil: reorder point (linear ft)
     foil_color: str = ""                          # paper hot_foil: color
     roll_cost: float = 0.0                        # roll: price of one full roll
     roll_qty: float = 0.0                          # roll: number of rolls on hand

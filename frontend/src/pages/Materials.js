@@ -34,6 +34,7 @@ const BLANK = {
   color: "", sheet_price: 0, sheet_qty: 1,
   misc_qty: 1, misc_price: 0,
   paper_type: "normal", lam_width_in: 0, lam_length_ft: 0, lam_roll_cost: 0, foil_color: "",
+  lam_stock_ft: 0, lam_reorder_ft: 0,
   price_override: "", wholesale_price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
@@ -47,7 +48,7 @@ const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct
   "click_cost", "num_boxes", "price_per_box",
   "roll_cost", "roll_qty", "printable_height", "waste_linear_ft",
   "sheet_price", "sheet_qty", "misc_qty", "misc_price",
-  "lam_width_in", "lam_length_ft", "lam_roll_cost",
+  "lam_width_in", "lam_length_ft", "lam_roll_cost", "lam_stock_ft", "lam_reorder_ft",
   "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
@@ -311,12 +312,23 @@ export default function Materials() {
                   <td className="px-4 py-2.5 text-right num text-[#2495D3]">{money(m.selling_price)}</td>
                   <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-wholesale">{money(m.wholesale_price)}</td>
                   <td className="px-4 py-2.5">
-                    <div className="flex items-center justify-center gap-1">
-                      <button data-testid="material-stock-minus" onClick={() => adjust(m.id, -1)} className="p-1 text-slate-400 hover:text-red-500"><Minus size={13} /></button>
-                      <span className={`num w-14 text-center font-semibold ${m.low_stock ? "text-red-600" : "text-slate-700"}`} data-testid="material-stock-value">{m.stock_qty}</span>
-                      <button data-testid="material-stock-plus" onClick={() => adjust(m.id, 1)} className="p-1 text-slate-400 hover:text-emerald-600"><Plus size={13} /></button>
-                    </div>
-                    <div className="text-[10px] text-slate-400 text-center num">rp {m.reorder_point}</div>
+                    {(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? (
+                      <div className="text-center">
+                        <div className={`num font-semibold ${m.lam_reorder_ft > 0 && m.lam_stock_ft <= m.lam_reorder_ft ? "text-red-600" : "text-slate-700"}`} data-testid="material-lam-stock">{m.lam_stock_ft || 0} ft</div>
+                        {m.lam_reorder_ft > 0 && m.lam_stock_ft <= m.lam_reorder_ft
+                          ? <span className="text-[10px] font-mono uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5" data-testid="material-reorder-badge">Reorder</span>
+                          : <div className="text-[10px] text-slate-400 num">rp {m.lam_reorder_ft || 0} ft</div>}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-center gap-1">
+                          <button data-testid="material-stock-minus" onClick={() => adjust(m.id, -1)} className="p-1 text-slate-400 hover:text-red-500"><Minus size={13} /></button>
+                          <span className={`num w-14 text-center font-semibold ${m.low_stock ? "text-red-600" : "text-slate-700"}`} data-testid="material-stock-value">{m.stock_qty}</span>
+                          <button data-testid="material-stock-plus" onClick={() => adjust(m.id, 1)} className="p-1 text-slate-400 hover:text-emerald-600"><Plus size={13} /></button>
+                        </div>
+                        <div className="text-[10px] text-slate-400 text-center num">rp {m.reorder_point}</div>
+                      </>
+                    )}
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex gap-1 justify-end">
@@ -435,6 +447,10 @@ export default function Materials() {
                           <Input data-testid="material-field-lam_length_ft" type="number" value={form.lam_length_ft} onChange={(e) => set("lam_length_ft", e.target.value)} className="rounded-lg mt-1" placeholder="500" /></div>
                         <div><Label className="text-xs">Roll cost ($)</Label>
                           <Input data-testid="material-field-lam_roll_cost" type="number" value={form.lam_roll_cost} onChange={(e) => set("lam_roll_cost", e.target.value)} className="rounded-lg mt-1" placeholder="275" /></div>
+                        <div><Label className="text-xs">Stock (linear ft)</Label>
+                          <Input data-testid="material-field-lam_stock_ft" type="number" value={form.lam_stock_ft} onChange={(e) => set("lam_stock_ft", e.target.value)} className="rounded-lg mt-1" placeholder="500" /></div>
+                        <div><Label className="text-xs">Reorder point (ft)</Label>
+                          <Input data-testid="material-field-lam_reorder_ft" type="number" value={form.lam_reorder_ft} onChange={(e) => set("lam_reorder_ft", e.target.value)} className="rounded-lg mt-1" placeholder="50" /></div>
                         {form.paper_type === "hot_foil" && (
                           <div><Label className="text-xs">Color</Label>
                             <Input data-testid="material-field-foil_color" value={form.foil_color} onChange={(e) => set("foil_color", e.target.value)} className="rounded-lg mt-1" placeholder="Gold" /></div>
