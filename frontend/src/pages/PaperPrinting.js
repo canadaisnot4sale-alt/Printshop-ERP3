@@ -181,6 +181,9 @@ export default function PaperPrinting() {
                           unit_price: focusRow?.[`retail_unit_${side}`],
                           wholesale_unit: focusRow?.[`wholesale_unit_${side}`],
                         }} />
+                        {focusRow?.volume_discount_pct > 0 && (
+                          <div className="mt-2 text-[11px] font-mono uppercase tracking-widest text-emerald-600" data-testid="paper-volume-discount">Volume discount · {focusRow.volume_discount_pct}% off @ {focusQty} pc</div>
+                        )}
                       </div>
                       <div className="mt-4"><SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} inputs={{ productId, sheet, laminate, side, focusQty }} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} /></div>
                     </div>

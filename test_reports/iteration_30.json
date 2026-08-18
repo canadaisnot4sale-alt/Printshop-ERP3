@@ -1,0 +1,23 @@
+{
+  "summary": "Volume Discounts feature verified end-to-end. Backend: 14/14 relevant pytest cases pass (2 skipped for absent seed data — no sticker_compatible roll material and no sublimation-eligible product). Settings GET/PUT persists volume_discounts, defaults match spec (25=0,50=2,100=5,250=9,500=13,1000=18,2500=23,5000=28). scrub() applies discount to Paper (all 8 STANDARD_QTYS rows with correct volume_discount_pct and strictly-decreasing retail_unit_4_0/4_4 and wholesale_unit_4_0/4_4), DTF (13% @ 500), Embroidery (5% @ 100), Rollsticker (13% @ 500), Laser/DirectPrint/Channelletters return 200 with discount container. RBAC still holds: client sees only retail_* and gets discounted rows; reseller sees only wholesale_* and gets discounted rows; admin sees all. Regression: 100lb uncoated Cover on 12x18 @ qty=25 (0% discount) 4/0 → 13 sheets → customer_price_4_0 = 55.12 (13*4 + markup(1.04, 200%) = 52+3.12=55.12) confirmed in both API and UI. Tier edit persistence works: setting qty=100→pct=10 and re-querying returns 10%, restored to 5%. Frontend: Settings 'Volume Discounts' card with 8 vd-row rows loads defaults; Paper Printing calculator shows paper-volume-discount label with correct text ('Volume discount · 5% off @ 100 pc', '· 13% off @ 500 pc') and hides at qty=25 (0%).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_volume_discounts.py",
+    "/app/test_reports/pytest/vd_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py exceeds 3200 lines — modularization (settings/calc/materials) strongly recommended.",
+    "scrub() mutates the response dict in place and relies on global _VOLUME_DISCOUNTS refreshed per get_settings() call — safe under single-worker asyncio, but any future move to multi-process workers could cause tier bleed between concurrent requests. Consider threading tiers through explicitly.",
+    "GET /api/materials silently ignores ?category=<x> query param and returns full list — misleading. Recommend either honoring the filter or removing it from callers to avoid confusion (encountered while writing tests)."
+  ],
+  "updated_files": ["/app/backend/tests/test_volume_discounts.py"],
+  "success_rate": {"backend": "100% (14/14 executed pass, 2 pre-condition skips)", "frontend": "100%"},
+  "test_credentials": "admin@printandsave.ca / admin123 ; cliente1@test.com / test123 (reseller)",
+  "seed_data_creation": "None. Seeded materials (100lb uncoated Cover, 3641 Matte Vinyl 52\", Mirror Acrylic) preserved. Settings tiers modified during persist test then restored to defaults.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Volume discount tests live in /app/backend/tests/test_volume_discounts.py and are grouped under xdist_group('volume_discount_settings') so persist_custom_tiers_and_restore doesn't race with other classes under pytest -n 2 --dist loadscope. Key testids: volume-discounts-card, vd-add, vd-row, vd-qty, vd-pct, vd-remove, paper-volume-discount. Paper Printing 'Focus Quantity' selector buttons are role='button' with exact names '25','50','100','250','500','1000','2500','5000'. DTF/Embroidery models use `quantity` (not `qty`); Embroidery placements use `stitch_count` (not `stitches`). Sticker requires roll_material.sticker_compatible=True (currently none seeded → results empty). Sublimation requires product with sublimation-eligible category.",
+  "rca of the issue": "N/A — no functional issues detected."
+}

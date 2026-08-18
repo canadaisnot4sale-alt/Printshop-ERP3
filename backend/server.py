@@ -346,6 +346,12 @@ class FixedCost(BaseModel):
     amount: float = 0.0             # per month
     notes: str = ""
 
+DEFAULT_VOLUME_DISCOUNTS = [
+    {"qty": 25, "pct": 0}, {"qty": 50, "pct": 2}, {"qty": 100, "pct": 5},
+    {"qty": 250, "pct": 9}, {"qty": 500, "pct": 13}, {"qty": 1000, "pct": 18},
+    {"qty": 2500, "pct": 23}, {"qty": 5000, "pct": 28},
+]
+
 class Settings(BaseModel):
     retail_markup_pct: float = 200.0
     wholesale_markup_pct: float = 100.0
@@ -409,6 +415,8 @@ class Settings(BaseModel):
     default_maintenance_pct_year: float = 2.0
     owner_salary_monthly: float = 0.0
     technician_hourly_rate: float = 65.0
+    # Volume discounts: buy more → cheaper. List of {qty, pct}; the highest tier whose qty <= order qty applies. Retail + Wholesale.
+    volume_discounts: List[dict] = Field(default_factory=lambda: [dict(t) for t in DEFAULT_VOLUME_DISCOUNTS])
 
 SHEET_SIZES = {
     "8.5x11": (8.5, 11), "8.5x14": (8.5, 14), "11x17": (11, 17),
@@ -435,6 +443,8 @@ async def get_settings() -> dict:
     if missing:
         await db.settings.update_one({"_key": "global"}, {"$set": missing})
         s.update(missing)
+    global _VOLUME_DISCOUNTS
+    _VOLUME_DISCOUNTS = s.get("volume_discounts") or []
     return s
 
 # ---------------- Calc engines ----------------
@@ -465,8 +475,49 @@ WHOLESALE_FIELDS = {
     "wholesale_price", "wholesale_price_4_0", "wholesale_price_4_4", "wholesale_total",
     "wholesale_unit",
 }
+# Fields a volume discount is applied to (retail + wholesale, totals + per-unit)
+DISCOUNTABLE_FIELDS = (RETAIL_FIELDS | WHOLESALE_FIELDS | {
+    "retail_unit_4_0", "retail_unit_4_4", "wholesale_unit_4_0", "wholesale_unit_4_4",
+})
+# Current volume-discount tiers, refreshed by get_settings() on every request.
+_VOLUME_DISCOUNTS: list = []
+
+def discount_for_qty(qty, tiers):
+    """Return the discount % for a quantity: the highest tier whose qty threshold <= qty."""
+    pct = 0.0
+    try:
+        for t in sorted(tiers, key=lambda x: float(x.get("qty", 0) or 0)):
+            if float(qty) >= float(t.get("qty", 0) or 0):
+                pct = float(t.get("pct", 0) or 0)
+    except Exception:
+        return 0.0
+    return pct
 
 def scrub(data, role):
+    # 1) Apply volume discount to every priced quantity container (all roles, idempotent).
+    tiers = _VOLUME_DISCOUNTS
+    if tiers:
+        def _disc(o):
+            if isinstance(o, dict):
+                for v in o.values():
+                    _disc(v)
+                q = o.get("quantity", o.get("qty"))
+                if (isinstance(q, (int, float)) and q > 0
+                        and ("base_cost" in o or "base_cost_4_0" in o)
+                        and "volume_discount_pct" not in o):
+                    pct = discount_for_qty(q, tiers)
+                    if pct:
+                        f = 1 - pct / 100.0
+                        for k in DISCOUNTABLE_FIELDS:
+                            val = o.get(k)
+                            if isinstance(val, (int, float)):
+                                o[k] = round(val * f, 4)
+                    o["volume_discount_pct"] = pct
+            elif isinstance(o, list):
+                for x in o:
+                    _disc(x)
+        _disc(data)
+    # 2) Role-based field stripping.
     if role == "admin":
         return data
     def strip(key):

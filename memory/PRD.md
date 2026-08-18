@@ -114,6 +114,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v31 Volume discounts (buy more → cheaper), all modules
+- **Editable volume-discount tiers** in Settings ("Volume Discounts" card): each tier = {qty threshold, discount %}. Both quantity AND % are editable; add/remove tiers. Default: 25=0, 50=2, 100=5, 250=9, 500=13, 1000=18, 2500=23, 5000=28.
+- **Applied centrally in scrub()** (all roles incl. admin, idempotent) to every priced quantity container across ALL 11 estimating modules — reduces Retail AND Wholesale totals + per-unit by the tier % (highest tier whose qty threshold ≤ order qty). Each result carries volume_discount_pct.
+- Settings.volume_discounts field (default_factory), get_settings() refreshes module global _VOLUME_DISCOUNTS; discount_for_qty() helper; DISCOUNTABLE_FIELDS set. Paper Printing shows a "Volume discount · X% off @ N pc" note.
+- Verified iteration_30 = backend 14/14 + frontend 100%. Paper unit price now decreases gradually 25→5000; RBAC intact; base pricing regression OK (100lb Cover @25 4/0 12x18 = $55.12).
+
 ## Implemented (2026-06) — v30 Paper Stocks pricing view + material-priced quotes
 - **Paper Printing → Paper Stocks tab** is now a rich read-only table mirroring the Materials overview: Unit cost, Finish cost, Printed 1 side, Printed 2 sides, Retail, Wholesale, Stock (prices honor overrides; DEFAULT badge). Reads from central /materials (admin tab). Removed old CrudManager stock view.
 - **Materials overview**: added Printed 1 side / Printed 2 sides columns (paper = finish + click / finish + 2×click; other categories show "—").

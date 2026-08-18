@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { Save, Plus, Trash2 } from "lucide-react";
 
 const GROUPS = [
   {
@@ -126,6 +126,7 @@ export default function Settings() {
     try {
       const payload = { ...s };
       Object.keys(payload).forEach((k) => { if (typeof payload[k] === "string" && k !== "currency") payload[k] = Number(payload[k]); });
+      if (Array.isArray(payload.volume_discounts)) payload.volume_discounts = payload.volume_discounts.map((r) => ({ qty: Number(r.qty) || 0, pct: Number(r.pct) || 0 }));
       const { data } = await api.put("/settings", payload);
       setS(data);
       toast.success("Settings saved — all quotes now use these values");
@@ -134,6 +135,11 @@ export default function Settings() {
 
   if (!s) return null;
 
+  const vd = s.volume_discounts || [];
+  const setVD = (i, key, val) => setS({ ...s, volume_discounts: vd.map((r, idx) => idx === i ? { ...r, [key]: val } : r) });
+  const addVD = () => setS({ ...s, volume_discounts: [...vd, { qty: 0, pct: 0 }] });
+  const removeVD = (i) => setS({ ...s, volume_discounts: vd.filter((_, idx) => idx !== i) });
+
   return (
     <div data-testid="settings-page">
       <PageHeader title="Settings" subtitle="Global pricing — changes flow through every module">
@@ -141,7 +147,8 @@ export default function Settings() {
           <Save size={16} className="mr-2" />Save
         </Button>
       </PageHeader>
-      <div className="p-8 grid md:grid-cols-2 gap-6 max-w-4xl">
+      <div className="p-8 max-w-4xl space-y-6">
+        <div className="grid md:grid-cols-2 gap-6">
         {GROUPS.map((g) => (
           <div key={g.title} className="bg-white border border-slate-200 rounded-sm p-6">
             <h3 className="font-head font-bold mb-4">{g.title}</h3>
@@ -161,6 +168,28 @@ export default function Settings() {
             </div>
           </div>
         ))}
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-sm p-6" data-testid="volume-discounts-card">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-head font-bold">Volume Discounts</h3>
+            <Button data-testid="vd-add" onClick={addVD} variant="outline" className="rounded-sm h-8 text-xs"><Plus size={14} className="mr-1" />Add tier</Button>
+          </div>
+          <p className="text-xs text-slate-500 mb-4">Buy more → cheaper. The highest tier whose quantity ≤ order quantity applies — to Retail and Wholesale, across every estimating module. Edit both the quantities and the % as you need.</p>
+          <table className="w-full text-sm">
+            <thead><tr className="text-[10px] font-mono uppercase text-slate-400"><th className="text-left py-1">Quantity ≥</th><th className="text-left py-1">Discount %</th><th /></tr></thead>
+            <tbody>
+              {vd.map((r, i) => (
+                <tr key={i} data-testid="vd-row">
+                  <td className="py-1 pr-3"><Input data-testid="vd-qty" type="number" value={r.qty} onChange={(e) => setVD(i, "qty", e.target.value)} className="rounded-sm w-32 num" /></td>
+                  <td className="py-1 pr-3"><Input data-testid="vd-pct" type="number" step="0.5" value={r.pct} onChange={(e) => setVD(i, "pct", e.target.value)} className="rounded-sm w-28 num" /></td>
+                  <td className="py-1 text-right"><button data-testid="vd-remove" onClick={() => removeVD(i)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button></td>
+                </tr>
+              ))}
+              {vd.length === 0 && <tr><td colSpan={3} className="py-4 text-center text-slate-400 text-xs">No tiers — add one to enable volume discounts.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
