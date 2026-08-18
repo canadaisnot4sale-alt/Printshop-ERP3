@@ -114,6 +114,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v34 Paper Printing products: alphabetical + default
+- GET on all register_crud lists now sorts alphabetically by name (when present). Paper Printing product dropdown + Products tab are alphabetical.
+- Product model gained `is_default`; create/update enforce a SINGLE default (unset others). Products tab has a "Default" switch + "Default" badge column. Quote setup pre-selects the default product (falls back to first alphabetically). Verified via API: alpha order Business Card→Flyer→Postcard; setting one default leaves exactly one.
+
 ## Implemented (2026-06) — v33 Per-module volume discounts (editable qty + %)
 - Volume discounts are now **per module** via `Settings.volume_discounts_by_module` {module: [{qty,pct}]}. A module with no tiers falls back to `default`. Editable in Settings → Volume Discounts with a module selector (vd-module-select) + "Copy Default tiers" helper. Applies to Retail & Wholesale.
 - Backend: each /api/calc/* handler calls set_calc_module('<module>'); scrub() reads the module via a **contextvars.ContextVar** (`_CURRENT_MODULE_CV`) — fixes the concurrency tier-bleed risk flagged in iteration 30/31 (no global mutation). Module keys: paper, booklet, large-format, stickers, dtf, embroidery, laser, direct-print, channel-letters, sublimation, roll-stickers.

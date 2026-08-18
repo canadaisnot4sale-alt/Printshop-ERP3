@@ -155,6 +155,7 @@ class Product(BaseModel):
     bleed_w: Optional[float] = None
     bleed_h: Optional[float] = None
     gutter: float = 0.0
+    is_default: bool = False
     retail_markup_pct: Optional[float] = None
     wholesale_markup_pct: Optional[float] = None
     notes: str = ""
@@ -743,6 +744,8 @@ def register_crud(path, model, collection, transform=None):
     async def list_items(user=Depends(get_current_user)):
         items = await coll.find().sort("created_at", -1).to_list(1000)
         items = [clean(i) for i in items]
+        if items and "name" in items[0]:
+            items.sort(key=lambda x: str(x.get("name", "")).lower())
         return items
 
     @api_router.post(f"/{path}")
@@ -753,6 +756,8 @@ def register_crud(path, model, collection, transform=None):
         doc["created_at"] = now_iso()
         res = await coll.insert_one(doc)
         doc["_id"] = res.inserted_id
+        if doc.get("is_default"):
+            await coll.update_many({"_id": {"$ne": res.inserted_id}}, {"$set": {"is_default": False}})
         return clean(doc)
 
     @api_router.put(f"/{path}/{{item_id}}")
@@ -761,6 +766,8 @@ def register_crud(path, model, collection, transform=None):
         if transform:
             transform(doc)
         await coll.update_one({"_id": ObjectId(item_id)}, {"$set": doc})
+        if doc.get("is_default"):
+            await coll.update_many({"_id": {"$ne": ObjectId(item_id)}}, {"$set": {"is_default": False}})
         updated = await coll.find_one({"_id": ObjectId(item_id)})
         return clean(updated)
 

@@ -28,12 +28,14 @@ const prodFields = [
   { name: "gutter", label: "Gutter (in)", type: "number", default: 0 },
   { name: "retail_markup_pct", label: "Retail Markup % (override)", type: "number" },
   { name: "wholesale_markup_pct", label: "Wholesale Markup % (override)", type: "number" },
+  { name: "is_default", label: "Default product (pre-selected in quotes)", type: "switch", full: true },
 ];
 const prodCols = [
   { name: "name", label: "Product" },
   { name: "finished", label: "Finished", mono: true, render: (i) => `${num(i.finished_w)} × ${num(i.finished_h)}"` },
   { name: "bleed", label: "With Bleed", mono: true, render: (i) => `${num(i.bleed_w || i.finished_w)} × ${num(i.bleed_h || i.finished_h)}"` },
   { name: "gutter", label: "Gutter", mono: true, render: (i) => `${num(i.gutter || 0)}"` },
+  { name: "is_default", label: "Default", render: (i) => (i.is_default ? <span className="text-[10px] font-mono uppercase bg-amber-100 text-amber-700 px-2 py-0.5 rounded">Default</span> : "—") },
 ];
 
 function Metric({ icon: Icon, label, value, accent }) {
@@ -61,7 +63,11 @@ export default function PaperPrinting() {
   const [loading, setLoading] = useState(false);
 
   const [paperMats, setPaperMats] = useState([]);
-  const loadProducts = () => api.get("/products").then((r) => { setProducts(r.data); if (!productId && r.data[0]) setProductId(r.data[0].id); });
+  const loadProducts = () => api.get("/products").then((r) => {
+    const list = [...r.data].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    setProducts(list);
+    if (!productId && list.length) setProductId((list.find((p) => p.is_default) || list[0]).id);
+  });
   const loadPaperMats = () => api.get("/materials").then((r) => setPaperMats((r.data || []).filter((m) => (m.modules || []).includes("paper")))).catch(() => {});
   useEffect(() => { loadProducts(); if (isAdmin) loadPaperMats(); /* eslint-disable-next-line */ }, []);
   // Default Sheet Size to the size of this module's DEFAULT paper material (unless re-quoting)
