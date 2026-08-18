@@ -123,6 +123,7 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Review screen** (Purchases import dialog): "Unit ×" field, per-line "→ Stock" and "→ $/unit" converted preview, green "matches: <material>" hint when auto-matched by code. Confirm-once workflow; material_id + unit_multiplier sent to backend.
 - **Description alias match**: Material gains supplier_description (paste the exact vendor invoice description in the Materials form). Import matches by material_id → code → supplier_description → name. On match it remembers the code/description on the material. Verified via curl: material with only supplier_description (no code) matched an invoice line → +400 sheets, $0.254.
 - **Duplicate invoice guard**: create_purchase rejects (HTTP 409) a purchase whose supplier company + invoice_number already exist, with a clear message. Prevents double-importing the same PDF (and double-counting inventory).
+- **Inventory reversal on delete**: DELETE /purchases/{pid} now reverses the stock the invoice added (only when update_inventory was true) — re-matches each line (material_id→code→supplier_description→name) and subtracts quantity×unit_multiplier. Returns `reversed[]`; frontend confirms and toasts how many materials were reversed. Verified via curl (100→500 on import, back to 100 on delete).
 - Verified end-to-end via curl; frontend compiles. NOTE: full Purchases UI flow not yet run through testing_agent.
 
 

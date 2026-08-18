@@ -121,9 +121,10 @@ export default function Purchases() {
   };
 
   const remove = async (id) => {
-    if (!window.confirm("Delete this purchase record?")) return;
-    await api.delete(`/purchases/${id}`);
-    toast.success("Deleted");
+    if (!window.confirm("Delete this purchase record? Any stock this invoice added to inventory will be reversed.")) return;
+    const { data } = await api.delete(`/purchases/${id}`);
+    const n = (data?.reversed || []).length;
+    toast.success(n ? `Deleted — reversed inventory on ${n} material(s)` : "Deleted");
     load();
   };
 

@@ -1746,8 +1746,34 @@ async def export_purchases_csv(supplier: Optional[str] = None, date_from: Option
 
 @api_router.delete("/purchases/{pid}")
 async def delete_purchase(pid: str, user=Depends(require_admin)):
+    doc = await db.purchases.find_one({"_id": ObjectId(pid)})
+    reversed_items = []
+    if doc and doc.get("update_inventory"):
+        for li in doc.get("line_items", []):
+            if not li.get("import_material"):
+                continue
+            mult = li.get("unit_multiplier") or 1.0
+            qty_units = round((li.get("quantity") or 0.0) * mult, 2)
+            if not qty_units:
+                continue
+            m = None
+            if li.get("material_id"):
+                try:
+                    m = await db.materials.find_one({"_id": ObjectId(li["material_id"])})
+                except Exception:
+                    m = None
+            if not m and li.get("code"):
+                m = await db.materials.find_one({"code": {"$regex": f"^{re.escape(li['code'])}$", "$options": "i"}})
+            if not m and li.get("description"):
+                m = await db.materials.find_one({"supplier_description": {"$regex": f"^{re.escape(li['description'].strip())}$", "$options": "i"}})
+            if not m and li.get("name"):
+                m = await db.materials.find_one({"name": li["name"]})
+            if m:
+                new_stock = round((m.get("stock_qty") or 0.0) - qty_units, 2)
+                await db.materials.update_one({"_id": m["_id"]}, {"$set": {"stock_qty": new_stock}})
+                reversed_items.append({"name": m.get("name"), "removed": qty_units, "new_stock": new_stock})
     await db.purchases.delete_one({"_id": ObjectId(pid)})
-    return {"ok": True}
+    return {"ok": True, "reversed": reversed_items}
 
 # ---------------- Profitability: true manufacturing cost + margin ----------------
 class ProfitabilityIn(BaseModel):
