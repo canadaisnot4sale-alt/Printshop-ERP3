@@ -80,6 +80,8 @@ export default function ProfitabilityPanel({ r }) {
       {prof && (
         <div className="text-sm">
           <Row label="Base production cost" value={prof.base_cost} />
+          {r?.lamination_cost > 0 && <Row label="· Lamination (cost)" value={r.lamination_cost} sub="incl. in base cost" />}
+          {r?.foil_cost > 0 && <Row label="· Hot Foil (cost)" value={r.foil_cost} sub="incl. in base cost" />}
           <Row label={`Labor · ${prof.production_hours}h × ${money(prof.shop_rate)}/h`} value={prof.labor_cost}
             sub={`overhead ${money(prof.business_hourly)}/h${prof.machine_hourly ? ` + machine ${money(prof.machine_hourly)}/h` : ""}`} />
           <div className="flex items-baseline justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">

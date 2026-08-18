@@ -495,6 +495,7 @@ WHOLESALE_FIELDS = {
 # Fields a volume discount is applied to (retail + wholesale, totals + per-unit)
 DISCOUNTABLE_FIELDS = (RETAIL_FIELDS | WHOLESALE_FIELDS | {
     "retail_unit_4_0", "retail_unit_4_4", "wholesale_unit_4_0", "wholesale_unit_4_4",
+    "lamination_retail", "foil_retail", "lamination_wholesale", "foil_wholesale",
 })
 # Current volume-discount tiers map {module: [tiers]} + which module the current calc is for.
 # _CURRENT_MODULE_CV is a ContextVar so concurrent async requests never bleed tiers into each other.
@@ -641,6 +642,8 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
             lam = round(sheets * settings["lamination_per_sheet"], 2)
         else:
             lam = 0.0
+        lam_cost = round(sheets * lam_ps, 2)
+        foil_cost = round(sheets * foil_ps, 2)
         base_40 = material + cost_40 + lam                      # true production cost
         base_44 = material + cost_44 + lam
         paper_retail = round(sheets * retail_ps, 2)             # paper sold at its own retail/override
@@ -654,6 +657,9 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
             "qty": q, "sheets": sheets, "n_up": n_up,
             "material_cost": material, "cost_4_0": cost_40, "cost_4_4": cost_44,
             "lamination": lam,
+            "lamination_cost": lam_cost, "foil_cost": foil_cost,
+            "lamination_retail": markup_price(lam_cost, retail_pct), "foil_retail": markup_price(foil_cost, retail_pct),
+            "lamination_wholesale": markup_price(lam_cost, whole_pct), "foil_wholesale": markup_price(foil_cost, whole_pct),
             "base_cost_4_0": round(base_40, 2), "base_cost_4_4": round(base_44, 2),
             "unit_cost_4_0": round(base_40 / q, 4) if q else 0,
             "unit_cost_4_4": round(base_44 / q, 4) if q else 0,

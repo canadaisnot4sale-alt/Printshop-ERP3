@@ -62,6 +62,8 @@ export function PricingPanel({ r, className = "" }) {
         {prod != null && <PriceLine label="Production Cost" value={prod} tone="muted" testid="price-production" />}
         {retail != null && <PriceLine label="Retail Price" value={retail} unit={r.unit_price} tone="retail" testid="price-retail" />}
         {wholesale != null && <PriceLine label="Wholesale Price" value={wholesale} unit={r.wholesale_unit} testid="price-wholesale" />}
+        {(() => { const v = r.lamination_retail ?? r.lamination_wholesale; return v > 0 ? <PriceLine label="· Lamination" value={v} unit={r.qty ? v / r.qty : undefined} tone="muted" testid="price-lamination" /> : null; })()}
+        {(() => { const v = r.foil_retail ?? r.foil_wholesale; return v > 0 ? <PriceLine label="· Hot Foil" value={v} unit={r.qty ? v / r.qty : undefined} tone="muted" testid="price-foil" /> : null; })()}
         {order != null && (
           <div className="flex items-baseline justify-between bg-[#2495D3] text-white px-4 py-3">
             <span className="text-[10px] font-mono uppercase tracking-widest">Order Total</span>

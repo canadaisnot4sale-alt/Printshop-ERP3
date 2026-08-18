@@ -114,6 +114,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v39 Laminate & Hot Foil cost breakdown (separate lines)
+- paper_quote now returns per-row lamination_cost/foil_cost (raw) + lamination_retail/foil_retail + lamination_wholesale/foil_wholesale (retail/wholesale marked-up; added to DISCOUNTABLE_FIELDS so volume discount applies consistently).
+- UI shows them separately in BOTH the price card (PricingPanel: "· Lamination" / "· Hot Foil" at selling price + per-pc) and the Profitability panel (cost lines, admin). Per-unit computed frontend by /qty. Role-scrubbed (client no cost/wholesale, reseller no retail).
+
 ## Implemented (2026-06) — v38 Foil sides selector + default 2 sides
 - Hot Foil now has the SAME 1/2-sides selector as Laminate (backend foil_sides in PaperCalcIn + foil_spec + addon-usage). Default for BOTH laminate and foil = **2 sides**. Verified laminate 2 sides = 2× (Velvete 1000pc: 1-side $41.25, 2-side $82.50).
 

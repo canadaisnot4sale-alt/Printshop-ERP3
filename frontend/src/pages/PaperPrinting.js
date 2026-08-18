@@ -232,6 +232,13 @@ export default function PaperPrinting() {
                           wholesale_total: focusRow?.[`wholesale_price_${side}`],
                           unit_price: focusRow?.[`retail_unit_${side}`],
                           wholesale_unit: focusRow?.[`wholesale_unit_${side}`],
+                          qty: focusRow?.qty,
+                          lamination_cost: focusRow?.lamination_cost,
+                          foil_cost: focusRow?.foil_cost,
+                          lamination_retail: focusRow?.lamination_retail,
+                          foil_retail: focusRow?.foil_retail,
+                          lamination_wholesale: focusRow?.lamination_wholesale,
+                          foil_wholesale: focusRow?.foil_wholesale,
                         }} />
                         {focusRow?.volume_discount_pct > 0 && (
                           <div className="mt-2 text-[11px] font-mono uppercase tracking-widest text-emerald-600" data-testid="paper-volume-discount">Volume discount · {focusRow.volume_discount_pct}% off @ {focusQty} pc</div>
