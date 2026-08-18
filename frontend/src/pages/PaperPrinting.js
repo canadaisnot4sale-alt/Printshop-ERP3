@@ -316,10 +316,20 @@ export default function PaperPrinting() {
                               </div>
                             </div>
                             <div className="text-[11px] font-mono text-slate-400 mt-0.5">{r.quote.n_up}-up · {row?.sheets} sheets</div>
-                            <div className="num text-xl font-black text-[#2495D3] mt-2">{money(retailOf(row) ?? wholesaleOf(row))}</div>
-                            <div className="text-[11px] text-slate-500 num">
+                            {(() => {
+                              const isRetail = retailOf(row) != null;
+                              const base = isRetail ? retailOf(row) : wholesaleOf(row);
+                              const taxed = base * (isRetail ? retailTaxF : wsTaxF);
+                              return (
+                                <div className="mt-2">
+                                  <div className="num text-xl font-black text-[#2495D3]">{money(taxed)}</div>
+                                  <div className="text-[10px] font-mono uppercase tracking-wide text-slate-400 -mt-0.5">incl. tax</div>
+                                </div>
+                              );
+                            })()}
+                            <div className="text-[11px] text-slate-500 num mt-1">
                               {retailOf(row) != null && `${money(row[`retail_unit_${side}`])}/unit`}
-                              {wholesaleOf(row) != null && retailOf(row) != null && ` · WS ${money(wholesaleOf(row))}`}
+                              {wholesaleOf(row) != null && retailOf(row) != null && ` · WS ${money(wholesaleOf(row) * wsTaxF)}`}
                               {wholesaleOf(row) != null && retailOf(row) == null && `${money(row[`wholesale_unit_${side}`])}/unit`}
                             </div>
                           </button>

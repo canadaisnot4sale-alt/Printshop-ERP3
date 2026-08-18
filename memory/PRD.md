@@ -117,6 +117,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v43.2 Compare Papers: tax-included blue price + per-paper native size
+- **Tax-included blue price**: each Compare Papers card's big blue number now shows the price WITH tax (Retail incl. GST+PST via `retailTaxF`; reseller/WS = incl. GST only via `wsTaxF`) + an "incl. tax" label; WS sub-line also tax-included. Matches the "TOTAL INCL. TAX" panel.
+- **Per-paper native size**: `calc_paper` now quotes each paper at ITS OWN sheet size (material `size` field → fallback derived from the paper name via `_extract_size` → fallback `body.sheet_key`). Added `_parse_dims()`; `paper_quote` parses non-preset sheet keys. Result: Copy Paper 8.5x11 → 8-up·13 sheets, Bond 8.5x14 → 10-up, 12x18 → 20-up — cards no longer all change together when one is clicked. Verified via curl + screenshot. User-confirmed.
+
 ## Fix (2026-06) — v43.1 PDF import: paper category default + size extraction
 - **Category default fixed**: Alfa Paper supplier rule + trained supplier doc now default new materials to `paper` (was `sheet`); added `paper` to the import dialog's category dropdown. New PDF-imported paper now behaves identically to manually-registered paper (printed 1/2 sides options).
 - **Size extraction fixed**: `_extract_size()` regex now tolerates inch marks (`18"x12"` → `18x12`); returned by `/purchases/parse` per line and shown as an editable **Size** column in the review table (data-testid `draft-line-size-{i}`). `PurchaseLine.size` stored + used on create (fallback to regex). Verified with real Alfa invoice #176837. User-confirmed working.

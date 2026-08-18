@@ -451,6 +451,10 @@ SHEET_SIZES = {
     "12x18": (12, 18), "13x19": (13, 19),
 }
 BIG_SHEETS = {"4x8": (48, 96), "5x10": (60, 120)}
+
+def _parse_dims(s):
+    m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)", str(s or ""))
+    return (float(m.group(1)), float(m.group(2))) if m else None
 CHANNEL_HEIGHTS = [6, 12, 16, 18, 22, 24, 36, 48]
 STANDARD_QTYS = [25, 50, 100, 250, 500, 1000, 2500, 5000]
 
@@ -618,7 +622,7 @@ def grid_layout(SW, SH, w, h, gutter=0.0):
     return best
 
 def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19", lam_spec=None, foil_spec=None, round_corners=False):
-    sw, sh = SHEET_SIZES.get(sheet_key, (13, 19))
+    sw, sh = SHEET_SIZES.get(sheet_key) or _parse_dims(sheet_key) or (13, 19)
     pw = product.get("bleed_w") or product["finished_w"]
     ph = product.get("bleed_h") or product["finished_h"]
     gutter = product.get("gutter") or 0.0
@@ -2244,7 +2248,13 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
                 foil_spec["wholesale_per_ft"] = fd["lam_wholesale_per_sheet"] / 3.0
     results = []
     for st in stocks:
-        quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key, lam_spec, foil_spec, body.round_corners)
+        # Each paper is compared at ITS OWN sheet size when known (so 8.5x11 copy paper
+        # shows 8-up regardless of the globally selected layout); falls back to body.sheet_key.
+        own_size = (raw.get(st["id"], {}) or {}).get("size") or st.get("size")
+        if not (own_size and _parse_dims(own_size)):
+            own_size = _extract_size(st.get("name") or "")   # fallback: derive from the paper name
+        eff_key = own_size if (own_size and _parse_dims(own_size)) else body.sheet_key
+        quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, eff_key, lam_spec, foil_spec, body.round_corners)
         results.append({"stock": st, "quote": quote})
     # per-sheet price helpers were only needed for pricing; drop before returning (avoid role leakage)
     for st in stocks:
