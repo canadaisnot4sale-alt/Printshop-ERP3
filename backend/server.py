@@ -433,6 +433,16 @@ class Settings(BaseModel):
     volume_discounts: List[dict] = Field(default_factory=lambda: [dict(t) for t in DEFAULT_VOLUME_DISCOUNTS])
     # Per-module volume discounts {module: [{qty,pct}]}. A module with no entry falls back to "default".
     volume_discounts_by_module: dict = Field(default_factory=lambda: {"default": [dict(t) for t in DEFAULT_VOLUME_DISCOUNTS]})
+    # Rush pricing surcharges (applied on top of Retail & Wholesale totals; display-only)
+    rush_same_day_pct: float = 15.0
+    rush_next_day_pct: float = 10.0
+    # Round corners (stack-based). Paper: many pieces per stack. Substrate: usually 1 piece per stack.
+    rc_paper_pieces_per_stack: float = 100.0
+    rc_paper_per_stack: float = 8.0
+    rc_paper_min: float = 0.0
+    rc_substrate_pieces_per_stack: float = 1.0
+    rc_substrate_per_stack: float = 2.0
+    rc_substrate_min: float = 0.0
 
 SHEET_SIZES = {
     "8.5x11": (8.5, 11), "8.5x14": (8.5, 14), "11x17": (11, 17),
@@ -499,6 +509,7 @@ WHOLESALE_FIELDS = {
 DISCOUNTABLE_FIELDS = (RETAIL_FIELDS | WHOLESALE_FIELDS | {
     "retail_unit_4_0", "retail_unit_4_4", "wholesale_unit_4_0", "wholesale_unit_4_4",
     "lamination_retail", "foil_retail", "lamination_wholesale", "foil_wholesale",
+    "round_corner_retail", "round_corner_wholesale",
 })
 # Current volume-discount tiers map {module: [tiers]} + which module the current calc is for.
 # _CURRENT_MODULE_CV is a ContextVar so concurrent async requests never bleed tiers into each other.
@@ -604,7 +615,7 @@ def grid_layout(SW, SH, w, h, gutter=0.0):
             best = {"n": n, "cols": cols, "rows": rows, "rotated": rot, "pw": pw, "ph": ph, "placements": placements}
     return best
 
-def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19", lam_spec=None, foil_spec=None):
+def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19", lam_spec=None, foil_spec=None, round_corners=False):
     sw, sh = SHEET_SIZES.get(sheet_key, (13, 19))
     pw = product.get("bleed_w") or product["finished_w"]
     ph = product.get("bleed_h") or product["finished_h"]
@@ -648,9 +659,14 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
         lam_cost = round(sheets * lam_ps, 2)
         foil_cost = round(sheets * foil_ps, 2)
         gen_lam = round(sheets * settings["lamination_per_sheet"], 2) if (laminate and not (lam_spec or foil_spec)) else 0.0
+        rc_cost = 0.0
+        if round_corners:
+            pps = settings.get("rc_paper_pieces_per_stack") or 1
+            stacks = math.ceil(q / pps) if pps else 0
+            rc_cost = max(settings.get("rc_paper_min") or 0.0, round(stacks * (settings.get("rc_paper_per_stack") or 0.0), 2))
         lam = round(lam_cost + foil_cost + gen_lam, 2)          # total add-on production cost
-        base_40 = material + cost_40 + lam                      # true production cost
-        base_44 = material + cost_44 + lam
+        base_40 = material + cost_40 + lam + rc_cost            # true production cost
+        base_44 = material + cost_44 + lam + rc_cost
         paper_retail = round(sheets * retail_ps, 2)             # paper sold at its own retail/override
         paper_whole = round(sheets * whole_ps, 2)
         # Add-on selling: honor per-sheet override, else markup on cost (markup is linear so parts sum).
@@ -660,11 +676,13 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
         foil_ws = _addon_sell(foil_spec, foil_cost, "wholesale_per_ft", whole_pct, sheets)
         gen_ret = markup_price(gen_lam, retail_pct)
         gen_ws = markup_price(gen_lam, whole_pct)
+        rc_ret = markup_price(rc_cost, retail_pct)
+        rc_ws = markup_price(rc_cost, whole_pct)
         # Paper priced at retail/wholesale; printing (click) marked up; add-ons priced (override or markup) on top.
-        cust_40 = round(paper_retail + markup_price(cost_40, retail_pct) + lam_ret + foil_ret + gen_ret, 2)
-        cust_44 = round(paper_retail + markup_price(cost_44, retail_pct) + lam_ret + foil_ret + gen_ret, 2)
-        ws_40 = round(paper_whole + markup_price(cost_40, whole_pct) + lam_ws + foil_ws + gen_ws, 2)
-        ws_44 = round(paper_whole + markup_price(cost_44, whole_pct) + lam_ws + foil_ws + gen_ws, 2)
+        cust_40 = round(paper_retail + markup_price(cost_40, retail_pct) + lam_ret + foil_ret + gen_ret + rc_ret, 2)
+        cust_44 = round(paper_retail + markup_price(cost_44, retail_pct) + lam_ret + foil_ret + gen_ret + rc_ret, 2)
+        ws_40 = round(paper_whole + markup_price(cost_40, whole_pct) + lam_ws + foil_ws + gen_ws + rc_ws, 2)
+        ws_44 = round(paper_whole + markup_price(cost_44, whole_pct) + lam_ws + foil_ws + gen_ws + rc_ws, 2)
         rows.append({
             "qty": q, "sheets": sheets, "n_up": n_up,
             "material_cost": material, "cost_4_0": cost_40, "cost_4_4": cost_44,
@@ -672,6 +690,7 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
             "lamination_cost": lam_cost, "foil_cost": foil_cost,
             "lamination_retail": lam_ret, "foil_retail": foil_ret,
             "lamination_wholesale": lam_ws, "foil_wholesale": foil_ws,
+            "round_corner_cost": rc_cost, "round_corner_retail": rc_ret, "round_corner_wholesale": rc_ws,
             "base_cost_4_0": round(base_40, 2), "base_cost_4_4": round(base_44, 2),
             "unit_cost_4_0": round(base_40 / q, 4) if q else 0,
             "unit_cost_4_4": round(base_44 / q, 4) if q else 0,
@@ -2070,6 +2089,7 @@ class PaperCalcIn(BaseModel):
     laminate_sides: int = 1
     foil_id: Optional[str] = None
     foil_sides: int = 1
+    round_corners: bool = False
     stock_ids: Optional[List[str]] = None
 
 @api_router.get("/paper-addons")
@@ -2127,7 +2147,7 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
                 foil_spec["wholesale_per_ft"] = fd["lam_wholesale_per_sheet"] / 3.0
     results = []
     for st in stocks:
-        quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key, lam_spec, foil_spec)
+        quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key, lam_spec, foil_spec, body.round_corners)
         results.append({"stock": st, "quote": quote})
     # per-sheet price helpers were only needed for pricing; drop before returning (avoid role leakage)
     for st in stocks:
@@ -2421,6 +2441,7 @@ class DirectPrintCalcIn(BaseModel):
     cnc_cut_length_in: float = 0.0
     machine_id: Optional[str] = None
     ink_coverage_pct: Optional[float] = None
+    round_corners: bool = False
 
 @api_router.post("/calc/directprint")
 async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_user)):
@@ -2447,12 +2468,20 @@ async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_use
         ink_ml, ink_cost = (0.0, 0.0)
         if machine:
             ink_ml, ink_cost = compute_ink(clean(machine), print_area, body.ink_coverage_pct)
-        base = sheet_cost + print_cost + cnc_cost + ink_cost
+        rc_cost = 0.0
+        if body.round_corners:
+            pps = s.get("rc_substrate_pieces_per_stack") or 1
+            stacks = math.ceil(total_qty / pps) if pps else 0
+            rc_cost = max(s.get("rc_substrate_min") or 0.0, round(stacks * (s.get("rc_substrate_per_stack") or 0.0), 2))
+        base = sheet_cost + print_cost + cnc_cost + ink_cost + rc_cost
         results.append(scrub({
             "material": m, "sheet_size": body.sheet_size, "sheets": sheets, "quantity": total_qty,
             "print_sqft": round(print_area, 2),
             "sheet_cost": round(sheet_cost, 2), "print_cost": round(print_cost, 2),
             "cnc_cost": round(cnc_cost, 2), "ink_cost": round(ink_cost, 2), "ink_ml": round(ink_ml, 2),
+            "round_corner_cost": round(rc_cost, 2),
+            "round_corner_retail": markup_price(rc_cost, s["retail_markup_pct"]),
+            "round_corner_wholesale": markup_price(rc_cost, s["wholesale_markup_pct"]),
             "machine_name": machine.get("name") if machine else None, "base_cost": round(base, 2),
             "retail_total": markup_price(base, s["retail_markup_pct"]),
             "wholesale_total": markup_price(base, s["wholesale_markup_pct"]),

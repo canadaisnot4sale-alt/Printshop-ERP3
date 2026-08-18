@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Save, Plus, Trash2 } from "lucide-react";
+import { resetRushRatesCache } from "@/components/Metric";
 
 const GROUPS = [
   {
@@ -21,6 +22,29 @@ const GROUPS = [
       { name: "click_4_0", label: "4/0 Click / sheet (CAD)" },
       { name: "click_4_4", label: "4/4 Click / sheet (CAD)" },
       { name: "lamination_per_sheet", label: "Lamination / sheet (CAD)" },
+    ],
+  },
+  {
+    title: "Rush Pricing (surcharge %)",
+    fields: [
+      { name: "rush_same_day_pct", label: "Same day +%" },
+      { name: "rush_next_day_pct", label: "Next day +%" },
+    ],
+  },
+  {
+    title: "Round Corners — Paper (per stack)",
+    fields: [
+      { name: "rc_paper_pieces_per_stack", label: "Pieces per stack" },
+      { name: "rc_paper_per_stack", label: "Cost per stack (CAD)" },
+      { name: "rc_paper_min", label: "Minimum charge (CAD)" },
+    ],
+  },
+  {
+    title: "Round Corners — Substrate",
+    fields: [
+      { name: "rc_substrate_pieces_per_stack", label: "Pieces per stack" },
+      { name: "rc_substrate_per_stack", label: "Cost per stack/piece (CAD)" },
+      { name: "rc_substrate_min", label: "Minimum charge (CAD)" },
     ],
   },
   {
@@ -148,6 +172,7 @@ export default function Settings() {
       }
       const { data } = await api.put("/settings", payload);
       setS(data);
+      resetRushRatesCache();
       toast.success("Settings saved — all quotes now use these values");
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };

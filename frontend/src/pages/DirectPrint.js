@@ -50,6 +50,7 @@ export default function DirectPrint() {
   const [cncLen, setCncLen] = useState(0);
   const [machineId, setMachineId] = useState("none");
   const [inkCoverage, setInkCoverage] = useState(100);
+  const [roundCorners, setRoundCorners] = useState(false);
   const [res, setRes] = useState(null);
   const [sel, setSel] = useState(null);
 
@@ -63,6 +64,7 @@ export default function DirectPrint() {
         sheet_size: sheetSize, cnc, cnc_cut_length_in: +cncLen,
         sizes: sizes.map((s) => ({ label: s.label, w: +s.w, h: +s.h, qty: +s.qty })),
         machine_id: machineId !== "none" ? machineId : null, ink_coverage_pct: inkCoverage,
+        round_corners: roundCorners,
       };
       const { data } = await api.post("/calc/directprint", body);
       if (!data.results.length) toast.info("Add sheet materials first.");
@@ -103,6 +105,10 @@ export default function DirectPrint() {
                 <div className="flex items-center justify-between pt-6">
                   <Label className="text-xs">CNC Cut</Label>
                   <Switch data-testid="dp-cnc" checked={cnc} onCheckedChange={setCnc} />
+                </div>
+                <div className="flex items-center justify-between pt-6">
+                  <Label className="text-xs">Round Corners</Label>
+                  <Switch data-testid="dp-round-corners" checked={roundCorners} onCheckedChange={setRoundCorners} />
                 </div>
                 {cnc && (
                   <div className="col-span-2"><Label className="text-xs">CNC cut length (in)</Label><Input data-testid="dp-cnc-len" type="number" value={cncLen} onChange={(e) => setCncLen(e.target.value)} className="rounded-lg mt-1 num" /></div>

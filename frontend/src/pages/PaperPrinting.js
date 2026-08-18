@@ -61,6 +61,7 @@ export default function PaperPrinting() {
   const [hotFoil, setHotFoil] = useState(false);
   const [foilId, setFoilId] = useState("");
   const [foilSides, setFoilSides] = useState(2);
+  const [roundCorners, setRoundCorners] = useState(false);
   const [lamOptions, setLamOptions] = useState([]);
   const [foilOptions, setFoilOptions] = useState([]);
   const [side, setSide] = useState("4_0");
@@ -99,7 +100,7 @@ export default function PaperPrinting() {
     if (!productId) return toast.error("Select a product");
     setLoading(true);
     try {
-      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null, foil_sides: foilSides });
+      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null, foil_sides: foilSides, round_corners: roundCorners });
       setResult(data);
       setSelectedStock((data.results || []).find((r) => r.stock.is_default) || data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
@@ -212,6 +213,13 @@ export default function PaperPrinting() {
                   </div>
                 )}
               </div>
+              <div className="py-2 mb-4 border-t border-slate-100 pt-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Round Corners</Label>
+                  <Switch data-testid="roundcorners-switch" checked={roundCorners} onCheckedChange={setRoundCorners} />
+                </div>
+                {roundCorners && <p className="text-[11px] text-slate-400 mt-1">Charged per stack (configure pieces/stack & price in Settings → Round Corners).</p>}
+              </div>
               <Button data-testid="calc-paper-button" onClick={calc} disabled={loading} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
                 <Calculator size={16} className="mr-2" />{loading ? "Calculating…" : "Generate Quote"}
               </Button>
@@ -257,6 +265,8 @@ export default function PaperPrinting() {
                           foil_retail: focusRow?.foil_retail,
                           lamination_wholesale: focusRow?.lamination_wholesale,
                           foil_wholesale: focusRow?.foil_wholesale,
+                          round_corner_retail: focusRow?.round_corner_retail,
+                          round_corner_wholesale: focusRow?.round_corner_wholesale,
                         }} />
                         {focusRow?.volume_discount_pct > 0 && (
                           <div className="mt-2 text-[11px] font-mono uppercase tracking-widest text-emerald-600" data-testid="paper-volume-discount">Volume discount · {focusRow.volume_discount_pct}% off @ {focusQty} pc</div>
