@@ -107,6 +107,7 @@ export default function Purchases() {
           import_material: !!li.import,
           material_id: li.material_id || "",
           size: li.size || "",
+          category: li.category || "",
           unit_multiplier: Number(draft.supplier_unit_multiplier || 1),
         })),
       };
@@ -318,6 +319,7 @@ export default function Purchases() {
                       <th className="text-center px-2 py-2">Import</th>
                       <th className="text-left px-2 py-2">Name</th>
                       <th className="text-left px-2 py-2">Code</th>
+                      <th className="text-left px-2 py-2">Category</th>
                       <th className="text-left px-2 py-2">Size</th>
                       <th className="text-right px-2 py-2">Qty</th>
                       <th className="text-right px-2 py-2">Unit price</th>
@@ -328,8 +330,10 @@ export default function Purchases() {
                   <tbody>
                     {draft.line_items.map((li, i) => {
                       const mult = Number(draft.supplier_unit_multiplier || 1);
-                      const stockUnits = (Number(li.quantity) || 0) * mult;
-                      const perUnit = stockUnits ? (Number(li.line_total) || 0) / stockUnits : (mult ? (Number(li.unit_price) || 0) / mult : 0);
+                      const stockUnits = li.converted_qty != null ? Number(li.converted_qty) : (Number(li.quantity) || 0) * mult;
+                      const perUnit = li.converted_unit_cost != null ? Number(li.converted_unit_cost)
+                        : (stockUnits ? (Number(li.line_total) || 0) / stockUnits : (mult ? (Number(li.unit_price) || 0) / mult : 0));
+                      const unitLabel = li.stock_unit_label || "";
                       return (
                       <tr key={i} data-testid="draft-line-row" className="border-b border-slate-100">
                         <td className="px-2 py-1.5 text-center">
@@ -340,11 +344,17 @@ export default function Purchases() {
                           {li.matched_name && <div className="text-[10px] text-emerald-600 mt-0.5" data-testid={`draft-line-matched-${i}`}>↳ matches: {li.matched_name}</div>}
                         </td>
                         <td className="px-2 py-1.5"><Input value={li.code || ""} onChange={(e) => setLine(i, "code", e.target.value)} className="rounded h-7 text-xs w-28" /></td>
-                        <td className="px-2 py-1.5"><Input data-testid={`draft-line-size-${i}`} value={li.size || ""} onChange={(e) => setLine(i, "size", e.target.value)} placeholder="12x18" className="rounded h-7 text-xs w-16" /></td>
+                        <td className="px-2 py-1.5">
+                          <select data-testid={`draft-line-category-${i}`} value={li.category || "other"} onChange={(e) => setLine(i, "category", e.target.value)}
+                            className="rounded h-7 text-xs border border-slate-200 bg-white px-1 focus:outline-none focus:ring-1 focus:ring-[#2495D3]">
+                            {["roll", "substrate", "paper", "sheet", "ink", "laminate", "other"].map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-2 py-1.5"><Input data-testid={`draft-line-size-${i}`} value={li.size || ""} onChange={(e) => setLine(i, "size", e.target.value)} placeholder="12x18" className="rounded h-7 text-xs w-20" /></td>
                         <td className="px-2 py-1.5"><Input type="number" value={li.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} className="rounded h-7 text-xs w-16 text-right num" /></td>
                         <td className="px-2 py-1.5"><Input type="number" value={li.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} className="rounded h-7 text-xs w-20 text-right num" /></td>
-                        <td className="px-2 py-1.5 text-right num text-slate-700 font-semibold" data-testid={`draft-line-stock-${i}`}>{stockUnits.toLocaleString()}</td>
-                        <td className="px-2 py-1.5 text-right num text-[#2495D3]" data-testid={`draft-line-percost-${i}`}>{money(perUnit)}</td>
+                        <td className="px-2 py-1.5 text-right num text-slate-700 font-semibold" data-testid={`draft-line-stock-${i}`}>{stockUnits.toLocaleString()}{unitLabel ? ` ${unitLabel}` : ""}</td>
+                        <td className="px-2 py-1.5 text-right num text-[#2495D3]" data-testid={`draft-line-percost-${i}`}>{money(perUnit)}{unitLabel === "ft²" ? "/ft²" : ""}</td>
                       </tr>
                       );
                     })}
@@ -363,6 +373,7 @@ export default function Purchases() {
                 <Switch data-testid="draft-update-inventory" checked={!!draft.update_inventory} onCheckedChange={(v) => setD("update_inventory", v)} />
                 <Label className="text-xs">Update materials & inventory (match by code, add qty to stock, create new if missing)</Label>
               </div>
+              <p className="text-[11px] text-slate-400 -mt-1">Rolls (vinyl/banner) convert YD/FT → ft² of stock; substrates (ACM/coroplast/acrylic) store sheets. Stock & $/unit are recalculated on save from each line's category.</p>
             </div>
           )}
 

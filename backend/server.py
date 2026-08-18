@@ -883,7 +883,8 @@ def map_material(collection, m, default_module=None):
                      "sticker_compatible": bool(m.get("sticker_compatible")),
                      "material_type": m.get("material_type") or "vinyl"})
     elif collection == "laser_materials":
-        base.update({"cost_per_sheet": uc, "sheet_width": m.get("sheet_width") or 24.0,
+        base.update({"cost_per_sheet": m.get("sheet_price") or uc,
+                     "sheet_width": m.get("sheet_width") or 24.0,
                      "sheet_height": m.get("sheet_height") or 18.0})
     elif collection == "sheet_materials":
         base.update({"price_per_sqft": uc, "inks": "CMYK",
@@ -1473,6 +1474,114 @@ def _extract_size(text: str) -> str:
     m = _SIZE_RE.search(text or "")
     return f"{m.group(1)}x{m.group(2)}" if m else ""
 
+# ---- Roll vs Substrate detection + unit conversion for supplier invoice import (e.g. Grimco) ----
+_ROLL_SPEC_RE = re.compile(r"(\d+(?:\.\d+)?)\s*[\"'”’]?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(yds?|yards?|ft|feet|['’])", re.I)
+_SHEET_SPEC_RE = re.compile(r"(\d+(?:\.\d+)?)\s*[\"'”’]?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[\"'”’]?", re.I)
+_ROLL_KEYWORDS = ("vinyl", "banner", "canvas", "orajet", "oracal", "oralite", "briteline",
+                  "wallmark", "wall vinyl", "laminate", " lam", "gf ", "6mil", "mil")
+_SUBSTRATE_KEYWORDS = ("max-metal", "maxmetal", "max metal", "acm", "coroplast", "coro ", "foam",
+                       "foamboard", "acrylic", "pvc", "dibond", "sintra", "alupanel", "gatorfoam",
+                       "gator", "styrene", "polycarbonate", "lexan")
+_ROLL_TYPE_MAP = (("banner", "banner"), ("canvas", "canvas"), ("wallmark", "wall vinyl"),
+                  ("wall", "wall vinyl"), ("laminate", "laminate"), (" lam", "laminate"), ("vinyl", "vinyl"))
+
+def _fmt_num(x):
+    x = float(x)
+    return int(x) if x == int(x) else round(x, 2)
+
+def _detect_media_category(text: str) -> str:
+    t = (text or "").lower()
+    if _ROLL_SPEC_RE.search(text or ""):
+        return "roll"
+    for kw in _SUBSTRATE_KEYWORDS:
+        if kw in t:
+            return "substrate"
+    for kw in _ROLL_KEYWORDS:
+        if kw in t:
+            return "roll"
+    if _SHEET_SPEC_RE.search(text or ""):
+        return "substrate"
+    return ""
+
+def _roll_material_type(text: str) -> str:
+    t = (text or "").lower()
+    for kw, label in _ROLL_TYPE_MAP:
+        if kw in t:
+            return label
+    return "vinyl"
+
+def _sheet_size_label(w, h) -> str:
+    lo, hi = sorted([float(w), float(h)])
+    if abs(lo - 48) <= 1.5 and abs(hi - 96) <= 1.5:
+        return "4x8"
+    if abs(lo - 60) <= 1.5 and abs(hi - 120) <= 1.5:
+        return "5x10"
+    return f"{_fmt_num(w)}x{_fmt_num(h)}"
+
+def _parse_media_spec(category: str, *texts):
+    if category == "roll":
+        for text in texts:
+            if not text:
+                continue
+            m = _ROLL_SPEC_RE.search(text)
+            if m:
+                unit = m.group(3).lower()
+                length = float(m.group(2))
+                length_ft = length * 3.0 if unit.startswith(("yd", "yard")) else length
+                return {"width_in": float(m.group(1)), "length_ft": length_ft}
+        for text in texts:
+            d = _parse_dims(text)
+            if d:
+                return {"width_in": d[0], "length_ft": d[1]}
+    elif category == "substrate":
+        for text in texts:
+            if not text:
+                continue
+            m = _SHEET_SPEC_RE.search(text)
+            if m:
+                return {"sheet_w": float(m.group(1)), "sheet_h": float(m.group(2))}
+    return {}
+
+def _import_line_spec(category, quantity, size_override, desc_text, line_total, unit_price, unit_multiplier):
+    """Return (unit_cost, stock_units, size_label, extra_fields, modules, stock_unit_label) for one invoice line.
+    roll -> unit_cost=$/ft², stock=roll area (ft²); substrate -> unit_cost=$/ft², stock=sheets; else generic."""
+    cat = (category or "").lower()
+    qty = float(quantity or 0)
+    lt = float(line_total or 0)
+    up = float(unit_price or 0)
+    if cat == "roll":
+        spec = _parse_media_spec("roll", desc_text, size_override)
+        if spec.get("width_in") and spec.get("length_ft"):
+            w = spec["width_in"]; length_ft = spec["length_ft"]; rolls = qty or 1
+            area_per = (w / 12.0) * length_ft
+            roll_cost = round(lt / rolls, 4) if (rolls and lt) else round(up, 4)
+            unit_cost = round(roll_cost / area_per, 4) if area_per else 0.0
+            stock_units = round(rolls * area_per, 2)
+            size_str = f"{_fmt_num(w)}in x {_fmt_num(length_ft)}ft"
+            extra = {"unit": "sqft", "roll_width": w, "printable_width": round(w - 2.0, 2),
+                     "roll_cost": roll_cost, "roll_qty": rolls, "min_linear_feet": 1.0,
+                     "material_type": _roll_material_type(desc_text), "size": size_str,
+                     "sticker_compatible": False}
+            return unit_cost, stock_units, size_str, extra, ["large-format"], "ft²"
+    if cat == "substrate":
+        spec = _parse_media_spec("substrate", desc_text, size_override)
+        if spec.get("sheet_w") and spec.get("sheet_h"):
+            sw = spec["sheet_w"]; sh = spec["sheet_h"]; sheets = qty or 1
+            area = round(sw * sh / 144.0, 3)
+            sheet_price = round(lt / sheets, 4) if (sheets and lt) else round(up, 4)
+            unit_cost = round(sheet_price / area, 4) if area else 0.0
+            size_str = _sheet_size_label(sw, sh)
+            extra = {"unit": "sqft", "sheet_area_sqft": area, "sheet_price": sheet_price,
+                     "sheet_qty": sheets, "sheet_width": sw, "sheet_height": sh,
+                     "cnc_capable": True, "channel_capable": True, "size": size_str}
+            return unit_cost, sheets, size_str, extra, ["direct-print", "laser", "channel-letters"], "sheets"
+    # generic (paper / other)
+    mult = unit_multiplier or 1.0
+    qty_units = round(qty * mult, 2)
+    unit_cost = round(lt / qty_units, 4) if (qty_units and lt) else (round(up / mult, 4) if mult else up)
+    size_str = (size_override or "").strip() or _extract_size(desc_text)
+    return unit_cost, qty_units, size_str, {}, [], ""
+
 def extract_pdf_text(raw: bytes) -> str:
     import pypdfium2 as pdfium
     pdf = pdfium.PdfDocument(raw)
@@ -1542,8 +1651,10 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
     for li in data.get("line_items", []):
         li["import"] = True
         li["name"] = (li.get("description") or "")[:60]
-        li["size"] = _extract_size(li.get("description") or li.get("name") or "")
         li["unit_multiplier"] = mult
+        desc = li.get("description") or li.get("name") or ""
+        det = _detect_media_category(desc)
+        li["category"] = det or cat
         m = None
         if li.get("code"):
             m = await db.materials.find_one({"code": {"$regex": f"^{re.escape(li['code'])}$", "$options": "i"}})
@@ -1552,10 +1663,14 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
         if m:
             li["material_id"] = str(m["_id"])
             li["matched_name"] = m.get("name")
-        q = float(li.get("quantity") or 0) * mult
-        lt = float(li.get("line_total") or 0)
-        li["converted_qty"] = round(q, 2)
-        li["converted_unit_cost"] = round(lt / q, 4) if q else (round(float(li.get("unit_price") or 0) / mult, 4) if mult else float(li.get("unit_price") or 0))
+        uc, su, ssz, _extra, cat_mods, ulabel = _import_line_spec(
+            li["category"], li.get("quantity"), "", desc,
+            li.get("line_total") or 0, li.get("unit_price") or 0, mult)
+        li["size"] = ssz
+        li["converted_qty"] = su
+        li["converted_unit_cost"] = uc
+        li["stock_unit_label"] = ulabel
+        li["suggested_modules_line"] = cat_mods
     return data
 
 class PurchaseLine(BaseModel):
@@ -1570,6 +1685,7 @@ class PurchaseLine(BaseModel):
     material_id: str = ""
     unit_multiplier: float = 1.0
     size: str = ""
+    category: str = ""
 
 class PurchaseSupplier(BaseModel):
     company: str = ""
@@ -1611,10 +1727,11 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
         for li in body.line_items:
             if not li.import_material:
                 continue
-            mult = li.unit_multiplier or 1.0
-            qty_units = round(li.quantity * mult, 2)                              # invoice qty → real stock units
-            unit_cost = round(li.line_total / qty_units, 4) if qty_units else (round(li.unit_price / mult, 4) if mult else li.unit_price)
-            size_str = (li.size or "").strip() or _extract_size(li.description or li.name or "")
+            cat = (li.category or body.default_category or "other").lower()
+            unit_cost, stock_units, size_str, extra, cat_mods, _ = _import_line_spec(
+                cat, li.quantity, li.size, li.description or li.name,
+                li.line_total, li.unit_price, li.unit_multiplier)
+            line_modules = list(dict.fromkeys((cat_mods or []) + (body.modules or [])))
             match = None
             if li.material_id:
                 try:
@@ -1628,10 +1745,10 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
             if not match and li.name:
                 match = await db.materials.find_one({"name": li.name})
             if match:
-                mods = list(set((match.get("modules") or []) + body.modules))
+                mods = list(set((match.get("modules") or []) + line_modules))
                 upd = {
                     "unit_cost": unit_cost,
-                    "stock_qty": (match.get("stock_qty") or 0.0) + qty_units,
+                    "stock_qty": (match.get("stock_qty") or 0.0) + stock_units,
                     "modules": mods,
                     "last_purchase_at": now_iso(),
                 }
@@ -1641,6 +1758,13 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                     upd["supplier_description"] = li.description.strip()           # remember vendor description alias
                 if size_str and not match.get("size"):
                     upd["size"] = size_str                                          # auto-derived sheet size for layout
+                if cat and not match.get("category"):
+                    upd["category"] = cat
+                for k, v in extra.items():                                          # fill roll/substrate specs only if missing
+                    if k in ("size", "unit"):
+                        continue
+                    if match.get(k) is None:
+                        upd[k] = v
                 for k, v in [("supplier_company", sup.company), ("supplier_contact", sup.contact),
                              ("supplier_phone", sup.phone), ("supplier_email", sup.email)]:
                     if v and not match.get(k):
@@ -1650,15 +1774,16 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
             else:
                 doc = {
                     "name": li.name or li.description[:60] or li.code,
-                    "code": li.code, "category": body.default_category,
+                    "code": li.code, "category": cat,
                     "supplier_company": sup.company, "supplier_contact": sup.contact,
                     "supplier_phone": sup.phone, "supplier_email": sup.email,
-                    "unit": li.unit or "each", "unit_cost": unit_cost,
+                    "unit": extra.get("unit") or li.unit or "each", "unit_cost": unit_cost,
                     "size": size_str,
-                    "stock_qty": qty_units, "reorder_point": 0.0, "reorder_target": 0.0,
-                    "modules": body.modules, "is_default": False,
+                    "stock_qty": stock_units, "reorder_point": 0.0, "reorder_target": 0.0,
+                    "modules": line_modules, "is_default": False,
                     "last_purchase_at": now_iso(), "created_at": now_iso(),
                 }
+                doc.update({k: v for k, v in extra.items() if k not in ("unit", "size")})
                 res = await db.materials.insert_one(doc)
                 affected.append({"id": str(res.inserted_id), "name": doc["name"], "action": "created"})
         # Train the supplier rule: remember the unit multiplier for next time.
@@ -1767,8 +1892,10 @@ async def delete_purchase(pid: str, user=Depends(require_admin)):
         for li in doc.get("line_items", []):
             if not li.get("import_material"):
                 continue
-            mult = li.get("unit_multiplier") or 1.0
-            qty_units = round((li.get("quantity") or 0.0) * mult, 2)
+            cat = (li.get("category") or doc.get("default_category") or "other").lower()
+            _, qty_units, _sz, _ex, _mods, _ul = _import_line_spec(
+                cat, li.get("quantity"), li.get("size"), li.get("description") or li.get("name"),
+                li.get("line_total") or 0, li.get("unit_price") or 0, li.get("unit_multiplier"))
             if not qty_units:
                 continue
             m = None

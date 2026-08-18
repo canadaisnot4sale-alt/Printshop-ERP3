@@ -117,6 +117,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v44 Grimco supplier import: per-line roll vs substrate detection + unit conversion
+- **Mixed invoice support**: PDF import now detects EACH line as roll or substrate (YD/FT length → roll; inch×inch → substrate; + keyword hints ORAJET/BRITELINE/vinyl/banner vs ACM/coroplast/acrylic/max-metal/PVC). Per-line editable **Category** dropdown added to the review table.
+- **Unit conversion** (`_import_line_spec`): ROLL → unit_cost=$/ft² (roll_cost ÷ (width_ft × length_ft), YD×3→ft), stock=rolls×area ft², sets roll_width/printable_width(−2)/roll_cost/roll_qty/material_type, modules=[large-format]. SUBSTRATE → unit_cost=$/ft² (sheet_price ÷ area), stock=sheets, sets sheet_area_sqft/sheet_price/sheet_width/height/cnc_capable/channel_capable, size label 4x8 / 5x10, modules=[direct-print, laser, channel-letters].
+- **Laser on rigid substrates**: `map_material` laser now uses `sheet_price` as cost_per_sheet (falls back to unit_cost) so laser quotes rigid sheets by the real per-sheet price. Verified with real Grimco invoices #60460 & #67306.
+- **Delete reversal** made category-aware (reverses ft² for rolls, sheets for substrates). Backend tests: /app/backend/tests/test_grimco_import.py (6/6) + curl e2e (create mixed → verify → delete reversal). User to verify by uploading a real Grimco PDF.
+
 ## Implemented (2026-06) — v43.2 Compare Papers: tax-included blue price + per-paper native size
 - **Tax-included blue price**: each Compare Papers card's big blue number now shows the price WITH tax (Retail incl. GST+PST via `retailTaxF`; reseller/WS = incl. GST only via `wsTaxF`) + an "incl. tax" label; WS sub-line also tax-included. Matches the "TOTAL INCL. TAX" panel.
 - **Per-paper native size**: `calc_paper` now quotes each paper at ITS OWN sheet size (material `size` field → fallback derived from the paper name via `_extract_size` → fallback `body.sheet_key`). Added `_parse_dims()`; `paper_quote` parses non-preset sheet keys. Result: Copy Paper 8.5x11 → 8-up·13 sheets, Bond 8.5x14 → 10-up, 12x18 → 20-up — cards no longer all change together when one is clicked. Verified via curl + screenshot. User-confirmed.
