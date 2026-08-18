@@ -127,19 +127,34 @@ export function PricingPanel({ r, className = "" }) {
         <div className="rounded-xl border border-slate-200 mt-2 overflow-hidden" data-testid="tax-pricing">
           <div className="bg-slate-50 px-4 py-2 text-[10px] font-mono uppercase tracking-widest text-slate-500 border-b border-slate-200">Tax Included</div>
           <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] font-mono uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                <th className="text-left px-4 py-1.5"></th>
+                {retail != null && <th className="text-right px-4 py-1.5">Retail</th>}
+                {wholesale != null && <th className="text-right px-4 py-1.5">Wholesale</th>}
+              </tr>
+            </thead>
             <tbody>
-              {retail != null && (
-                <tr className="border-b border-slate-50">
-                  <td className="px-4 py-1.5 text-slate-500">Retail + GST {rush.gst}% + PST {rush.pst}%</td>
-                  <td className="px-4 py-1.5 text-right num text-[#2495D3] font-semibold" data-testid="tax-retail">{money(retail * (1 + (rush.gst + rush.pst) / 100))}</td>
-                </tr>
-              )}
-              {wholesale != null && (
-                <tr>
-                  <td className="px-4 py-1.5 text-slate-500">Wholesale + GST {rush.gst}%</td>
-                  <td className="px-4 py-1.5 text-right num text-slate-600" data-testid="tax-wholesale">{money(wholesale * (1 + rush.gst / 100))}</td>
-                </tr>
-              )}
+              <tr className="border-b border-slate-50">
+                <td className="px-4 py-1.5 text-slate-500">Subtotal</td>
+                {retail != null && <td className="px-4 py-1.5 text-right num" data-testid="tax-retail-subtotal">{money(retail)}</td>}
+                {wholesale != null && <td className="px-4 py-1.5 text-right num" data-testid="tax-ws-subtotal">{money(wholesale)}</td>}
+              </tr>
+              <tr className="border-b border-slate-50">
+                <td className="px-4 py-1.5 text-slate-500">GST {rush.gst}%</td>
+                {retail != null && <td className="px-4 py-1.5 text-right num" data-testid="tax-retail-gst">{money(retail * rush.gst / 100)}</td>}
+                {wholesale != null && <td className="px-4 py-1.5 text-right num" data-testid="tax-ws-gst">{money(wholesale * rush.gst / 100)}</td>}
+              </tr>
+              <tr className="border-b border-slate-50">
+                <td className="px-4 py-1.5 text-slate-500">PST {rush.pst}%</td>
+                {retail != null && <td className="px-4 py-1.5 text-right num" data-testid="tax-retail-pst">{money(retail * rush.pst / 100)}</td>}
+                {wholesale != null && <td className="px-4 py-1.5 text-right num text-slate-300">—</td>}
+              </tr>
+              <tr>
+                <td className="px-4 py-1.5 text-slate-600 font-semibold">Total w/ tax</td>
+                {retail != null && <td className="px-4 py-1.5 text-right num text-[#2495D3] font-semibold" data-testid="tax-retail">{money(retail * (1 + (rush.gst + rush.pst) / 100))}</td>}
+                {wholesale != null && <td className="px-4 py-1.5 text-right num text-slate-600 font-semibold" data-testid="tax-wholesale">{money(wholesale * (1 + rush.gst / 100))}</td>}
+              </tr>
             </tbody>
           </table>
         </div>
