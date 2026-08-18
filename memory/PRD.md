@@ -114,6 +114,14 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v38 Foil sides selector + default 2 sides
+- Hot Foil now has the SAME 1/2-sides selector as Laminate (backend foil_sides in PaperCalcIn + foil_spec + addon-usage). Default for BOTH laminate and foil = **2 sides**. Verified laminate 2 sides = 2× (Velvete 1000pc: 1-side $41.25, 2-side $82.50).
+
+## Implemented (2026-06) — v37 Laminate/Foil linear-ft inventory + auto-deduct on order
+- Laminate/Foil materials track **stock in linear feet** (`lam_stock_ft`) + **reorder point** (`lam_reorder_ft`). Materials list shows ft stock and a red **"Reorder"** badge when stock ≤ reorder point.
+- **Auto-deduction on order** (user chose: deduct only when a job becomes an order, NOT on quotes): paper quote saves laminate_id/sides + foil_id in inputs; `quote_to_product` computes `lam_ft_per_order`/`foil_ft_per_order` via grid_layout (sheets × sheet-length-ft × sides); `deduct_inventory_for_order` subtracts `ft × order_qty` from `lam_stock_ft`. Recorded in order.inventory_deductions (unit "linear ft").
+- Verified E2E: Velvete 500ft, quote 1000pc/12x18/1-side (50 sheets → 75ft) → order qty1 → deducted 75ft → 425ft remaining.
+
 ## Implemented (2026-06) — v36 Paper Laminate & Hot Foil (roll materials)
 - Materials → Paper now has a **Type** select: Normal (default) | Laminate | Hot Foil. For Laminate/Foil the form captures roll specs (width in, length ft, roll cost) + Color (foil); Unit dropdown hidden. Fields on Material: paper_type, lam_width_in, lam_length_ft, lam_roll_cost, foil_color.
 - Paper Printing: Lamination switch → dropdown of registered laminates (assigned to paper) + 1/2 sides selector; new Hot Foil switch → dropdown of foils (shows color). New endpoint GET /api/paper-addons?type=laminate|hot_foil (no cost leaked).

@@ -2026,6 +2026,7 @@ class PaperCalcIn(BaseModel):
     laminate_id: Optional[str] = None
     laminate_sides: int = 1
     foil_id: Optional[str] = None
+    foil_sides: int = 1
     stock_ids: Optional[List[str]] = None
 
 @api_router.get("/paper-addons")
@@ -2069,7 +2070,7 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
     if body.foil_id:
         fd = await db.materials.find_one({"_id": ObjectId(body.foil_id)})
         if fd and fd.get("lam_length_ft"):
-            foil_spec = {"per_ft": fd.get("lam_roll_cost", 0) / fd["lam_length_ft"], "sides": 1}
+            foil_spec = {"per_ft": fd.get("lam_roll_cost", 0) / fd["lam_length_ft"], "sides": max(1, body.foil_sides or 1)}
     results = []
     for st in stocks:
         quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key, lam_spec, foil_spec)
@@ -2685,6 +2686,33 @@ class ToProductIn(BaseModel):
     description: str = ""
     published: bool = False
 
+async def _paper_addon_usage(inp):
+    """Linear feet of laminate/foil consumed by a converted paper job (for inventory deduction)."""
+    out = {}
+    try:
+        sw, sh = SHEET_SIZES.get(inp.get("sheet"), (13, 19))
+        qty = float(inp.get("focusQty") or 0)
+        prod = await db.products.find_one({"_id": ObjectId(inp["productId"])}) if inp.get("productId") else None
+        if not prod or qty <= 0:
+            return out
+        pw = prod.get("bleed_w") or prod.get("finished_w") or 0
+        ph = prod.get("bleed_h") or prod.get("finished_h") or 0
+        gl = grid_layout(sw, sh, pw, ph, prod.get("gutter") or 0.0)
+        n_up = gl["n"] or 1
+        sheets = math.ceil(qty / n_up)
+        length_ft = max(sw, sh) / 12.0
+        if inp.get("laminate_id"):
+            sides = max(1, int(inp.get("laminate_sides") or 1))
+            out["lam_material_id"] = inp["laminate_id"]
+            out["lam_ft_per_order"] = round(sheets * length_ft * sides, 2)
+        if inp.get("hot_foil") and inp.get("foil_id"):
+            fsides = max(1, int(inp.get("foil_sides") or 1))
+            out["foil_material_id"] = inp["foil_id"]
+            out["foil_ft_per_order"] = round(sheets * length_ft * fsides, 2)
+    except Exception:
+        return out
+    return out
+
 @api_router.post("/quotes/{quote_id}/to-product")
 async def quote_to_product(quote_id: str, body: ToProductIn, user=Depends(require_admin)):
     q = await db.quotes.find_one({"_id": ObjectId(quote_id)})
@@ -2694,6 +2722,8 @@ async def quote_to_product(quote_id: str, body: ToProductIn, user=Depends(requir
     doc.update({"module": q.get("module", ""), "source_quote_id": quote_id, "bom": [],
                 "specs": {"summary": q.get("summary", {}), "inputs": q.get("inputs", {})},
                 "created_at": now_iso()})
+    if (q.get("module") or "").lower() == "paper":
+        doc.update(await _paper_addon_usage(q.get("inputs", {})))
     res = await db.catalog_products.insert_one(doc)
     doc["_id"] = res.inserted_id
     return clean(doc)
@@ -2727,6 +2757,26 @@ async def deduct_inventory_for_order(enriched):
         deductions.append({"material_id": mid, "material_name": mat.get("name"),
                            "unit": mat.get("unit"), "used": round(usage, 3), "waste": waste,
                            "total": total, "new_stock": new_stock, "short": new_stock < 0})
+    # Laminate / hot-foil consumption in linear feet (from converted paper jobs)
+    for it in enriched:
+        p = it["product"]
+        qy = it["qty"]
+        for mid_key, ft_key in [("lam_material_id", "lam_ft_per_order"), ("foil_material_id", "foil_ft_per_order")]:
+            mid = p.get(mid_key)
+            ft = round((p.get(ft_key) or 0.0) * qy, 2)
+            if not (mid and ft):
+                continue
+            try:
+                mat = await db.materials.find_one({"_id": ObjectId(mid)})
+            except Exception:
+                mat = None
+            if not mat:
+                continue
+            new_ft = round((mat.get("lam_stock_ft") or 0.0) - ft, 2)
+            await db.materials.update_one({"_id": ObjectId(mid)}, {"$set": {"lam_stock_ft": new_ft}})
+            deductions.append({"material_id": mid, "material_name": mat.get("name"),
+                               "unit": "linear ft", "used": ft, "waste": 0,
+                               "total": ft, "new_stock": new_ft, "short": new_ft < 0})
     return deductions
 
 class OrderItemIn(BaseModel):

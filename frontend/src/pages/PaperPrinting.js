@@ -57,9 +57,10 @@ export default function PaperPrinting() {
   const [sheet, setSheet] = useState("13x19");
   const [laminate, setLaminate] = useState(false);
   const [laminateId, setLaminateId] = useState("");
-  const [laminateSides, setLaminateSides] = useState(1);
+  const [laminateSides, setLaminateSides] = useState(2);
   const [hotFoil, setHotFoil] = useState(false);
   const [foilId, setFoilId] = useState("");
+  const [foilSides, setFoilSides] = useState(2);
   const [lamOptions, setLamOptions] = useState([]);
   const [foilOptions, setFoilOptions] = useState([]);
   const [side, setSide] = useState("4_0");
@@ -90,7 +91,7 @@ export default function PaperPrinting() {
     if (!productId) return toast.error("Select a product");
     setLoading(true);
     try {
-      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null });
+      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null, foil_sides: foilSides });
       setResult(data);
       setSelectedStock(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
@@ -180,11 +181,15 @@ export default function PaperPrinting() {
                   <Switch data-testid="hotfoil-switch" checked={hotFoil} onCheckedChange={setHotFoil} />
                 </div>
                 {hotFoil && (
-                  <div className="mt-2" data-testid="foil-picker">
+                  <div className="mt-2 space-y-2" data-testid="foil-picker">
                     <Select value={foilId} onValueChange={setFoilId}>
                       <SelectTrigger data-testid="foil-select" className="rounded-lg h-9"><SelectValue placeholder="Choose foil" /></SelectTrigger>
                       <SelectContent>{foilOptions.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}{o.foil_color ? ` · ${o.foil_color}` : ""}</SelectItem>)}</SelectContent>
                     </Select>
+                    <div className="flex items-center gap-2">
+                      <button type="button" data-testid="foil-sides-1" onClick={() => setFoilSides(1)} className={`flex-1 text-xs rounded-lg border py-1.5 ${foilSides === 1 ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600"}`}>1 side</button>
+                      <button type="button" data-testid="foil-sides-2" onClick={() => setFoilSides(2)} className={`flex-1 text-xs rounded-lg border py-1.5 ${foilSides === 2 ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600"}`}>2 sides</button>
+                    </div>
                     {foilOptions.length === 0 && <p className="text-[11px] text-slate-400 mt-1">No foils registered. Add one in Materials (Paper → Type: Hot Foil).</p>}
                   </div>
                 )}
@@ -232,7 +237,7 @@ export default function PaperPrinting() {
                           <div className="mt-2 text-[11px] font-mono uppercase tracking-widest text-emerald-600" data-testid="paper-volume-discount">Volume discount · {focusRow.volume_discount_pct}% off @ {focusQty} pc</div>
                         )}
                       </div>
-                      <div className="mt-4"><SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} inputs={{ productId, sheet, laminate, side, focusQty }} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} /></div>
+                      <div className="mt-4"><SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} inputs={{ productId, sheet, laminate, laminate_id: laminateId, laminate_sides: laminateSides, hot_foil: hotFoil, foil_id: foilId, foil_sides: foilSides, side, focusQty }} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} /></div>
                     </div>
                   </div>
 
