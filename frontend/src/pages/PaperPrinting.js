@@ -54,8 +54,8 @@ export default function PaperPrinting() {
   const [productId, setProductId] = useState("");
   const [sheet, setSheet] = useState("13x19");
   const [laminate, setLaminate] = useState(false);
-  const [side, setSide] = useState("4_4");
-  const [focusQty, setFocusQty] = useState(500);
+  const [side, setSide] = useState("4_0");
+  const [focusQty, setFocusQty] = useState(100);
   const [selectedStock, setSelectedStock] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
