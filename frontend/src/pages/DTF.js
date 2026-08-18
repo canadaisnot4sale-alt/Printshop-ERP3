@@ -8,6 +8,7 @@ import NestingCanvas from "@/components/NestingCanvas";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import VolumePricingTable from "@/components/VolumePricingTable";
 import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -111,6 +112,9 @@ export default function DTF() {
                       <CostRow label="Labor" value={res.labor} />
                     </div>
                     <PricingPanel r={res} className="mt-3" />
+                    <VolumePricingTable className="mt-4" endpoint="/calc/dtf"
+                      makeBody={(q) => ({ garment_id: garmentId === "none" ? null : garmentId, placements: placements.map((p) => ({ label: p.label, w: +p.w, h: +p.h })), quantity: q })}
+                      extract={(d) => d} signature={`${garmentId}|${JSON.stringify(placements)}`} unitLabel="unit" />
                     <div className="mt-3 flex justify-end"><SaveQuoteBar module="DTF" title={`DTF x${res.quantity}`} inputs={{ garmentId, quantity, placements }} summary={res} /></div>
                   </div>
                 </div>

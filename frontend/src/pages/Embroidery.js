@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { CostRow } from "@/components/Totals";
 import { Metric, ConfigCard, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import VolumePricingTable from "@/components/VolumePricingTable";
 import { useRequote } from "@/lib/useRequote";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,6 +107,9 @@ export default function Embroidery() {
                 <CostRow label="Embroidery" value={res.embroidery_cost} />
                 <CostRow label="Digitizing" value={res.setup} />
                 <PricingPanel r={res} className="mt-3" />
+                <VolumePricingTable className="mt-4" endpoint="/calc/embroidery"
+                  makeBody={(q) => ({ garment_id: garmentId === "none" ? null : garmentId, placements: placements.map((p) => ({ label: p.label, stitch_count: +p.stitch_count })), quantity: q, digitizing })}
+                  extract={(d) => d} signature={`${garmentId}|${digitizing}|${JSON.stringify(placements)}`} unitLabel="unit" />
                 <div className="mt-3 flex justify-end"><SaveQuoteBar module="Embroidery" title={`Embroidery ${res.total_stitches}st x${res.quantity}`} inputs={{ garmentId, quantity, digitizing, placements }} summary={res} /></div>
               </div>
             </div>

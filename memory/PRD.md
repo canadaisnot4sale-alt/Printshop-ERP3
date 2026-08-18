@@ -114,6 +114,11 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v32 Volume Pricing mini-table in scalar-qty modules
+- Reusable `components/VolumePricingTable.js`: recomputes a module's quote at each STANDARD_QTY (25→5000) and shows Qty · Discount · Retail/unit · Retail total (+ WS for admin/reseller), role-aware.
+- Wired into Paper Printing (row-based, tap to focus) + Stickers, DTF, Embroidery, Sublimation, Roll Stickers (single-scalar quantity; refetches on input change via signature).
+- NOTE: Large Format / Laser / Direct Print / Channel Letters use multi-size inputs (no single scalar qty) so the per-qty table does not map — deferred.
+
 ## Implemented (2026-06) — v31 Volume discounts (buy more → cheaper), all modules
 - **Editable volume-discount tiers** in Settings ("Volume Discounts" card): each tier = {qty threshold, discount %}. Both quantity AND % are editable; add/remove tiers. Default: 25=0, 50=2, 100=5, 250=9, 500=13, 1000=18, 2500=23, 5000=28.
 - **Applied centrally in scrub()** (all roles incl. admin, idempotent) to every priced quantity container across ALL 11 estimating modules — reduces Retail AND Wholesale totals + per-unit by the tier % (highest tier whose qty threshold ≤ order qty). Each result carries volume_discount_pct.

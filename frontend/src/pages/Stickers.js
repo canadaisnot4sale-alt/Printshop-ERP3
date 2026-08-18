@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import NestingCanvas from "@/components/NestingCanvas";
 import { Metric, ConfigCard, EmptyState, SectionLabel, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import VolumePricingTable from "@/components/VolumePricingTable";
 import { useRequote } from "@/lib/useRequote";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +101,10 @@ export default function Stickers() {
                 <SectionLabel>{sel.material} · Layout</SectionLabel>
                 {sel.layout && <NestingCanvas layout={sel.layout} />}
                 <PricingPanel r={sel} className="mt-3" />
+                <VolumePricingTable className="mt-4" endpoint="/calc/sticker"
+                  makeBody={(q) => ({ width: +w, height: +h, qty: q, finishing, laminate })}
+                  extract={(d) => (d.results || []).find((r) => r.material_id === sel.material_id) || (d.results || [])[0]}
+                  signature={`${w}|${h}|${finishing}|${laminate}|${sel.material_id}`} unitLabel="sticker" />
                 <div className="mt-3 flex justify-end">
                   <SaveQuoteBar module="Stickers" title={`Sticker ${w}x${h} x${qty} · ${sel.material}`} inputs={{ w, h, qty, finishing, laminate }} summary={sel} />
                 </div>

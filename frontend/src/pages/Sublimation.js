@@ -6,6 +6,7 @@ import CrudManager from "@/components/CrudManager";
 import { CostRow } from "@/components/Totals";
 import { Metric, EmptyState, SectionLabel, priceOf, PricingPanel } from "@/components/Metric";
 import { SaveQuoteBar } from "@/components/SaveQuote";
+import VolumePricingTable from "@/components/VolumePricingTable";
 import { useRequote } from "@/lib/useRequote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,9 @@ export default function Sublimation() {
                     <CostRow label="Ink" value={res.ink_cost} />
                     <CostRow label="Labor" value={res.labor} />
                     <PricingPanel r={res} className="mt-3" />
+                    <VolumePricingTable className="mt-4" endpoint="/calc/sublimation"
+                      makeBody={(q) => ({ product_id: productId, quantity: q })}
+                      extract={(d) => d} signature={`${productId}`} unitLabel="unit" />
                     <div className="mt-3 flex justify-end"><SaveQuoteBar module="Sublimation" title={`${res.product.name} x${res.quantity}`} inputs={{ productId, qty }} summary={res} /></div>
                   </div>
                 </div>
