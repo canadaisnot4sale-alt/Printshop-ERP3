@@ -215,6 +215,41 @@ export default function PaperPrinting() {
                       })}
                     </div>
                   </div>
+
+                  {/* Volume pricing table — see savings as quantity grows */}
+                  <div data-testid="paper-volume-table">
+                    <div className="text-xs font-mono uppercase tracking-widest text-slate-500 mb-2">Volume Pricing · {selectedStock.stock.name} · {side.replace("_", "/")}</div>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-mono uppercase tracking-widest text-slate-500">
+                            <th className="text-left px-4 py-2">Qty</th>
+                            <th className="text-right px-4 py-2">Discount</th>
+                            {retailOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">Retail / unit</th>}
+                            {retailOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">Retail total</th>}
+                            {wholesaleOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">WS / unit</th>}
+                            {wholesaleOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">WS total</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedStock.quote.rows.map((row) => (
+                            <tr key={row.qty} data-testid="paper-volume-row"
+                              onClick={() => setFocusQty(row.qty)}
+                              className={`border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 ${row.qty === focusQty ? "bg-[#2495D3]/5" : ""}`}>
+                              <td className="px-4 py-2 num font-semibold">{row.qty}</td>
+                              <td className="px-4 py-2 text-right num">{(row.volume_discount_pct || 0) > 0 ? <span className="text-emerald-600">−{row.volume_discount_pct}%</span> : <span className="text-slate-300">—</span>}</td>
+                              {retailOf(row) != null && <td className="px-4 py-2 text-right num text-slate-600">{money(row[`retail_unit_${side}`])}</td>}
+                              {retailOf(row) != null && <td className="px-4 py-2 text-right num font-semibold text-[#2495D3]">{money(retailOf(row))}</td>}
+                              {wholesaleOf(row) != null && <td className="px-4 py-2 text-right num text-slate-500">{money(row[`wholesale_unit_${side}`])}</td>}
+                              {wholesaleOf(row) != null && <td className="px-4 py-2 text-right num text-slate-600">{money(wholesaleOf(row))}</td>}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-2">Tap a row to set it as your focus quantity. Discounts are editable in Settings → Volume Discounts.</p>
+                  </div>
+
                 </div>
               )}
             </div>
