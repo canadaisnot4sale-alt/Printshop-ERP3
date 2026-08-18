@@ -34,7 +34,7 @@ const BLANK = {
   color: "", sheet_price: 0, sheet_qty: 1,
   misc_qty: 1, misc_price: 0,
   paper_type: "normal", lam_width_in: 0, lam_length_ft: 0, lam_roll_cost: 0, foil_color: "",
-  lam_stock_ft: 0, lam_reorder_ft: 0,
+  lam_stock_ft: 0, lam_reorder_ft: 0, lam_retail_per_sheet: 0, lam_wholesale_per_sheet: 0,
   price_override: "", wholesale_price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
@@ -49,6 +49,7 @@ const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct
   "roll_cost", "roll_qty", "printable_height", "waste_linear_ft",
   "sheet_price", "sheet_qty", "misc_qty", "misc_price",
   "lam_width_in", "lam_length_ft", "lam_roll_cost", "lam_stock_ft", "lam_reorder_ft",
+  "lam_retail_per_sheet", "lam_wholesale_per_sheet",
   "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
@@ -140,6 +141,16 @@ export default function Materials() {
   const wMk = form.wholesale_markup_pct === "" || form.wholesale_markup_pct == null ? defMk.wholesale : Number(form.wholesale_markup_pct);
   const retailLive = Number(form.price_override) > 0 ? Number(form.price_override) : baseCost * (1 + rMk / 100);
   const wholesaleLive = Number(form.wholesale_price_override) > 0 ? Number(form.wholesale_price_override) : baseCost * (1 + wMk / 100);
+
+  // Laminate / Hot Foil reference (12x18 sheet). Cost by linear foot; Retail/Wholesale honor per-sheet override.
+  const lamPerFt = Number(form.lam_length_ft) > 0 ? Number(form.lam_roll_cost || 0) / Number(form.lam_length_ft) : 0;
+  const lamC1 = lamPerFt * 1.5, lamC2 = lamPerFt * 3;
+  const lamRetOvr = Number(form.lam_retail_per_sheet || 0);
+  const lamWsOvr = Number(form.lam_wholesale_per_sheet || 0);
+  const lamRetail2 = lamRetOvr > 0 ? lamRetOvr : lamC2 * (1 + rMk / 100);
+  const lamRetail1 = lamRetOvr > 0 ? lamRetOvr / 2 : lamC1 * (1 + rMk / 100);
+  const lamWhole2 = lamWsOvr > 0 ? lamWsOvr : lamC2 * (1 + wMk / 100);
+  const lamWhole1 = lamWsOvr > 0 ? lamWsOvr / 2 : lamC1 * (1 + wMk / 100);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const has = (...mods) => mods.some((m) => form.modules.includes(m));
@@ -236,7 +247,8 @@ export default function Materials() {
 
   const lowCount = items.filter((m) => m.low_stock).length;
   const invValue = items.reduce((a, m) => {
-    const perUnit = m.category === "roll" ? (m.roll_cost || 0) : (m.unit_cost || 0);
+    const perUnit = m.category === "roll" ? (m.roll_cost || 0)
+      : ((m.paper_type === "laminate" || m.paper_type === "hot_foil") ? (m.lam_roll_cost || 0) : (m.unit_cost || 0));
     return a + (m.stock_qty || 0) * perUnit;
   }, 0);
   const defaults = items.filter((m) => (m.default_modules || []).length > 0).length;
@@ -313,12 +325,12 @@ export default function Materials() {
                     <div className="text-slate-700">{m.supplier_company || "—"}</div>
                     <div className="text-[11px] text-slate-400">{m.supplier_email}</div>
                   </td>
-                  <td className="px-4 py-2.5 text-right num">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.unit_cost)}</td>
-                  <td className="px-4 py-2.5 text-right num font-semibold">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.finish_cost)}</td>
-                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-1">{m.category === "paper" && (m.paper_type || "normal") === "normal" ? money((m.finish_cost || 0) + (m.click_cost ?? 0.055)) : "—"}</td>
-                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-2">{m.category === "paper" && (m.paper_type || "normal") === "normal" ? money((m.finish_cost || 0) + 2 * (m.click_cost ?? 0.055)) : "—"}</td>
-                  <td className="px-4 py-2.5 text-right num text-[#2495D3]">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.selling_price)}</td>
-                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-wholesale">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.wholesale_price)}</td>
+                  <td className="px-4 py-2.5 text-right num">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? `${money(m.lam_per_ft)}/ft` : money(m.unit_cost)}</td>
+                  <td className="px-4 py-2.5 text-right num font-semibold">{money(m.finish_cost)}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-1">{m.category === "paper" && (m.paper_type || "normal") === "normal" ? money((m.finish_cost || 0) + (m.click_cost ?? 0.055)) : (m.paper_type === "laminate" || m.paper_type === "hot_foil") ? money(m.lam_ref_cost_1) : "—"}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-2">{m.category === "paper" && (m.paper_type || "normal") === "normal" ? money((m.finish_cost || 0) + 2 * (m.click_cost ?? 0.055)) : (m.paper_type === "laminate" || m.paper_type === "hot_foil") ? money(m.lam_ref_cost_2) : "—"}</td>
+                  <td className="px-4 py-2.5 text-right num text-[#2495D3]">{money(m.selling_price)}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-wholesale">{money(m.wholesale_price)}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-center gap-1">
                       <button data-testid="material-stock-minus" onClick={() => adjust(m.id, -1)} className="p-1 text-slate-400 hover:text-red-500"><Minus size={13} /></button>
@@ -603,6 +615,34 @@ export default function Materials() {
                   <div className="num text-lg font-bold text-slate-600 mt-1" data-testid="preview-wholesale">{money(wholesaleLive)}</div>
                 </div>
               </div>
+              )}
+              {isLamFoil && (
+                <div className="mt-3 space-y-3" data-testid="lamfoil-pricing">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><Label className="text-xs">Retail override / sheet (12×18, 2 sides) ($)</Label>
+                      <Input data-testid="material-field-lam_retail_per_sheet" type="number" step="0.01" value={form.lam_retail_per_sheet} onChange={(e) => set("lam_retail_per_sheet", e.target.value)} className="rounded-lg mt-1" placeholder="auto (markup)" /></div>
+                    <div><Label className="text-xs">Wholesale override / sheet (12×18, 2 sides) ($)</Label>
+                      <Input data-testid="material-field-lam_wholesale_per_sheet" type="number" step="0.01" value={form.lam_wholesale_per_sheet} onChange={(e) => set("lam_wholesale_per_sheet", e.target.value)} className="rounded-lg mt-1" placeholder="auto (markup)" /></div>
+                    <div><Label className="text-xs">Retail markup % (×{(1 + rMk / 100).toFixed(1)})</Label>
+                      <Input data-testid="material-field-retail_markup" type="number" value={form.retail_markup_pct} onChange={(e) => set("retail_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder={`default ${defMk.retail}`} /></div>
+                    <div><Label className="text-xs">Wholesale markup % (×{(1 + wMk / 100).toFixed(1)})</Label>
+                      <Input data-testid="material-field-wholesale_markup" type="number" value={form.wholesale_markup_pct} onChange={(e) => set("wholesale_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder={`default ${defMk.wholesale}`} /></div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white overflow-hidden" data-testid="lamfoil-reference-card">
+                    <div className="bg-slate-50 px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest text-slate-500 border-b border-slate-200">Reference · 12×18 sheet · {money(lamPerFt)}/linear ft</div>
+                    <table className="w-full text-sm">
+                      <thead><tr className="text-[10px] font-mono uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                        <th className="text-left px-3 py-1.5"></th><th className="text-right px-3 py-1.5">1 side</th><th className="text-right px-3 py-1.5">2 sides</th>
+                      </tr></thead>
+                      <tbody>
+                        <tr className="border-b border-slate-50"><td className="px-3 py-1.5 text-slate-500">Cost</td><td className="px-3 py-1.5 text-right num">{money(lamC1)}</td><td className="px-3 py-1.5 text-right num">{money(lamC2)}</td></tr>
+                        <tr className="border-b border-slate-50"><td className="px-3 py-1.5 text-slate-500">Retail</td><td className="px-3 py-1.5 text-right num text-[#2495D3]" data-testid="lam-ref-retail-1">{money(lamRetail1)}</td><td className="px-3 py-1.5 text-right num text-[#2495D3] font-semibold" data-testid="lam-ref-retail-2">{money(lamRetail2)}</td></tr>
+                        <tr><td className="px-3 py-1.5 text-slate-500">Wholesale</td><td className="px-3 py-1.5 text-right num text-slate-600" data-testid="lam-ref-ws-1">{money(lamWhole1)}</td><td className="px-3 py-1.5 text-right num text-slate-600" data-testid="lam-ref-ws-2">{money(lamWhole2)}</td></tr>
+                      </tbody>
+                    </table>
+                    <div className="px-3 py-1.5 text-[10px] text-slate-400 border-t border-slate-100">Inventory tracked by rolls · 2 sides runs 2 rolls (top + bottom), each consuming the sheet length once.</div>
+                  </div>
+                </div>
               )}
               {isPaper && !isLamFoil && (
                 <div className="mt-3 grid grid-cols-3 gap-3" data-testid="paper-printed-cost">

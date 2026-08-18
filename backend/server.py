@@ -283,6 +283,8 @@ class Material(BaseModel):
     lam_stock_ft: float = 0.0                     # paper laminate/foil: linear feet on hand (legacy)
     lam_reorder_ft: float = 0.0                   # paper laminate/foil: reorder point (linear ft, legacy)
     lam_open_used_ft: float = 0.0                 # paper laminate/foil: ft consumed on the currently open roll
+    lam_retail_per_sheet: float = 0.0             # paper laminate/foil: override retail price per 12x18 sheet @ 2 sides (0 = markup)
+    lam_wholesale_per_sheet: float = 0.0          # paper laminate/foil: override wholesale price per 12x18 sheet @ 2 sides (0 = markup)
     foil_color: str = ""                          # paper hot_foil: color
     roll_cost: float = 0.0                        # roll: price of one full roll
     roll_qty: float = 0.0                          # roll: number of rolls on hand
@@ -625,42 +627,51 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
     if whole_ps is None:
         whole_ps = markup_price(cps, whole_pct)
     # Laminate/Hot-foil cost per sheet: by linear foot of the sheet length (roll consumed full-width per pass).
+    sheet_len_ft = max(sw, sh) / 12.0
     def _addon_ps(a):
         if not a or not a.get("per_ft"):
             return 0.0
-        return a["per_ft"] * (max(sw, sh) / 12.0) * a.get("sides", 1)
+        return a["per_ft"] * sheet_len_ft * a.get("sides", 1)
     lam_ps = _addon_ps(lam_spec)
     foil_ps = _addon_ps(foil_spec)
+    def _addon_sell(spec, cost_amt, per_ft_key, pct, sheets):
+        # Per-sheet override (defined @12x18, 2 sides) scales by actual sheet length & sides; else markup on cost.
+        if spec and spec.get(per_ft_key):
+            return round(sheets * spec[per_ft_key] * sheet_len_ft * spec.get("sides", 1), 2)
+        return markup_price(cost_amt, pct)
     rows = []
     for q in qtys:
         sheets = math.ceil(q / n_up) if n_up else 0
         material = round(sheets * cps, 2)                       # true material cost (for margin)
         cost_40 = round(sheets * settings["click_4_0"], 2)
         cost_44 = round(sheets * settings["click_4_4"], 2)
-        if lam_spec or foil_spec:
-            lam = round(sheets * (lam_ps + foil_ps), 2)
-        elif laminate:
-            lam = round(sheets * settings["lamination_per_sheet"], 2)
-        else:
-            lam = 0.0
         lam_cost = round(sheets * lam_ps, 2)
         foil_cost = round(sheets * foil_ps, 2)
+        gen_lam = round(sheets * settings["lamination_per_sheet"], 2) if (laminate and not (lam_spec or foil_spec)) else 0.0
+        lam = round(lam_cost + foil_cost + gen_lam, 2)          # total add-on production cost
         base_40 = material + cost_40 + lam                      # true production cost
         base_44 = material + cost_44 + lam
         paper_retail = round(sheets * retail_ps, 2)             # paper sold at its own retail/override
         paper_whole = round(sheets * whole_ps, 2)
-        # Paper priced at retail/wholesale; printing (click) + lamination marked up on top.
-        cust_40 = round(paper_retail + markup_price(cost_40 + lam, retail_pct), 2)
-        cust_44 = round(paper_retail + markup_price(cost_44 + lam, retail_pct), 2)
-        ws_40 = round(paper_whole + markup_price(cost_40 + lam, whole_pct), 2)
-        ws_44 = round(paper_whole + markup_price(cost_44 + lam, whole_pct), 2)
+        # Add-on selling: honor per-sheet override, else markup on cost (markup is linear so parts sum).
+        lam_ret = _addon_sell(lam_spec, lam_cost, "retail_per_ft", retail_pct, sheets)
+        lam_ws = _addon_sell(lam_spec, lam_cost, "wholesale_per_ft", whole_pct, sheets)
+        foil_ret = _addon_sell(foil_spec, foil_cost, "retail_per_ft", retail_pct, sheets)
+        foil_ws = _addon_sell(foil_spec, foil_cost, "wholesale_per_ft", whole_pct, sheets)
+        gen_ret = markup_price(gen_lam, retail_pct)
+        gen_ws = markup_price(gen_lam, whole_pct)
+        # Paper priced at retail/wholesale; printing (click) marked up; add-ons priced (override or markup) on top.
+        cust_40 = round(paper_retail + markup_price(cost_40, retail_pct) + lam_ret + foil_ret + gen_ret, 2)
+        cust_44 = round(paper_retail + markup_price(cost_44, retail_pct) + lam_ret + foil_ret + gen_ret, 2)
+        ws_40 = round(paper_whole + markup_price(cost_40, whole_pct) + lam_ws + foil_ws + gen_ws, 2)
+        ws_44 = round(paper_whole + markup_price(cost_44, whole_pct) + lam_ws + foil_ws + gen_ws, 2)
         rows.append({
             "qty": q, "sheets": sheets, "n_up": n_up,
             "material_cost": material, "cost_4_0": cost_40, "cost_4_4": cost_44,
             "lamination": lam,
             "lamination_cost": lam_cost, "foil_cost": foil_cost,
-            "lamination_retail": markup_price(lam_cost, retail_pct), "foil_retail": markup_price(foil_cost, retail_pct),
-            "lamination_wholesale": markup_price(lam_cost, whole_pct), "foil_wholesale": markup_price(foil_cost, whole_pct),
+            "lamination_retail": lam_ret, "foil_retail": foil_ret,
+            "lamination_wholesale": lam_ws, "foil_wholesale": foil_ws,
             "base_cost_4_0": round(base_40, 2), "base_cost_4_4": round(base_44, 2),
             "unit_cost_4_0": round(base_40 / q, 4) if q else 0,
             "unit_cost_4_4": round(base_44 / q, 4) if q else 0,
@@ -1236,6 +1247,26 @@ def compute_material(m, biz_hourly, machines_by_id, s):
     stock = m.get("stock_qty") or 0.0
     rp = m.get("reorder_point") or 0.0
     low_stock = stock <= rp
+    # Laminate/Hot-foil: paper-style reference values for a 12x18 sheet (Retail/Wholesale @ 2 sides).
+    if (m.get("category") == "paper") and (m.get("paper_type") in ("laminate", "hot_foil")):
+        roll_len = float(m.get("lam_length_ft") or 0.0)
+        per_ft = (float(m.get("lam_roll_cost") or 0.0) / roll_len) if roll_len > 0 else 0.0
+        c1 = round(per_ft * 1.5, 4)      # 12x18 sheet, 1 side
+        c2 = round(per_ft * 3.0, 4)      # 12x18 sheet, 2 sides
+        r_ovr = float(m.get("lam_retail_per_sheet") or 0.0)
+        w_ovr = float(m.get("lam_wholesale_per_sheet") or 0.0)
+        retail_price = round(r_ovr, 2) if r_ovr > 0 else markup_price(c2, rm)
+        wholesale_price = round(w_ovr, 2) if w_ovr > 0 else markup_price(c2, wm)
+        selling_price = retail_price
+        finish_cost = c1
+        below_cost = bool((r_ovr > 0 and r_ovr < c2) or (w_ovr > 0 and w_ovr < c2))
+        m["lam_per_ft"] = round(per_ft, 4)
+        m["lam_ref_cost_1"] = c1
+        m["lam_ref_cost_2"] = c2
+        m["lam_ref_retail_1"] = round(r_ovr / 2.0, 2) if r_ovr > 0 else markup_price(c1, rm)
+        m["lam_ref_retail_2"] = retail_price
+        m["lam_ref_wholesale_1"] = round(w_ovr / 2.0, 2) if w_ovr > 0 else markup_price(c1, wm)
+        m["lam_ref_wholesale_2"] = wholesale_price
     m.update({
         "labor_cost": round(labor_cost, 4),
         "ink_cost": round(ink_cost, 4),
@@ -1263,7 +1294,8 @@ async def list_materials(user=Depends(get_current_user)):
             for k in ["unit_cost", "finish_cost", "labor_cost", "ink_cost",
                       "supplier_company", "supplier_contact", "supplier_phone",
                       "supplier_email", "wholesale_price", "below_cost", "stock_qty",
-                      "reorder_point", "reorder_target", "low_stock"]:
+                      "reorder_point", "reorder_target", "low_stock",
+                      "lam_per_ft", "lam_ref_cost_1", "lam_ref_cost_2"]:
                 m.pop(k, None)
         out.append(m)
     return out
@@ -2080,11 +2112,19 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
         ld = await db.materials.find_one({"_id": ObjectId(body.laminate_id)})
         if ld and ld.get("lam_length_ft"):
             lam_spec = {"per_ft": ld.get("lam_roll_cost", 0) / ld["lam_length_ft"], "sides": max(1, body.laminate_sides or 1)}
+            if ld.get("lam_retail_per_sheet"):
+                lam_spec["retail_per_ft"] = ld["lam_retail_per_sheet"] / 3.0
+            if ld.get("lam_wholesale_per_sheet"):
+                lam_spec["wholesale_per_ft"] = ld["lam_wholesale_per_sheet"] / 3.0
     foil_spec = None
     if body.foil_id:
         fd = await db.materials.find_one({"_id": ObjectId(body.foil_id)})
         if fd and fd.get("lam_length_ft"):
             foil_spec = {"per_ft": fd.get("lam_roll_cost", 0) / fd["lam_length_ft"], "sides": max(1, body.foil_sides or 1)}
+            if fd.get("lam_retail_per_sheet"):
+                foil_spec["retail_per_ft"] = fd["lam_retail_per_sheet"] / 3.0
+            if fd.get("lam_wholesale_per_sheet"):
+                foil_spec["wholesale_per_ft"] = fd["lam_wholesale_per_sheet"] / 3.0
     results = []
     for st in stocks:
         quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key, lam_spec, foil_spec)
@@ -2718,11 +2758,13 @@ async def _paper_addon_usage(inp):
         if inp.get("laminate_id"):
             sides = max(1, int(inp.get("laminate_sides") or 1))
             out["lam_material_id"] = inp["laminate_id"]
-            out["lam_ft_per_order"] = round(sheets * length_ft * sides, 2)
+            out["lam_ft_per_order"] = round(sheets * length_ft, 2)   # per-roll feet (each side = its own roll)
+            out["lam_sides"] = sides
         if inp.get("hot_foil") and inp.get("foil_id"):
             fsides = max(1, int(inp.get("foil_sides") or 1))
             out["foil_material_id"] = inp["foil_id"]
-            out["foil_ft_per_order"] = round(sheets * length_ft * fsides, 2)
+            out["foil_ft_per_order"] = round(sheets * length_ft, 2)  # per-roll feet
+            out["foil_sides"] = fsides
     except Exception:
         return out
     return out
@@ -2778,26 +2820,30 @@ async def deduct_inventory_for_order(enriched):
     for it in enriched:
         p = it["product"]
         qy = it["qty"]
-        for mid_key, ft_key in [("lam_material_id", "lam_ft_per_order"), ("foil_material_id", "foil_ft_per_order")]:
+        for mid_key, ft_key, sides_key in [("lam_material_id", "lam_ft_per_order", "lam_sides"),
+                                           ("foil_material_id", "foil_ft_per_order", "foil_sides")]:
             mid = p.get(mid_key)
-            ft = round((p.get(ft_key) or 0.0) * qy, 3)
+            ft = round((p.get(ft_key) or 0.0) * qy, 3)   # per-roll feet (one side's roll)
             if not (mid and ft):
                 continue
-            lam_ft_acc[mid] = round(lam_ft_acc.get(mid, 0.0) + ft, 3)
-    for mid, ft in lam_ft_acc.items():
+            sides = max(1, int(p.get(sides_key) or 1))
+            key = (mid, sides)   # keep per-(material, sides) so mixed-sides lines don't over-deplete
+            lam_ft_acc[key] = round(lam_ft_acc.get(key, 0.0) + ft, 3)
+    for (mid, sides), ft in lam_ft_acc.items():
         try:
-            mat = await db.materials.find_one({"_id": ObjectId(mid)})
+            mat = await db.materials.find_one({"_id": ObjectId(mid)})   # fresh read (may be updated by a prior sides-group)
         except Exception:
             mat = None
         if not mat:
             continue
         roll_len = float(mat.get("lam_length_ft") or 0.0)
-        used = round(float(mat.get("lam_open_used_ft") or 0.0) + ft, 3)
+        used = round(float(mat.get("lam_open_used_ft") or 0.0) + ft, 3)   # per-roll open feet
         rolls = float(mat.get("stock_qty") or 0.0)
-        rolls_consumed = 0
+        cycles = 0
         if roll_len > 0:
-            rolls_consumed = int(used // roll_len)
-            used = round(used - rolls_consumed * roll_len, 3)
+            cycles = int(used // roll_len)
+            used = round(used - cycles * roll_len, 3)
+        rolls_consumed = cycles * sides   # each completed roll depletes `sides` physical rolls (run in parallel)
         new_rolls = round(rolls - rolls_consumed, 3)
         await db.materials.update_one(
             {"_id": ObjectId(mid)},
@@ -2805,7 +2851,7 @@ async def deduct_inventory_for_order(enriched):
         deductions.append({"material_id": mid, "material_name": mat.get("name"),
                            "unit": "roll(s)", "used": rolls_consumed, "waste": 0,
                            "total": rolls_consumed, "new_stock": new_rolls, "short": new_rolls < 0,
-                           "open_roll_used_ft": used, "ft_this_order": ft})
+                           "open_roll_used_ft": used, "ft_per_roll_this_order": ft, "sides": sides})
     return deductions
 
 class OrderItemIn(BaseModel):

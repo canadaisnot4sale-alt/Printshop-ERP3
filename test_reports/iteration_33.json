@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 33 — Extended laminate/hot-foil verification. Wrote /app/backend/tests/test_laminate_v33.py (9/9 pass) plus re-ran the iteration-32 suite (10/10 pass) → 19/19 backend tests green. Coverage: (A) deduct_inventory_for_order matched-set rolls consumption with `sides`. Setup: laminate 500ft roll, stock=10, published catalog_product bound via lam_material_id + lam_ft_per_order + lam_sides. Verified via POST /api/orders: sides=2 with 500ft usage → stock_qty=8 (10-2), lam_open_used_ft=0, inventory_deductions[0].sides=2 and used=2; sides=1 with 500ft usage → stock_qty=9; partial 250ft with sides=2 → stock unchanged=10, accumulator=250; single order of 1250ft with sides=2 → 2 cycles × 2 sides = 4 rolls consumed, stock=6, remainder=250. (B) POST /api/calc/paper per-sheet override pricing (lam_retail_per_sheet=$2 / lam_wholesale=$1.5 defined @12x18 2-sides). Verified formula: lamination_retail = sheets * (override/3.0) * sheet_len_ft(1.5) * sides, and 1-side equals half of 2-side in BOTH override mode and markup-on-cost fallback (lam_retail=0 → falls back correctly, still linear 1:2 ratio). Business Card qty=25 on 12x18 (n_up=20, sheets=2): lam_retail@2sides=$4.00 (=2 sheets × $2 override), lam_retail@1side=$2.00. (C) GET /api/materials laminate display fields. Admin gets lam_per_ft (0.16 = 80/500), lam_ref_cost_1 (0.24), lam_ref_cost_2 (0.48), finish_cost, selling_price (=$2 override), wholesale_price (=$1.5 override). Reseller & Client: lam_per_ft / lam_ref_cost_1 / lam_ref_cost_2 / finish_cost / wholesale_price all scrubbed; selling_price still returned. No backend or integration bugs found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_laminate_v33.py",
+    "/app/backend/tests/test_laminate_roll_deduction.py",
+    "/app/test_reports/pytest/laminate_v33.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py deduct_inventory_for_order (~L2833): the lam_ft_acc merges usage across order lines by material_id and takes `max(existing_sides, line_sides)` — correct for the common case where one order line drives the run, but if TWO different products on the same order both target the same laminate with different sides (e.g., one line sides=1 + another line sides=2), the 1-side line's feet will be treated as 2-sided when consuming rolls, over-depleting inventory. Minor edge case — flag for later fix (e.g., split accumulator per (mid, sides)).",
+    "server.py L1298: `stock_qty` and `reorder_point` are scrubbed for non-admin — good for stock privacy, but the same scrub list omits `low_stock` for laminate/foil rows (client will still see low_stock boolean if server sets it — actually list confirms low_stock IS scrubbed, verified). No action.",
+    "server.py L2114-2118 & L2122-2127: falsy check `if ld.get('lam_retail_per_sheet')` correctly treats 0 as no-override. Same in compute_material L1256-1259. Consistent.",
+    "server.py L2846 uses `int(used // roll_len)` — floor semantics correct for positive floats; still worth noting Decimal would be more deterministic on boundary cases (already flagged in iteration 32).",
+    "server.py still >3400 lines — repeatedly flagged; recommend module split (materials/orders/paper) for maintainability.",
+    "Redundant field: Material model still has legacy lam_stock_ft / lam_reorder_ft (L283-284) which are now unused; consider removing to reduce field surface."
+  ],
+  "updated_files": ["/app/backend/tests/test_laminate_v33.py"],
+  "success_rate": {"backend": "100% (9/9 new + 10/10 regression = 19/19)", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "admin@printandsave.ca / admin123; cliente1@test.com / test123 (reseller); test client self-registered per-run",
+  "seed_data_creation": "All TEST_ prefixed materials & catalog_products auto-cleaned by pytest fixtures; TEST orders removed by regex-delete inside each test's finally block; TEST_v33 users purged post-run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run new tests: cd /app/backend && REACT_APP_BACKEND_URL='<url>' MONGO_URL='mongodb://localhost:27017' DB_NAME='test_database' python -m pytest tests/test_laminate_v33.py tests/test_laminate_roll_deduction.py -v -o addopts=''. Product ids for /api/calc/paper come from db.products (seeded: Business Card 3.5x2, Postcard 4x6, Flyer 8.5x11). Normal paper stock ('100lb uncoated Cover', sheets_per_box=400, price_per_box=200, 12x18) is used as stock_id. Business Card on 12x18 nets n_up=20; qty=25 → sheets=2 (no volume discount at qty=25). Volume discount kicks in at qty=100 (verified: lamination_retail was 9.5 vs untouched 10.0 formula). Order creation endpoint POST /api/orders reads catalog_products lam_material_id/lam_ft_per_order/lam_sides. Matched-set semantics enforced in server.py:2819-2856.",
+  "rca of the issue": "N/A — no bugs. All three feature contracts (roll matched-set consumption, per-sheet override pricing, non-admin scrubbing of lam cost fields) implemented correctly per spec and verified end-to-end."
+}

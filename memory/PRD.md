@@ -117,6 +117,13 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v41 Laminate/Foil: per-sheet price override + paper-style display + 2-roll parallel depletion
+- **Paper-style display** in Materials table & form for laminate/hot_foil (reference 12×18 sheet): Unit Cost = $/linear ft, Finish Cost = cost 1 side, Printed 1 side / Printed 2 sides = cost @1/@2 sides, Retail/Wholesale = @2 sides. compute_material sets lam_per_ft, lam_ref_cost_1/2, lam_ref_retail_1/2, lam_ref_wholesale_1/2, finish_cost, selling_price, wholesale_price. Cost fields scrubbed for non-admin. Inventory value uses lam_roll_cost × rolls.
+- **Per-sheet price override** (fields lam_retail_per_sheet, lam_wholesale_per_sheet — defined @12×18, 2 sides). Internally per_ft_override = override/3.0 (1.5ft × 2 sides); paper_quote _addon_sell uses override × sheet_len_ft × sides (scales by real size/sides), else markup on cost. Form shows override inputs + markup % + a Reference card (Cost/Retail/Wholesale × 1/2 sides). Motor por pie lineal intacto.
+- **2-roll parallel depletion** (user clarification): 2-sided runs 2 rolls (top+bottom), each depleting the sheet length ONCE. _paper_addon_usage stores lam_ft_per_order = per-roll feet (sheets×sheet_len, NOT ×sides) + lam_sides/foil_sides. deduct_inventory_for_order: cycles = int(per_roll_used // roll_len); rolls_consumed = cycles × sides. Accumulator keyed by (material, sides) to avoid over-depletion on mixed-sides orders. Cost still ×sides (total material across both rolls).
+- Verified E2E iteration_33: 19/19 backend pytest (matched-set roll consumption for sides 1/2, multi-cycle, partial carry-forward; override pricing 1-side=½ 2-side in override & markup modes; non-admin scrubbing). Tests: /app/backend/tests/test_laminate_v33.py.
+
+
 ## Implemented (2026-06) — v40 Laminate/Foil inventory tracked by ROLLS (smart per-roll deduction)
 - User change: inventory for Laminate/Hot Foil now tracked & displayed by **rolls** (`stock_qty`), NOT linear feet. Materials table shows roll count "N rl" with `-`/`+` adjust buttons (same as other materials); the old "ft / rp ft" display and the duplicate generic Inventory block in the form are removed for laminate/foil.
 - Form fields: "Stock (rolls)" → binds `stock_qty`, "Reorder point (rolls)" → binds `reorder_point`. Roll width/length(ft)/cost + foil color kept. Cost per linear ft still = lam_roll_cost / lam_length_ft (pricing unchanged).
