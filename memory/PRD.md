@@ -114,6 +114,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v35 Alphabetical + default extended to Sublimation & Garments
+- Sublimation products and DTF/Embroidery garments now support a single `is_default` (Default switch + badge column). Sublimation calculator pre-selects the default product; DTF & Embroidery pre-select the default garment. All catalogs already sort alphabetically (register_crud).
+- Backend: `is_default` added to Garment and SublimationProduct models; single-default enforcement is generic in register_crud.
+
 ## Implemented (2026-06) — v34 Paper Printing products: alphabetical + default
 - GET on all register_crud lists now sorts alphabetically by name (when present). Paper Printing product dropdown + Products tab are alphabetical.
 - Product model gained `is_default`; create/update enforce a SINGLE default (unset others). Products tab has a "Default" switch + "Default" badge column. Quote setup pre-selects the default product (falls back to first alphabetically). Verified via API: alpha order Business Card→Flyer→Postcard; setting one default leaves exactly one.

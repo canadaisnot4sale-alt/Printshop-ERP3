@@ -200,6 +200,7 @@ class SublimationProduct(BaseModel):
     uses_paper: bool = False
     print_bleed_w: float = 0.0
     print_bleed_h: float = 0.0
+    is_default: bool = False
 
 class RollStickerMaterial(BaseModel):
     name: str
@@ -220,6 +221,7 @@ class Garment(BaseModel):
     name: str
     category: str = "tshirt"
     cost_each: float = 0.0
+    is_default: bool = False
 
 class LaserMaterial(BaseModel):
     name: str

@@ -27,6 +27,7 @@ const prodFields = [
   { name: "uses_paper", label: "Uses sublimation paper", type: "switch" },
   { name: "print_bleed_w", label: "Print bleed W (in)", type: "number" },
   { name: "print_bleed_h", label: "Print bleed H (in)", type: "number" },
+  { name: "is_default", label: "Default product (pre-selected in quotes)", type: "switch", full: true },
 ];
 const prodCols = [
   { name: "name", label: "Product" },
@@ -35,6 +36,7 @@ const prodCols = [
   { name: "price_per_box", label: "Box", mono: true, render: (i) => money(i.price_per_box) },
   { name: "pieces_per_box", label: "Pcs/box", mono: true },
   { name: "print", label: "Print", mono: true, render: (i) => (i.uses_paper ? `${i.print_bleed_w}×${i.print_bleed_h}"` : "—") },
+  { name: "is_default", label: "Default", render: (i) => (i.is_default ? <span className="text-[10px] font-mono uppercase bg-amber-100 text-amber-700 px-2 py-0.5 rounded">Default</span> : "—") },
 ];
 
 export default function Sublimation() {
@@ -45,7 +47,7 @@ export default function Sublimation() {
   const [qty, setQty] = useState(25);
   const [res, setRes] = useState(null);
 
-  const load = () => api.get("/sublimation-products").then((r) => { setProducts(r.data); if (!productId && r.data[0]) setProductId(r.data[0].id); });
+  const load = () => api.get("/sublimation-products").then((r) => { setProducts(r.data); if (!productId && r.data.length) setProductId((r.data.find((p) => p.is_default) || r.data[0]).id); });
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
   const calc = async () => {

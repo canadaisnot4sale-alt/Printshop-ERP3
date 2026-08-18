@@ -23,11 +23,13 @@ const garmentFields = [
   { name: "name", label: "Name", type: "text", full: true },
   { name: "category", label: "Category", type: "select", options: ["tshirt", "hoodie", "polo", "other"], default: "tshirt" },
   { name: "cost_each", label: "Cost each (CAD)", type: "number", default: 4.5 },
+  { name: "is_default", label: "Default garment (pre-selected in quotes)", type: "switch", full: true },
 ];
 const garmentCols = [
   { name: "name", label: "Garment" },
   { name: "category", label: "Type" },
   { name: "cost_each", label: "Cost", mono: true, render: (i) => money(i.cost_each) },
+  { name: "is_default", label: "Default", render: (i) => (i.is_default ? <span className="text-[10px] font-mono uppercase bg-amber-100 text-amber-700 px-2 py-0.5 rounded">Default</span> : "—") },
 ];
 
 export default function DTF() {
@@ -41,7 +43,7 @@ export default function DTF() {
   ]);
   const [res, setRes] = useState(null);
 
-  useEffect(() => { api.get("/garments").then((r) => setGarments(r.data)); }, []);
+  useEffect(() => { api.get("/garments").then((r) => { setGarments(r.data); const d = r.data.find((g) => g.is_default); if (d) setGarmentId(d.id); }); }, []);
 
   const calc = async () => {
     try {

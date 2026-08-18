@@ -23,7 +23,7 @@ export default function Embroidery() {
   const [placements, setPlacements] = useState([{ label: "Left chest", stitch_count: 8000 }]);
   const [res, setRes] = useState(null);
 
-  useEffect(() => { api.get("/garments").then((r) => setGarments(r.data)); }, []);
+  useEffect(() => { api.get("/garments").then((r) => { setGarments(r.data); const d = r.data.find((g) => g.is_default); if (d) setGarmentId(d.id); }); }, []);
 
   const add = () => placements.length < 8 && setPlacements([...placements, { label: "", stitch_count: 5000 }]);
   const rm = (i) => setPlacements(placements.filter((_, idx) => idx !== i));
