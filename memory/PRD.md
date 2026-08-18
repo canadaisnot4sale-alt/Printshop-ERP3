@@ -1,5 +1,13 @@
 # Print and Save — Print Shop ERP & Estimating
 
+## ⏳ PENDING / USER-REQUESTED (remind the user — deferred by them on 2026-06)
+- **Sales Dashboard** (Phase 5 sales analytics). User explicitly asked for this and said "lo hacemos más adelante, recuérdamelo":
+  - **Break-even multi-period**: how much to sell per DAY / WEEK / MONTH / YEAR to cover costs (currently only monthly exists in /financials).
+  - **Best-selling product** ranking (by units & revenue, with period filter) — does NOT exist yet.
+  - **Real earnings consolidated**: day/week/month/year sales vs break-even target.
+  - NOTE: best-seller & real sales depend on Orders/Store; if user bills outside the app, ask how sales are recorded so the report is faithful.
+
+
 ## Original Problem Statement
 Excel-style ERP/estimating system for a print shop automating pricing, material management, production calculations and cost analysis across 5 modules: Paper Printing, Booklet, Large Format, Sticker Calculator, Equipment & Production Cost. Everything interconnected so material/equipment/markup/product changes flow through all quotes.
 
