@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from pathlib import Path
 import os
+import re
 import contextvars
 
 ROOT_DIR = Path(__file__).parent
@@ -251,6 +252,7 @@ class Material(BaseModel):
     supplier_contact: str = ""
     supplier_phone: str = ""
     supplier_email: str = ""
+    supplier_description: str = ""              # exact vendor invoice description — used to auto-match on PDF import
     # Specs
     unit: str = "sheet"                         # sheet, sqft, roll, each
     size: str = ""                              # e.g. 4x8 ft, 13x19 in
@@ -1534,7 +1536,9 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
         li["unit_multiplier"] = mult
         m = None
         if li.get("code"):
-            m = await db.materials.find_one({"code": {"$regex": f"^{li['code']}$", "$options": "i"}})
+            m = await db.materials.find_one({"code": {"$regex": f"^{re.escape(li['code'])}$", "$options": "i"}})
+        if not m and li.get("description"):
+            m = await db.materials.find_one({"supplier_description": {"$regex": f"^{re.escape(li['description'].strip())}$", "$options": "i"}})
         if m:
             li["material_id"] = str(m["_id"])
             li["matched_name"] = m.get("name")
@@ -1599,7 +1603,9 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                 except Exception:
                     match = None
             if not match and li.code:
-                match = await db.materials.find_one({"code": {"$regex": f"^{li.code}$", "$options": "i"}})
+                match = await db.materials.find_one({"code": {"$regex": f"^{re.escape(li.code)}$", "$options": "i"}})
+            if not match and li.description:
+                match = await db.materials.find_one({"supplier_description": {"$regex": f"^{re.escape(li.description.strip())}$", "$options": "i"}})
             if not match and li.name:
                 match = await db.materials.find_one({"name": li.name})
             if match:
@@ -1612,6 +1618,8 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                 }
                 if li.code and not match.get("code"):
                     upd["code"] = li.code                                          # remember supplier code → material
+                if li.description and not match.get("supplier_description"):
+                    upd["supplier_description"] = li.description.strip()           # remember vendor description alias
                 for k, v in [("supplier_company", sup.company), ("supplier_contact", sup.contact),
                              ("supplier_phone", sup.phone), ("supplier_email", sup.email)]:
                     if v and not match.get(k):

@@ -26,7 +26,7 @@ const MODULES = [
 
 const BLANK = {
   name: "", code: "", category: "paper",
-  supplier_company: "", supplier_contact: "", supplier_phone: "", supplier_email: "",
+  supplier_company: "", supplier_contact: "", supplier_phone: "", supplier_email: "", supplier_description: "",
   unit: "sheet", size: "", weight: "", sheet_area_sqft: 0,
   unit_cost: 0, labor_minutes: 0, machine_id: "", ink_coverage_pct: 0,
   click_cost: 0.055, num_boxes: 1, price_per_box: 0,
@@ -367,6 +367,10 @@ export default function Materials() {
               <div className="col-span-2">
                 <Label className="text-xs">Nickname / name</Label>
                 <Input data-testid="material-field-name" value={form.name} onChange={(e) => set("name", e.target.value)} className="rounded-lg mt-1" />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs">Supplier description <span className="text-slate-400">(paste exactly from invoice — used to auto-match on PDF import)</span></Label>
+                <Input data-testid="material-field-supplier_description" value={form.supplier_description} onChange={(e) => set("supplier_description", e.target.value)} className="rounded-lg mt-1" placeholder="e.g. 12X18 100LB UNCOATED COVER CWH..." />
               </div>
               <div><Label className="text-xs">Code</Label>
                 <Input data-testid="material-field-code" value={form.code} onChange={(e) => set("code", e.target.value)} className="rounded-lg mt-1" /></div>

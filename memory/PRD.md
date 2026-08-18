@@ -121,6 +121,7 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Supplier unit rule** (trained once): SupplierPreset gains unit_multiplier + unit_label (+ default_category/modules). Alfa Paper seeded ×1000 ("M Sheets"). Saving a purchase upserts the supplier rule (auto-trained). /purchases/parse looks up the supplier → attaches supplier_unit_multiplier, per-line converted_qty/converted_unit_cost, and auto-match material_id by code.
 - **Unit conversion on import**: create_purchase converts invoice units → real stock. qty_units = quantity × unit_multiplier; unit_cost = line_total / qty_units (fallback unit_price/mult). Verified via curl: Alfa 0.4 M @ $254/M ($101.60 box) → +400 sheets, $0.254/sheet. Remembers supplier code on the matched material for future auto-match.
 - **Review screen** (Purchases import dialog): "Unit ×" field, per-line "→ Stock" and "→ $/unit" converted preview, green "matches: <material>" hint when auto-matched by code. Confirm-once workflow; material_id + unit_multiplier sent to backend.
+- **Description alias match**: Material gains supplier_description (paste the exact vendor invoice description in the Materials form). Import matches by material_id → code → supplier_description → name. On match it remembers the code/description on the material. Verified via curl: material with only supplier_description (no code) matched an invoice line → +400 sheets, $0.254.
 - Verified end-to-end via curl; frontend compiles. NOTE: full Purchases UI flow not yet run through testing_agent.
 
 
