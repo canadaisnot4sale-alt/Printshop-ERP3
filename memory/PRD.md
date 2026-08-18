@@ -123,6 +123,7 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Tax-Included view** (all modules): shared PricingPanel adds a "Tax Included" block with GST/PST broken out separately — Retail = Subtotal + GST% + PST%, Wholesale = Subtotal + GST% only (PST shown as —). Rates from settings.gst_pct/pst_pct.
 - **Selectable Rush turnaround**: Rush Options rows are tappable; selecting Standard/Next day/Same day recalculates BOTH the Order Total and the Tax Included block on the chosen rushed price (retail & wholesale × factor). Selected row highlighted; header shows the active turnaround. Display-only (default Standard).
 - **Volume Pricing +tax columns**: both the inline Paper Printing volume table AND the shared VolumePricingTable now add "Retail +tax" (GST+PST) and "WS +tax" (GST only) columns using settings.gst_pct/pst_pct (via exported useRushRates hook from Metric.js).
+- **Unified Order Total box**: merged the pre-tax "Order Total" band and the "Tax Included" block into ONE box. Rush selector on top; two-column (Retail | Wholesale) breakdown Subtotal/GST/PST; the highlighted blue footer row "Total incl. tax" shows the tax-inclusive Retail (large) + Wholesale. Recalculates on Rush selection. data-testid order-total; tax-retail/tax-wholesale on the blue total.
 - Verified E2E iteration_34: 8/8 backend pytest + frontend across Paper, Direct Print, Stickers, and Settings persistence. Tests: /app/backend/tests/test_round_corners_and_rush.py.
 
 

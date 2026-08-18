@@ -96,12 +96,6 @@ export function PricingPanel({ r, className = "" }) {
         {(() => { const v = r.lamination_retail ?? r.lamination_wholesale; return v > 0 ? <PriceLine label="· Lamination" value={v} unit={r.qty ? v / r.qty : undefined} tone="muted" testid="price-lamination" /> : null; })()}
         {(() => { const v = r.foil_retail ?? r.foil_wholesale; return v > 0 ? <PriceLine label="· Hot Foil" value={v} unit={r.qty ? v / r.qty : undefined} tone="muted" testid="price-foil" /> : null; })()}
         {(() => { const v = r.round_corner_retail ?? r.round_corner_wholesale; return v > 0 ? <PriceLine label="· Round Corners" value={v} tone="muted" testid="price-roundcorner" /> : null; })()}
-        {order != null && (
-          <div className="flex items-baseline justify-between bg-[#2495D3] text-white px-4 py-3">
-            <span className="text-[10px] font-mono uppercase tracking-widest">Order Total · {sel.label}</span>
-            <span className="num text-2xl font-black" data-testid="price-order-total">{money(order)}</span>
-          </div>
-        )}
       </div>
       {order != null && (
         <div className="rounded-xl border border-slate-200 mt-2 overflow-hidden" data-testid="rush-pricing">
@@ -130,8 +124,8 @@ export function PricingPanel({ r, className = "" }) {
         </div>
       )}
       {order != null && (
-        <div className="rounded-xl border border-slate-200 mt-2 overflow-hidden" data-testid="tax-pricing">
-          <div className="bg-slate-50 px-4 py-2 text-[10px] font-mono uppercase tracking-widest text-slate-500 border-b border-slate-200">Tax Included · {sel.label}</div>
+        <div className="rounded-xl border border-slate-200 mt-2 overflow-hidden" data-testid="order-total">
+          <div className="bg-slate-50 px-4 py-2 text-[10px] font-mono uppercase tracking-widest text-slate-500 border-b border-slate-200">Order Total · {sel.label}</div>
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[10px] font-mono uppercase tracking-widest text-slate-400 border-b border-slate-100">
@@ -151,15 +145,15 @@ export function PricingPanel({ r, className = "" }) {
                 {retail != null && <td className="px-4 py-1.5 text-right num" data-testid="tax-retail-gst">{money(retail * rush.gst / 100)}</td>}
                 {wholesale != null && <td className="px-4 py-1.5 text-right num" data-testid="tax-ws-gst">{money(wholesale * rush.gst / 100)}</td>}
               </tr>
-              <tr className="border-b border-slate-50">
+              <tr>
                 <td className="px-4 py-1.5 text-slate-500">PST {rush.pst}%</td>
                 {retail != null && <td className="px-4 py-1.5 text-right num" data-testid="tax-retail-pst">{money(retail * rush.pst / 100)}</td>}
                 {wholesale != null && <td className="px-4 py-1.5 text-right num text-slate-300">—</td>}
               </tr>
-              <tr>
-                <td className="px-4 py-1.5 text-slate-600 font-semibold">Total w/ tax</td>
-                {retail != null && <td className="px-4 py-1.5 text-right num text-[#2495D3] font-semibold" data-testid="tax-retail">{money(retail * (1 + (rush.gst + rush.pst) / 100))}</td>}
-                {wholesale != null && <td className="px-4 py-1.5 text-right num text-slate-600 font-semibold" data-testid="tax-wholesale">{money(wholesale * (1 + rush.gst / 100))}</td>}
+              <tr className="bg-[#2495D3] text-white">
+                <td className="px-4 py-3 text-[10px] font-mono uppercase tracking-widest align-middle">Total<br />incl. tax</td>
+                {retail != null && <td className="px-4 py-3 text-right num text-2xl font-black align-middle" data-testid="tax-retail">{money(retail * (1 + (rush.gst + rush.pst) / 100))}</td>}
+                {wholesale != null && <td className="px-4 py-3 text-right num text-base font-semibold align-middle opacity-90" data-testid="tax-wholesale">{money(wholesale * (1 + rush.gst / 100))}</td>}
               </tr>
             </tbody>
           </table>
