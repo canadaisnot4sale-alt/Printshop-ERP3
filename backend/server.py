@@ -1452,7 +1452,7 @@ async def reorder_email(body: ReorderEmailIn, user=Depends(require_admin)):
 
 # ---------------- Purchases: PDF invoice import + history (tax) ----------------
 SUPPLIER_MODULE_RULES = [
-    ("alfa", ["paper"], "sheet"),
+    ("alfa", ["paper"], "paper"),
     ("spicers", ["large-format", "direct-print"], "ink"),
     ("grimco", ["large-format", "direct-print"], "roll"),
 ]
@@ -1463,6 +1463,11 @@ def suggest_supplier_defaults(company: str):
         if key in c:
             return mods, cat
     return [], "other"
+
+_SIZE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*[\"'”’]?\s*[xX×]\s*[\"'”’]?\s*(\d+(?:\.\d+)?)")
+def _extract_size(text: str) -> str:
+    m = _SIZE_RE.search(text or "")
+    return f"{m.group(1)}x{m.group(2)}" if m else ""
 
 def extract_pdf_text(raw: bytes) -> str:
     import pypdfium2 as pdfium
@@ -1533,6 +1538,7 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
     for li in data.get("line_items", []):
         li["import"] = True
         li["name"] = (li.get("description") or "")[:60]
+        li["size"] = _extract_size(li.get("description") or li.get("name") or "")
         li["unit_multiplier"] = mult
         m = None
         if li.get("code"):
@@ -1559,6 +1565,7 @@ class PurchaseLine(BaseModel):
     import_material: bool = True
     material_id: str = ""
     unit_multiplier: float = 1.0
+    size: str = ""
 
 class PurchaseSupplier(BaseModel):
     company: str = ""
@@ -1603,6 +1610,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
             mult = li.unit_multiplier or 1.0
             qty_units = round(li.quantity * mult, 2)                              # invoice qty → real stock units
             unit_cost = round(li.line_total / qty_units, 4) if qty_units else (round(li.unit_price / mult, 4) if mult else li.unit_price)
+            size_str = (li.size or "").strip() or _extract_size(li.description or li.name or "")
             match = None
             if li.material_id:
                 try:
@@ -1627,6 +1635,8 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                     upd["code"] = li.code                                          # remember supplier code → material
                 if li.description and not match.get("supplier_description"):
                     upd["supplier_description"] = li.description.strip()           # remember vendor description alias
+                if size_str and not match.get("size"):
+                    upd["size"] = size_str                                          # auto-derived sheet size for layout
                 for k, v in [("supplier_company", sup.company), ("supplier_contact", sup.contact),
                              ("supplier_phone", sup.phone), ("supplier_email", sup.email)]:
                     if v and not match.get(k):
@@ -1640,6 +1650,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                     "supplier_company": sup.company, "supplier_contact": sup.contact,
                     "supplier_phone": sup.phone, "supplier_email": sup.email,
                     "unit": li.unit or "each", "unit_cost": unit_cost,
+                    "size": size_str,
                     "stock_qty": qty_units, "reorder_point": 0.0, "reorder_target": 0.0,
                     "modules": body.modules, "is_default": False,
                     "last_purchase_at": now_iso(), "created_at": now_iso(),

@@ -21,7 +21,7 @@ import {
 
 const BAR_COLORS = ["#2495D3", "#1E7AA9", "#5BB4E0", "#0F5A82", "#8CCEC", "#134E6F"];
 
-const CATEGORIES = ["sheet", "roll", "ink", "laminate", "substrate", "other"];
+const CATEGORIES = ["paper", "roll", "ink", "laminate", "substrate", "sheet", "other"];
 const MODULES = [
   "paper", "booklet", "large-format", "stickers", "dtf", "embroidery",
   "laser", "direct-print", "channel-letters", "sublimation", "roll-stickers",
@@ -106,6 +106,7 @@ export default function Purchases() {
           unit_price: Number(li.unit_price || 0), line_total: Number(li.line_total || 0),
           import_material: !!li.import,
           material_id: li.material_id || "",
+          size: li.size || "",
           unit_multiplier: Number(draft.supplier_unit_multiplier || 1),
         })),
       };
@@ -317,6 +318,7 @@ export default function Purchases() {
                       <th className="text-center px-2 py-2">Import</th>
                       <th className="text-left px-2 py-2">Name</th>
                       <th className="text-left px-2 py-2">Code</th>
+                      <th className="text-left px-2 py-2">Size</th>
                       <th className="text-right px-2 py-2">Qty</th>
                       <th className="text-right px-2 py-2">Unit price</th>
                       <th className="text-right px-2 py-2">→ Stock</th>
@@ -338,6 +340,7 @@ export default function Purchases() {
                           {li.matched_name && <div className="text-[10px] text-emerald-600 mt-0.5" data-testid={`draft-line-matched-${i}`}>↳ matches: {li.matched_name}</div>}
                         </td>
                         <td className="px-2 py-1.5"><Input value={li.code || ""} onChange={(e) => setLine(i, "code", e.target.value)} className="rounded h-7 text-xs w-28" /></td>
+                        <td className="px-2 py-1.5"><Input data-testid={`draft-line-size-${i}`} value={li.size || ""} onChange={(e) => setLine(i, "size", e.target.value)} placeholder="12x18" className="rounded h-7 text-xs w-16" /></td>
                         <td className="px-2 py-1.5"><Input type="number" value={li.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} className="rounded h-7 text-xs w-16 text-right num" /></td>
                         <td className="px-2 py-1.5"><Input type="number" value={li.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} className="rounded h-7 text-xs w-20 text-right num" /></td>
                         <td className="px-2 py-1.5 text-right num text-slate-700 font-semibold" data-testid={`draft-line-stock-${i}`}>{stockUnits.toLocaleString()}</td>
