@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money, num } from "@/lib/format";
-import { PricingPanel } from "@/components/Metric";
+import { PricingPanel, useRushRates } from "@/components/Metric";
 import { useRequote } from "@/lib/useRequote";
 import { toast } from "sonner";
 import { Calculator, Layers, FileStack, DollarSign, Tag } from "lucide-react";
@@ -53,6 +53,9 @@ export default function PaperPrinting() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [products, setProducts] = useState([]);
+  const rush = useRushRates();
+  const retailTaxF = 1 + (rush.gst + rush.pst) / 100;
+  const wsTaxF = 1 + rush.gst / 100;
   const [productId, setProductId] = useState("");
   const [sheet, setSheet] = useState("13x19");
   const [laminate, setLaminate] = useState(false);
@@ -322,8 +325,10 @@ export default function PaperPrinting() {
                             <th className="text-right px-4 py-2">Discount</th>
                             {retailOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">Retail / unit</th>}
                             {retailOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">Retail total</th>}
+                            {retailOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">Retail +tax</th>}
                             {wholesaleOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">WS / unit</th>}
                             {wholesaleOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">WS total</th>}
+                            {wholesaleOf(rowFor(selectedStock, focusQty)) != null && <th className="text-right px-4 py-2">WS +tax</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -335,14 +340,16 @@ export default function PaperPrinting() {
                               <td className="px-4 py-2 text-right num">{(row.volume_discount_pct || 0) > 0 ? <span className="text-emerald-600">−{row.volume_discount_pct}%</span> : <span className="text-slate-300">—</span>}</td>
                               {retailOf(row) != null && <td className="px-4 py-2 text-right num text-slate-600">{money(row[`retail_unit_${side}`])}</td>}
                               {retailOf(row) != null && <td className="px-4 py-2 text-right num font-semibold text-[#2495D3]">{money(retailOf(row))}</td>}
+                              {retailOf(row) != null && <td className="px-4 py-2 text-right num text-[#2495D3]" data-testid="paper-volume-retail-tax">{money(retailOf(row) * retailTaxF)}</td>}
                               {wholesaleOf(row) != null && <td className="px-4 py-2 text-right num text-slate-500">{money(row[`wholesale_unit_${side}`])}</td>}
                               {wholesaleOf(row) != null && <td className="px-4 py-2 text-right num text-slate-600">{money(wholesaleOf(row))}</td>}
+                              {wholesaleOf(row) != null && <td className="px-4 py-2 text-right num text-slate-600" data-testid="paper-volume-ws-tax">{money(wholesaleOf(row) * wsTaxF)}</td>}
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-2">Tap a row to set it as your focus quantity. Discounts are editable in Settings → Volume Discounts.</p>
+                    <p className="text-[11px] text-slate-400 mt-2">Tap a row to set it as your focus quantity. +tax: Retail incl. GST {rush.gst}% + PST {rush.pst}%; WS incl. GST {rush.gst}% only. Discounts editable in Settings → Volume Discounts.</p>
                   </div>
 
                 </div>

@@ -7,7 +7,7 @@ import ProfitabilityPanel from "@/components/ProfitabilityPanel";
 // Rush surcharge rates + tax rates fetched once and cached across the app.
 let _rushCache = null;
 export function resetRushRatesCache() { _rushCache = null; }
-function useRushRates() {
+export function useRushRates() {
   const [r, setR] = useState(_rushCache);
   useEffect(() => {
     if (_rushCache) return;

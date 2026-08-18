@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { money } from "@/lib/format";
+import { useRushRates } from "@/components/Metric";
 
 const QTYS = [25, 50, 100, 250, 500, 1000, 2500, 5000];
 
@@ -9,6 +10,9 @@ const QTYS = [25, 50, 100, 250, 500, 1000, 2500, 5000];
 export default function VolumePricingTable({ endpoint, makeBody, extract, signature, unitLabel = "unit", className = "" }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const rush = useRushRates();
+  const retailTaxF = 1 + (rush.gst + rush.pst) / 100;
+  const wsTaxF = 1 + rush.gst / 100;
 
   useEffect(() => {
     let alive = true;
@@ -47,8 +51,10 @@ export default function VolumePricingTable({ endpoint, makeBody, extract, signat
               <th className="text-right px-4 py-2">Discount</th>
               {hasRetail && <th className="text-right px-4 py-2">Retail / {unitLabel}</th>}
               {hasRetail && <th className="text-right px-4 py-2">Retail total</th>}
+              {hasRetail && <th className="text-right px-4 py-2">Retail +tax</th>}
               {hasWs && <th className="text-right px-4 py-2">WS / {unitLabel}</th>}
               {hasWs && <th className="text-right px-4 py-2">WS total</th>}
+              {hasWs && <th className="text-right px-4 py-2">WS +tax</th>}
             </tr>
           </thead>
           <tbody>
@@ -58,14 +64,16 @@ export default function VolumePricingTable({ endpoint, makeBody, extract, signat
                 <td className="px-4 py-2 text-right num">{r.disc > 0 ? <span className="text-emerald-600">−{r.disc}%</span> : <span className="text-slate-300">—</span>}</td>
                 {hasRetail && <td className="px-4 py-2 text-right num text-slate-600">{r.retail_unit != null ? money(r.retail_unit) : "—"}</td>}
                 {hasRetail && <td className="px-4 py-2 text-right num font-semibold text-[#2495D3]">{r.retail_total != null ? money(r.retail_total) : "—"}</td>}
+                {hasRetail && <td className="px-4 py-2 text-right num text-[#2495D3]" data-testid="volume-retail-tax">{r.retail_total != null ? money(r.retail_total * retailTaxF) : "—"}</td>}
                 {hasWs && <td className="px-4 py-2 text-right num text-slate-500">{r.wholesale_unit != null ? money(r.wholesale_unit) : "—"}</td>}
                 {hasWs && <td className="px-4 py-2 text-right num text-slate-600">{r.wholesale_total != null ? money(r.wholesale_total) : "—"}</td>}
+                {hasWs && <td className="px-4 py-2 text-right num text-slate-600" data-testid="volume-ws-tax">{r.wholesale_total != null ? money(r.wholesale_total * wsTaxF) : "—"}</td>}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-slate-400 mt-2">Discounts are editable in Settings → Volume Discounts.</p>
+      <p className="text-[11px] text-slate-400 mt-2">Discounts are editable in Settings → Volume Discounts. +tax = Retail incl. GST {rush.gst}% + PST {rush.pst}%; WS incl. GST {rush.gst}% only.</p>
     </div>
   );
 }
