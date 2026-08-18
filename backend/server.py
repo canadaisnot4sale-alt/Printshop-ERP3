@@ -280,8 +280,9 @@ class Material(BaseModel):
     lam_width_in: float = 0.0                     # paper laminate/foil: roll width (in)
     lam_length_ft: float = 0.0                    # paper laminate/foil: roll length (ft)
     lam_roll_cost: float = 0.0                    # paper laminate/foil: cost per roll
-    lam_stock_ft: float = 0.0                     # paper laminate/foil: linear feet on hand
-    lam_reorder_ft: float = 0.0                   # paper laminate/foil: reorder point (linear ft)
+    lam_stock_ft: float = 0.0                     # paper laminate/foil: linear feet on hand (legacy)
+    lam_reorder_ft: float = 0.0                   # paper laminate/foil: reorder point (linear ft, legacy)
+    lam_open_used_ft: float = 0.0                 # paper laminate/foil: ft consumed on the currently open roll
     foil_color: str = ""                          # paper hot_foil: color
     roll_cost: float = 0.0                        # roll: price of one full roll
     roll_qty: float = 0.0                          # roll: number of rolls on hand
@@ -2765,26 +2766,41 @@ async def deduct_inventory_for_order(enriched):
         deductions.append({"material_id": mid, "material_name": mat.get("name"),
                            "unit": mat.get("unit"), "used": round(usage, 3), "waste": waste,
                            "total": total, "new_stock": new_stock, "short": new_stock < 0})
-    # Laminate / hot-foil consumption in linear feet (from converted paper jobs)
+    # Laminate / hot-foil consumption: tracked by ROLLS. We accumulate linear feet consumed
+    # on the currently-open roll and only decrement the physical roll count (stock_qty) once
+    # the accumulated usage exceeds a full roll length (lam_length_ft).
+    lam_ft_acc = {}
     for it in enriched:
         p = it["product"]
         qy = it["qty"]
         for mid_key, ft_key in [("lam_material_id", "lam_ft_per_order"), ("foil_material_id", "foil_ft_per_order")]:
             mid = p.get(mid_key)
-            ft = round((p.get(ft_key) or 0.0) * qy, 2)
+            ft = round((p.get(ft_key) or 0.0) * qy, 3)
             if not (mid and ft):
                 continue
-            try:
-                mat = await db.materials.find_one({"_id": ObjectId(mid)})
-            except Exception:
-                mat = None
-            if not mat:
-                continue
-            new_ft = round((mat.get("lam_stock_ft") or 0.0) - ft, 2)
-            await db.materials.update_one({"_id": ObjectId(mid)}, {"$set": {"lam_stock_ft": new_ft}})
-            deductions.append({"material_id": mid, "material_name": mat.get("name"),
-                               "unit": "linear ft", "used": ft, "waste": 0,
-                               "total": ft, "new_stock": new_ft, "short": new_ft < 0})
+            lam_ft_acc[mid] = round(lam_ft_acc.get(mid, 0.0) + ft, 3)
+    for mid, ft in lam_ft_acc.items():
+        try:
+            mat = await db.materials.find_one({"_id": ObjectId(mid)})
+        except Exception:
+            mat = None
+        if not mat:
+            continue
+        roll_len = float(mat.get("lam_length_ft") or 0.0)
+        used = round(float(mat.get("lam_open_used_ft") or 0.0) + ft, 3)
+        rolls = float(mat.get("stock_qty") or 0.0)
+        rolls_consumed = 0
+        if roll_len > 0:
+            rolls_consumed = int(used // roll_len)
+            used = round(used - rolls_consumed * roll_len, 3)
+        new_rolls = round(rolls - rolls_consumed, 3)
+        await db.materials.update_one(
+            {"_id": ObjectId(mid)},
+            {"$set": {"stock_qty": new_rolls, "lam_open_used_ft": used}})
+        deductions.append({"material_id": mid, "material_name": mat.get("name"),
+                           "unit": "roll(s)", "used": rolls_consumed, "waste": 0,
+                           "total": rolls_consumed, "new_stock": new_rolls, "short": new_rolls < 0,
+                           "open_roll_used_ft": used, "ft_this_order": ft})
     return deductions
 
 class OrderItemIn(BaseModel):

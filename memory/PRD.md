@@ -117,6 +117,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v40 Laminate/Foil inventory tracked by ROLLS (smart per-roll deduction)
+- User change: inventory for Laminate/Hot Foil now tracked & displayed by **rolls** (`stock_qty`), NOT linear feet. Materials table shows roll count "N rl" with `-`/`+` adjust buttons (same as other materials); the old "ft / rp ft" display and the duplicate generic Inventory block in the form are removed for laminate/foil.
+- Form fields: "Stock (rolls)" → binds `stock_qty`, "Reorder point (rolls)" → binds `reorder_point`. Roll width/length(ft)/cost + foil color kept. Cost per linear ft still = lam_roll_cost / lam_length_ft (pricing unchanged).
+- **Smart per-roll deduction (option B)** on order creation: new field `lam_open_used_ft` accumulates linear feet consumed on the currently-open roll; `stock_qty` decrements by `int(used // lam_length_ft)` rolls only when a full roll is consumed, remainder carried in `lam_open_used_ft`. Logic in `deduct_inventory_for_order` (server.py ~2769).
+- Verified E2E iteration_32: backend 10/10 pytest (roll persistence, +/- adjust clamp at 0, accumulator math incl. multi-roll & carry-forward) + frontend create/display/adjust. Tests at /app/backend/tests/test_laminate_roll_deduction.py.
+
 ## Implemented (2026-06) — v39 Laminate & Hot Foil cost breakdown (separate lines)
 - paper_quote now returns per-row lamination_cost/foil_cost (raw) + lamination_retail/foil_retail + lamination_wholesale/foil_wholesale (retail/wholesale marked-up; added to DISCOUNTABLE_FIELDS so volume discount applies consistently).
 - UI shows them separately in BOTH the price card (PricingPanel: "· Lamination" / "· Hot Foil" at selling price + per-pc) and the Profitability panel (cost lines, admin). Per-unit computed frontend by /qty. Role-scrubbed (client no cost/wholesale, reseller no retail).

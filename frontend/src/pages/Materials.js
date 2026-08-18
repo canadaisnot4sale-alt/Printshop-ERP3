@@ -312,23 +312,12 @@ export default function Materials() {
                   <td className="px-4 py-2.5 text-right num text-[#2495D3]">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.selling_price)}</td>
                   <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-wholesale">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.wholesale_price)}</td>
                   <td className="px-4 py-2.5">
-                    {(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? (
-                      <div className="text-center">
-                        <div className={`num font-semibold ${m.lam_reorder_ft > 0 && m.lam_stock_ft <= m.lam_reorder_ft ? "text-red-600" : "text-slate-700"}`} data-testid="material-lam-stock">{m.lam_stock_ft || 0} ft</div>
-                        {m.lam_reorder_ft > 0 && m.lam_stock_ft <= m.lam_reorder_ft
-                          ? <span className="text-[10px] font-mono uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5" data-testid="material-reorder-badge">Reorder</span>
-                          : <div className="text-[10px] text-slate-400 num">rp {m.lam_reorder_ft || 0} ft</div>}
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-center gap-1">
-                          <button data-testid="material-stock-minus" onClick={() => adjust(m.id, -1)} className="p-1 text-slate-400 hover:text-red-500"><Minus size={13} /></button>
-                          <span className={`num w-14 text-center font-semibold ${m.low_stock ? "text-red-600" : "text-slate-700"}`} data-testid="material-stock-value">{m.stock_qty}</span>
-                          <button data-testid="material-stock-plus" onClick={() => adjust(m.id, 1)} className="p-1 text-slate-400 hover:text-emerald-600"><Plus size={13} /></button>
-                        </div>
-                        <div className="text-[10px] text-slate-400 text-center num">rp {m.reorder_point}</div>
-                      </>
-                    )}
+                    <div className="flex items-center justify-center gap-1">
+                      <button data-testid="material-stock-minus" onClick={() => adjust(m.id, -1)} className="p-1 text-slate-400 hover:text-red-500"><Minus size={13} /></button>
+                      <span className={`num w-14 text-center font-semibold ${m.low_stock ? "text-red-600" : "text-slate-700"}`} data-testid="material-stock-value">{m.stock_qty}{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? " rl" : ""}</span>
+                      <button data-testid="material-stock-plus" onClick={() => adjust(m.id, 1)} className="p-1 text-slate-400 hover:text-emerald-600"><Plus size={13} /></button>
+                    </div>
+                    <div className="text-[10px] text-slate-400 text-center num">rp {m.reorder_point}</div>
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex gap-1 justify-end">
@@ -451,10 +440,10 @@ export default function Materials() {
                           <Input data-testid="material-field-lam_length_ft" type="number" value={form.lam_length_ft} onChange={(e) => set("lam_length_ft", e.target.value)} className="rounded-lg mt-1" placeholder="500" /></div>
                         <div><Label className="text-xs">Roll cost ($)</Label>
                           <Input data-testid="material-field-lam_roll_cost" type="number" value={form.lam_roll_cost} onChange={(e) => set("lam_roll_cost", e.target.value)} className="rounded-lg mt-1" placeholder="275" /></div>
-                        <div><Label className="text-xs">Stock (linear ft)</Label>
-                          <Input data-testid="material-field-lam_stock_ft" type="number" value={form.lam_stock_ft} onChange={(e) => set("lam_stock_ft", e.target.value)} className="rounded-lg mt-1" placeholder="500" /></div>
-                        <div><Label className="text-xs">Reorder point (ft)</Label>
-                          <Input data-testid="material-field-lam_reorder_ft" type="number" value={form.lam_reorder_ft} onChange={(e) => set("lam_reorder_ft", e.target.value)} className="rounded-lg mt-1" placeholder="50" /></div>
+                        <div><Label className="text-xs">Stock (rolls)</Label>
+                          <Input data-testid="material-field-lam_stock_rolls" type="number" value={form.stock_qty} onChange={(e) => set("stock_qty", e.target.value)} className="rounded-lg mt-1" placeholder="10" /></div>
+                        <div><Label className="text-xs">Reorder point (rolls)</Label>
+                          <Input data-testid="material-field-lam_reorder_rolls" type="number" value={form.reorder_point} onChange={(e) => set("reorder_point", e.target.value)} className="rounded-lg mt-1" placeholder="2" /></div>
                         {form.paper_type === "hot_foil" && (
                           <div><Label className="text-xs">Color</Label>
                             <Input data-testid="material-field-foil_color" value={form.foil_color} onChange={(e) => set("foil_color", e.target.value)} className="rounded-lg mt-1" placeholder="Gold" /></div>
@@ -495,7 +484,7 @@ export default function Materials() {
               )}
               {isLamFoil && (
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="lamfoil-hint">
-                  Auto: cost <span className="num font-semibold">{money(Number(form.lam_length_ft) > 0 ? Number(form.lam_roll_cost || 0) / Number(form.lam_length_ft) : 0)}</span>/linear ft · charged by sheet length in Paper Printing
+                  Auto: cost <span className="num font-semibold">{money(Number(form.lam_length_ft) > 0 ? Number(form.lam_roll_cost || 0) / Number(form.lam_length_ft) : 0)}</span>/linear ft · inventory tracked by <span className="font-semibold">rolls</span> ({Number(form.stock_qty || 0)} rl × {Number(form.lam_length_ft || 0)} ft) · auto-deducts 1 roll per full roll consumed
                 </div>
               )}
               )}
@@ -644,6 +633,7 @@ export default function Materials() {
               )}
             </div>
 
+            {!isLamFoil && (
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Inventory</div>
               <div className="grid grid-cols-3 gap-4">
@@ -666,6 +656,7 @@ export default function Materials() {
                 </div>
               )}
             </div>
+            )}
 
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Used in modules</div>

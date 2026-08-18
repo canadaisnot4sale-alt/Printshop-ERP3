@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 32 — Laminate/Hot-Foil roll-count inventory + smart per-roll deduction verified end-to-end. Backend pytest (10/10 pass) in /app/backend/tests/test_laminate_roll_deduction.py covers: (1) POST /api/materials persists stock_qty as roll count (not linear ft) for paper_type=laminate/hot_foil with lam_length_ft, lam_width_in, lam_roll_cost, reorder_point in rolls, and foil_color for hot_foil. (2) POST /api/materials/{mid}/adjust-stock with delta +/-1 mutates stock_qty by exactly one roll and clamps at 0. (3) Smart accumulator via POST /api/orders (which invokes deduct_inventory_for_order → lam_ft_acc loop): with lam_length_ft=500 and stock_qty=10, first order consuming 300 ft leaves stock_qty=10 & lam_open_used_ft=300; second 300 ft (cumulative 600) leaves stock_qty=9 & lam_open_used_ft=100 — exact spec match. (4) Multi-roll consumption in single order (1250 ft on 500-ft roll) → stock_qty=8, lam_open_used_ft=250. (5) Carry-forward: preseeded accumulator=400 + 200 ft order → stock_qty=9, lam_open_used_ft=100. Frontend Playwright: admin login → Materials → New material → paper + Laminate → filled lam_width_in/lam_length_ft/lam_roll_cost/lam_stock_rolls (10)/lam_reorder_rolls (2) → save. Row cell 'material-stock-value' shows '10 rl'. 'material-stock-plus' click → '11 rl'; 'material-stock-minus' → '10 rl'. Backend deduct_inventory_for_order logic reviewed at lines 2769-2803: uses int(used // roll_len) with remainder carried into lam_open_used_ft — correct.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "New Material dialog (Laminate/Hot Foil)", "issues": ["The generic 'INVENTORY' section (Stock qty / Reorder point / Reorder target) is rendered BELOW the laminate-specific 'Stock (rolls)' / 'Reorder point (rolls)' inputs and shows the same bound values (10/2). This duplicate visible section is confusing for users — either hide the generic Inventory block when paper_type is laminate/hot_foil, or hide the roll-specific Stock/Reorder inputs and rely solely on the shared Inventory block."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_laminate_roll_deduction.py",
+    "/app/test_reports/pytest/laminate_roll.xml"
+  ],
+  "action_items": [
+    "(Optional design polish) Hide the duplicate generic 'Inventory' (stock_qty / reorder_point / reorder_target) block in Materials.js when form.paper_type is 'laminate' or 'hot_foil' since the same fields are already surfaced as 'Stock (rolls)' and 'Reorder point (rolls)' just above."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 2794: `rolls_consumed = int(used // roll_len)` — math.floor via int() is correct for positive values. However `used` is computed as `round(... + ft, 3)`; if a user configures roll_len as an integer like 500 and prior accumulator is 499.9995 + a 0.001 ft order, rounding could tip a boundary case to trigger an unintended roll decrement. Consider using math.floor(used / roll_len) on the un-rounded value or using Decimal to make boundaries deterministic.",
+    "server.py line 2764: for non-lam materials `new_stock = round(stock - total, 3)` can go negative and is silently persisted (only reported via short=True in the response). This applies to regular BoM deduction, not the roll-based path. Consider clamping at 0 like adjust_stock does, or blocking the order.",
+    "server.py 2782-2803 iterates lam_ft_acc but does NOT enforce a minimum stock check — an order can push stock_qty negative (short=True flag is set but persistence proceeds). Same class of issue as above; acceptable for a warehouse workflow but should be flagged in UI.",
+    "Materials.js still renders BOTH 'Stock (rolls)'/'Reorder point (rolls)' inputs and the generic INVENTORY section for laminate/foil — duplicate UI bound to same state key (stock_qty / reorder_point). Design nit, not a bug.",
+    "Repeat from iteration 31: server.py still exceeds 3300 lines; GET /api/materials still ignores `?category=` query param."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_laminate_roll_deduction.py"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (create + display + adjust-stock verified)"},
+  "test_credentials": "admin@printandsave.ca / admin123",
+  "seed_data_creation": "All TEST_ prefixed materials, catalog_products and orders are auto-cleaned via fixtures & DB deletes at end of each test. Post-run DB is in the same state as pre-run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_laminate_roll_deduction.py. Run with: cd /app/backend && REACT_APP_BACKEND_URL='<url>' MONGO_URL='mongodb://localhost:27017' DB_NAME='test_database' python -m pytest tests/test_laminate_roll_deduction.py -v -o addopts=''  (the -o addopts='' disables the xdist default; xdist is not required and tests use the DB directly). The order-conversion flow that consumes laminate/foil linear feet is POST /api/orders (not a separate quote→order convert endpoint). Catalog products with lam_material_id + lam_ft_per_order trigger the accumulator in deduct_inventory_for_order (server.py:2769-2803). Frontend testids for laminate form: material-field-paper_type, material-field-lam_width_in/lam_length_ft/lam_roll_cost/lam_stock_rolls/lam_reorder_rolls. Table testids: material-stock-minus/-plus/-value ('N rl' for laminate/foil). Note: the New Material dialog shows a duplicated generic 'Inventory' section for laminate types — cosmetic issue reported but not blocking.",
+  "rca of the issue": "N/A — feature works exactly as specified. Only two nitpicks reported: (a) duplicate Inventory section in create-material dialog for laminate/foil paper_types, (b) roll-based deduction can push stock_qty negative without clamping (same as non-lam deduction path)."
+}
