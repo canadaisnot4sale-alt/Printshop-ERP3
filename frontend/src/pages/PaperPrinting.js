@@ -83,8 +83,16 @@ export default function PaperPrinting() {
   const sheetOpts = [...new Set([...SHEETS, ...(sheet ? [sheet] : [])])];
 
   useEffect(() => {
-    api.get("/paper-addons?type=laminate").then((r) => setLamOptions(r.data)).catch(() => {});
-    api.get("/paper-addons?type=hot_foil").then((r) => setFoilOptions(r.data)).catch(() => {});
+    api.get("/paper-addons?type=laminate").then((r) => {
+      setLamOptions(r.data);
+      const d = r.data.find((o) => o.is_default) || r.data[0];
+      if (d) setLaminateId((cur) => cur || d.id);
+    }).catch(() => {});
+    api.get("/paper-addons?type=hot_foil").then((r) => {
+      setFoilOptions(r.data);
+      const d = r.data.find((o) => o.is_default) || r.data[0];
+      if (d) setFoilId((cur) => cur || d.id);
+    }).catch(() => {});
   }, []);
 
   const calc = async () => {
@@ -93,7 +101,7 @@ export default function PaperPrinting() {
     try {
       const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null, foil_sides: foilSides });
       setResult(data);
-      setSelectedStock(data.results[0] || null);
+      setSelectedStock((data.results || []).find((r) => r.stock.is_default) || data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
     finally { setLoading(false); }
   };
@@ -102,6 +110,11 @@ export default function PaperPrinting() {
     if (rq.productId) setProductId(rq.productId);
     if (rq.sheet) setSheet(rq.sheet);
     if (rq.laminate != null) setLaminate(rq.laminate);
+    if (rq.laminate_id) setLaminateId(rq.laminate_id);
+    if (rq.laminate_sides) setLaminateSides(rq.laminate_sides);
+    if (rq.hot_foil != null) setHotFoil(rq.hot_foil);
+    if (rq.foil_id) setFoilId(rq.foil_id);
+    if (rq.foil_sides) setFoilSides(rq.foil_sides);
     if (rq.side) setSide(rq.side);
     if (rq.focusQty) setFocusQty(rq.focusQty);
   }, calc);
@@ -113,6 +126,11 @@ export default function PaperPrinting() {
   const bestVal = (r) => { const row = rowFor(r, focusQty); return retailOf(row) ?? wholesaleOf(row) ?? Infinity; };
 
   const focusRow = useMemo(() => selectedStock && rowFor(selectedStock, focusQty), [selectedStock, focusQty]);
+  const bestId = useMemo(() => {
+    if (!result?.results?.length) return null;
+    return result.results.reduce((b, r) => (bestVal(r) < bestVal(b) ? r : b), result.results[0]).stock.id;
+    // eslint-disable-next-line
+  }, [result, focusQty, side]);
 
   return (
     <div data-testid="paper-page">
@@ -252,15 +270,23 @@ export default function PaperPrinting() {
                   <div>
                     <div className="text-xs font-mono uppercase tracking-widest text-slate-500 mb-2">Compare Papers · {focusQty} pcs · {side.replace("_", "/")}</div>
                     <div className="grid sm:grid-cols-2 gap-3">
-                      {[...result.results].sort((a, b) => bestVal(a) - bestVal(b)).map((r, idx) => {
+                      {[...result.results].sort((a, b) => {
+                        const ad = a.stock.is_default ? 0 : 1, bd = b.stock.is_default ? 0 : 1;
+                        if (ad !== bd) return ad - bd;
+                        return bestVal(a) - bestVal(b);
+                      }).map((r) => {
                         const row = rowFor(r, focusQty);
                         const isSel = selectedStock.stock.id === r.stock.id;
+                        const isBest = bestId === r.stock.id;
                         return (
                           <button key={r.stock.id} data-testid="paper-compare-row" onClick={() => setSelectedStock(r)}
                             className={`text-left rounded-xl border p-4 transition-all ${isSel ? "border-[#2495D3] ring-1 ring-[#2495D3]" : "border-slate-200 hover:border-slate-300"}`}>
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between gap-2">
                               <div className="font-head font-bold text-sm">{r.stock.name}</div>
-                              {idx === 0 && <span className="text-[10px] font-mono uppercase bg-emerald-500 text-white px-2 py-0.5 rounded-full">Best Value</span>}
+                              <div className="flex items-center gap-1">
+                                {r.stock.is_default && <span className="text-[10px] font-mono uppercase bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full" data-testid="paper-compare-default-badge">Default</span>}
+                                {isBest && <span className="text-[10px] font-mono uppercase bg-emerald-500 text-white px-2 py-0.5 rounded-full">Best Value</span>}
+                              </div>
                             </div>
                             <div className="text-[11px] font-mono text-slate-400 mt-0.5">{r.quote.n_up}-up · {row?.sheets} sheets</div>
                             <div className="num text-xl font-black text-[#2495D3] mt-2">{money(retailOf(row) ?? wholesaleOf(row))}</div>

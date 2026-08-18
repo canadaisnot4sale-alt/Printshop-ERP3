@@ -1294,19 +1294,23 @@ async def delete_supplier(sid: str, user=Depends(require_admin)):
     await db.suppliers.delete_one({"_id": ObjectId(sid)})
     return {"ok": True}
 
-async def _apply_default_modules(doc_id, default_modules):
-    """Ensure only one material is the default per module: unset the given modules from others."""
+async def _apply_default_modules(doc_id, default_modules, paper_type=None):
+    """Ensure only one material is the default per module: unset the given modules from others.
+    For the 'paper' module the default is scoped per paper_type so a normal paper, a laminate
+    and a hot-foil can each be the default simultaneously."""
     for mod in (default_modules or []):
-        await db.materials.update_many(
-            {"_id": {"$ne": doc_id}, "default_modules": mod},
-            {"$pull": {"default_modules": mod}})
+        flt = {"_id": {"$ne": doc_id}, "default_modules": mod}
+        if mod == "paper":
+            pt = paper_type or "normal"
+            flt["paper_type"] = {"$in": [None, "normal"]} if pt == "normal" else pt
+        await db.materials.update_many(flt, {"$pull": {"default_modules": mod}})
 
 @api_router.post("/materials")
 async def create_material(body: Material, user=Depends(require_admin)):
     doc = body.model_dump()
     doc["created_at"] = now_iso()
     res = await db.materials.insert_one(doc)
-    await _apply_default_modules(res.inserted_id, doc.get("default_modules"))
+    await _apply_default_modules(res.inserted_id, doc.get("default_modules"), doc.get("paper_type"))
     s = await get_settings()
     saved = clean(await db.materials.find_one({"_id": res.inserted_id}))
     return compute_material(saved, await _business_hourly(s), await _machines_by_id(s), s)
@@ -1316,7 +1320,7 @@ async def update_material(mid: str, body: Material, user=Depends(require_admin))
     doc = body.model_dump()
     oid = ObjectId(mid)
     await db.materials.update_one({"_id": oid}, {"$set": doc})
-    await _apply_default_modules(oid, doc.get("default_modules"))
+    await _apply_default_modules(oid, doc.get("default_modules"), doc.get("paper_type"))
     s = await get_settings()
     saved = clean(await db.materials.find_one({"_id": oid}))
     return compute_material(saved, await _business_hourly(s), await _machines_by_id(s), s)
@@ -2041,7 +2045,8 @@ async def paper_addons(type: str = "laminate", user=Depends(get_current_user)):
     q = {"category": "paper", "paper_type": type, "modules": {"$in": ["paper"]}}
     docs = await db.materials.find(q).sort("name", 1).to_list(200)
     return [{"id": str(d["_id"]), "name": d.get("name"), "foil_color": d.get("foil_color", ""),
-             "lam_width_in": d.get("lam_width_in", 0), "lam_length_ft": d.get("lam_length_ft", 0)} for d in docs]
+             "lam_width_in": d.get("lam_width_in", 0), "lam_length_ft": d.get("lam_length_ft", 0),
+             "is_default": "paper" in (d.get("default_modules") or [])} for d in docs]
 
 @api_router.post("/calc/paper")
 async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
