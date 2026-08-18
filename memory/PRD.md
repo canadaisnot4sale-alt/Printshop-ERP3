@@ -114,6 +114,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v33 Per-module volume discounts (editable qty + %)
+- Volume discounts are now **per module** via `Settings.volume_discounts_by_module` {module: [{qty,pct}]}. A module with no tiers falls back to `default`. Editable in Settings → Volume Discounts with a module selector (vd-module-select) + "Copy Default tiers" helper. Applies to Retail & Wholesale.
+- Backend: each /api/calc/* handler calls set_calc_module('<module>'); scrub() reads the module via a **contextvars.ContextVar** (`_CURRENT_MODULE_CV`) — fixes the concurrency tier-bleed risk flagged in iteration 30/31 (no global mutation). Module keys: paper, booklet, large-format, stickers, dtf, embroidery, laser, direct-print, channel-letters, sublimation, roll-stickers.
+- Verified iteration_31 (13/13 new + regression 100%) + post-fix API check: DTF custom tiers (1/6/12/24/50/100) yield 6/10/22% while Paper stays on Default (100→5%). Legacy flat `volume_discounts` field kept for back-compat (unused by engine).
+- Known/deferred (from testing agent): server.py >3200 lines needs router split; GET /api/materials ignores ?category filter.
+
 ## Implemented (2026-06) — v32 Volume Pricing mini-table in scalar-qty modules
 - Reusable `components/VolumePricingTable.js`: recomputes a module's quote at each STANDARD_QTY (25→5000) and shows Qty · Discount · Retail/unit · Retail total (+ WS for admin/reseller), role-aware.
 - Wired into Paper Printing (row-based, tap to focus) + Stickers, DTF, Embroidery, Sublimation, Roll Stickers (single-scalar quantity; refetches on input change via signature).

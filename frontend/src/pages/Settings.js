@@ -117,8 +117,24 @@ const GROUPS = [
   },
 ];
 
+const MODULES_VD = [
+  { k: "default", l: "Default (all modules)" },
+  { k: "paper", l: "Paper Printing" },
+  { k: "booklet", l: "Booklets" },
+  { k: "large-format", l: "Large Format" },
+  { k: "stickers", l: "Stickers" },
+  { k: "dtf", l: "DTF / Apparel" },
+  { k: "embroidery", l: "Embroidery" },
+  { k: "laser", l: "Laser" },
+  { k: "direct-print", l: "Direct Print & CNC" },
+  { k: "channel-letters", l: "Channel Letters" },
+  { k: "sublimation", l: "Sublimation" },
+  { k: "roll-stickers", l: "Roll Stickers" },
+];
+
 export default function Settings() {
   const [s, setS] = useState(null);
+  const [vdModule, setVdModule] = useState("default");
 
   useEffect(() => { api.get("/settings").then((r) => setS(r.data)); }, []);
 
@@ -127,6 +143,9 @@ export default function Settings() {
       const payload = { ...s };
       Object.keys(payload).forEach((k) => { if (typeof payload[k] === "string" && k !== "currency") payload[k] = Number(payload[k]); });
       if (Array.isArray(payload.volume_discounts)) payload.volume_discounts = payload.volume_discounts.map((r) => ({ qty: Number(r.qty) || 0, pct: Number(r.pct) || 0 }));
+      if (payload.volume_discounts_by_module && typeof payload.volume_discounts_by_module === "object") {
+        const m = {}; Object.entries(payload.volume_discounts_by_module).forEach(([k, arr]) => { m[k] = (arr || []).map((r) => ({ qty: Number(r.qty) || 0, pct: Number(r.pct) || 0 })); }); payload.volume_discounts_by_module = m;
+      }
       const { data } = await api.put("/settings", payload);
       setS(data);
       toast.success("Settings saved — all quotes now use these values");
@@ -135,10 +154,14 @@ export default function Settings() {
 
   if (!s) return null;
 
-  const vd = s.volume_discounts || [];
-  const setVD = (i, key, val) => setS({ ...s, volume_discounts: vd.map((r, idx) => idx === i ? { ...r, [key]: val } : r) });
-  const addVD = () => setS({ ...s, volume_discounts: [...vd, { qty: 0, pct: 0 }] });
-  const removeVD = (i) => setS({ ...s, volume_discounts: vd.filter((_, idx) => idx !== i) });
+  const vdMap = s.volume_discounts_by_module || {};
+  const vd = vdMap[vdModule] || [];
+  const writeVd = (arr) => setS({ ...s, volume_discounts_by_module: { ...vdMap, [vdModule]: arr } });
+  const setVD = (i, key, val) => writeVd(vd.map((r, idx) => idx === i ? { ...r, [key]: val } : r));
+  const addVD = () => writeVd([...vd, { qty: 0, pct: 0 }]);
+  const removeVD = (i) => writeVd(vd.filter((_, idx) => idx !== i));
+  const copyDefault = () => writeVd((vdMap.default || []).map((r) => ({ ...r })));
+  const usingDefault = vdModule !== "default" && vd.length === 0;
 
   return (
     <div data-testid="settings-page">
@@ -171,11 +194,17 @@ export default function Settings() {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-sm p-6" data-testid="volume-discounts-card">
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between mb-1 gap-3">
             <h3 className="font-head font-bold">Volume Discounts</h3>
-            <Button data-testid="vd-add" onClick={addVD} variant="outline" className="rounded-sm h-8 text-xs"><Plus size={14} className="mr-1" />Add tier</Button>
+            <div className="flex items-center gap-2">
+              <select data-testid="vd-module-select" value={vdModule} onChange={(e) => setVdModule(e.target.value)} className="text-xs border border-slate-200 rounded-sm h-8 px-2 bg-white">
+                {MODULES_VD.map((m) => <option key={m.k} value={m.k}>{m.l}</option>)}
+              </select>
+              <Button data-testid="vd-add" onClick={addVD} variant="outline" className="rounded-sm h-8 text-xs"><Plus size={14} className="mr-1" />Add tier</Button>
+            </div>
           </div>
-          <p className="text-xs text-slate-500 mb-4">Buy more → cheaper. The highest tier whose quantity ≤ order quantity applies — to Retail and Wholesale, across every estimating module. Edit both the quantities and the % as you need.</p>
+          <p className="text-xs text-slate-500 mb-4">Buy more → cheaper. The highest tier whose quantity ≤ order quantity applies — to Retail and Wholesale. Set tiers <b>per module</b>; a module with no tiers uses <b>Default</b>. Edit both the quantities and the %.</p>
+          {vdModule !== "default" && <div className="mb-3"><Button data-testid="vd-copy-default" onClick={copyDefault} variant="ghost" className="h-7 text-xs text-[#2495D3]">Copy Default tiers as a starting point</Button></div>}
           <table className="w-full text-sm">
             <thead><tr className="text-[10px] font-mono uppercase text-slate-400"><th className="text-left py-1">Quantity ≥</th><th className="text-left py-1">Discount %</th><th /></tr></thead>
             <tbody>
@@ -186,7 +215,7 @@ export default function Settings() {
                   <td className="py-1 text-right"><button data-testid="vd-remove" onClick={() => removeVD(i)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button></td>
                 </tr>
               ))}
-              {vd.length === 0 && <tr><td colSpan={3} className="py-4 text-center text-slate-400 text-xs">No tiers — add one to enable volume discounts.</td></tr>}
+              {vd.length === 0 && <tr><td colSpan={3} className="py-4 text-center text-slate-400 text-xs">{usingDefault ? "No custom tiers — this module uses the Default tiers." : "No tiers — add one to enable volume discounts."}</td></tr>}
             </tbody>
           </table>
         </div>

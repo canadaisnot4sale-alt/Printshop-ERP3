@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from pathlib import Path
 import os
+import contextvars
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -417,6 +418,8 @@ class Settings(BaseModel):
     technician_hourly_rate: float = 65.0
     # Volume discounts: buy more → cheaper. List of {qty, pct}; the highest tier whose qty <= order qty applies. Retail + Wholesale.
     volume_discounts: List[dict] = Field(default_factory=lambda: [dict(t) for t in DEFAULT_VOLUME_DISCOUNTS])
+    # Per-module volume discounts {module: [{qty,pct}]}. A module with no entry falls back to "default".
+    volume_discounts_by_module: dict = Field(default_factory=lambda: {"default": [dict(t) for t in DEFAULT_VOLUME_DISCOUNTS]})
 
 SHEET_SIZES = {
     "8.5x11": (8.5, 11), "8.5x14": (8.5, 14), "11x17": (11, 17),
@@ -443,8 +446,12 @@ async def get_settings() -> dict:
     if missing:
         await db.settings.update_one({"_key": "global"}, {"$set": missing})
         s.update(missing)
-    global _VOLUME_DISCOUNTS
+    global _VOLUME_DISCOUNTS, _VOLUME_DISCOUNTS_MAP
     _VOLUME_DISCOUNTS = s.get("volume_discounts") or []
+    m = s.get("volume_discounts_by_module") or {}
+    if not m and _VOLUME_DISCOUNTS:
+        m = {"default": _VOLUME_DISCOUNTS}
+    _VOLUME_DISCOUNTS_MAP = m
     return s
 
 # ---------------- Calc engines ----------------
@@ -479,8 +486,14 @@ WHOLESALE_FIELDS = {
 DISCOUNTABLE_FIELDS = (RETAIL_FIELDS | WHOLESALE_FIELDS | {
     "retail_unit_4_0", "retail_unit_4_4", "wholesale_unit_4_0", "wholesale_unit_4_4",
 })
-# Current volume-discount tiers, refreshed by get_settings() on every request.
+# Current volume-discount tiers map {module: [tiers]} + which module the current calc is for.
+# _CURRENT_MODULE_CV is a ContextVar so concurrent async requests never bleed tiers into each other.
 _VOLUME_DISCOUNTS: list = []
+_VOLUME_DISCOUNTS_MAP: dict = {}
+_CURRENT_MODULE_CV: contextvars.ContextVar = contextvars.ContextVar("calc_module", default="default")
+
+def set_calc_module(m):
+    _CURRENT_MODULE_CV.set(m)
 
 def discount_for_qty(qty, tiers):
     """Return the discount % for a quantity: the highest tier whose qty threshold <= qty."""
@@ -495,7 +508,7 @@ def discount_for_qty(qty, tiers):
 
 def scrub(data, role):
     # 1) Apply volume discount to every priced quantity container (all roles, idempotent).
-    tiers = _VOLUME_DISCOUNTS
+    tiers = _VOLUME_DISCOUNTS_MAP.get(_CURRENT_MODULE_CV.get()) or _VOLUME_DISCOUNTS_MAP.get("default") or []
     if tiers:
         def _disc(o):
             if isinstance(o, dict):
@@ -1986,6 +1999,7 @@ class PaperCalcIn(BaseModel):
 
 @api_router.post("/calc/paper")
 async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
+    set_calc_module("paper")
     settings = await get_settings()
     product = await db.products.find_one({"_id": ObjectId(body.product_id)})
     if not product:
@@ -2032,6 +2046,7 @@ class BookletCalcIn(BaseModel):
 
 @api_router.post("/calc/booklet")
 async def calc_booklet(body: BookletCalcIn, user=Depends(get_current_user)):
+    set_calc_module("booklet")
     settings = await get_settings()
     cover = await material_by_id("paper_stocks", body.cover_stock_id, module="booklet")
     inside = await material_by_id("paper_stocks", body.inside_stock_id, module="booklet")
@@ -2082,6 +2097,7 @@ class LFCalcIn(BaseModel):
 
 @api_router.post("/calc/largeformat")
 async def calc_lf(body: LFCalcIn, user=Depends(get_current_user)):
+    set_calc_module("large-format")
     settings = await get_settings()
     mats = await materials_by_ids("roll_materials", body.material_ids, module="large-format")
     machine = None
@@ -2132,6 +2148,7 @@ class StickerCalcIn(BaseModel):
 
 @api_router.post("/calc/sticker")
 async def calc_sticker(body: StickerCalcIn, user=Depends(get_current_user)):
+    set_calc_module("stickers")
     settings = await get_settings()
     mats = await materials_for_collection("roll_materials", {"sticker_compatible": True}, module="stickers")
     results = []
@@ -2188,6 +2205,7 @@ class DTFCalcIn(BaseModel):
 
 @api_router.post("/calc/dtf")
 async def calc_dtf(body: DTFCalcIn, user=Depends(get_current_user)):
+    set_calc_module("dtf")
     s = await get_settings()
     garment = None
     g_cost = 0.0
@@ -2227,6 +2245,7 @@ class EmbroideryCalcIn(BaseModel):
 
 @api_router.post("/calc/embroidery")
 async def calc_embroidery(body: EmbroideryCalcIn, user=Depends(get_current_user)):
+    set_calc_module("embroidery")
     s = await get_settings()
     garment = None
     g_cost = 0.0
@@ -2265,6 +2284,7 @@ class LaserCalcIn(BaseModel):
 
 @api_router.post("/calc/laser")
 async def calc_laser(body: LaserCalcIn, user=Depends(get_current_user)):
+    set_calc_module("laser")
     s = await get_settings()
     mats = await materials_by_ids("laser_materials", [body.material_id] if body.material_id else None, module="laser")
     total_qty = sum(int(z.qty) for z in body.sizes) or 1
@@ -2301,6 +2321,7 @@ class DirectPrintCalcIn(BaseModel):
 
 @api_router.post("/calc/directprint")
 async def calc_directprint(body: DirectPrintCalcIn, user=Depends(get_current_user)):
+    set_calc_module("direct-print")
     s = await get_settings()
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
     mats = await materials_by_ids("sheet_materials", body.material_ids, module="direct-print")
@@ -2352,6 +2373,7 @@ class ChannelCalcIn(BaseModel):
 
 @api_router.post("/calc/channelletters")
 async def calc_channel(body: ChannelCalcIn, user=Depends(get_current_user)):
+    set_calc_module("channel-letters")
     s = await get_settings()
     sw, sh = BIG_SHEETS.get(body.sheet_size, (48, 96))
     _sheet_all = await materials_by_ids("sheet_materials", body.material_ids, module="channel-letters")
@@ -2395,6 +2417,7 @@ class SublimationCalcIn(BaseModel):
 
 @api_router.post("/calc/sublimation")
 async def calc_sublimation(body: SublimationCalcIn, user=Depends(get_current_user)):
+    set_calc_module("sublimation")
     s = await get_settings()
     p = await db.sublimation_products.find_one({"_id": ObjectId(body.product_id)})
     if not p:
@@ -2432,6 +2455,7 @@ class RollStickerCalcIn(BaseModel):
 
 @api_router.post("/calc/rollsticker")
 async def calc_rollsticker(body: RollStickerCalcIn, user=Depends(get_current_user)):
+    set_calc_module("roll-stickers")
     s = await get_settings()
     m = await material_by_id("roll_sticker_materials", body.material_id, module="roll-stickers")
     if not m:
