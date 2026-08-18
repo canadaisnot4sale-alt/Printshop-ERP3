@@ -122,6 +122,7 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Unit conversion on import**: create_purchase converts invoice units → real stock. qty_units = quantity × unit_multiplier; unit_cost = line_total / qty_units (fallback unit_price/mult). Verified via curl: Alfa 0.4 M @ $254/M ($101.60 box) → +400 sheets, $0.254/sheet. Remembers supplier code on the matched material for future auto-match.
 - **Review screen** (Purchases import dialog): "Unit ×" field, per-line "→ Stock" and "→ $/unit" converted preview, green "matches: <material>" hint when auto-matched by code. Confirm-once workflow; material_id + unit_multiplier sent to backend.
 - **Description alias match**: Material gains supplier_description (paste the exact vendor invoice description in the Materials form). Import matches by material_id → code → supplier_description → name. On match it remembers the code/description on the material. Verified via curl: material with only supplier_description (no code) matched an invoice line → +400 sheets, $0.254.
+- **Duplicate invoice guard**: create_purchase rejects (HTTP 409) a purchase whose supplier company + invoice_number already exist, with a clear message. Prevents double-importing the same PDF (and double-counting inventory).
 - Verified end-to-end via curl; frontend compiles. NOTE: full Purchases UI flow not yet run through testing_agent.
 
 

@@ -1588,6 +1588,13 @@ class PurchaseIn(BaseModel):
 @api_router.post("/purchases")
 async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
     sup = body.supplier
+    if body.invoice_number and sup.company:
+        dup = await db.purchases.find_one({
+            "invoice_number": body.invoice_number,
+            "supplier.company": {"$regex": f"^{re.escape(sup.company)}$", "$options": "i"}})
+        if dup:
+            when = dup.get("date") or (dup.get("created_at") or "")[:10]
+            raise HTTPException(409, f"Invoice #{body.invoice_number} from {sup.company} was already imported ({when}). Not imported again to avoid duplicates.")
     affected = []
     if body.update_inventory:
         for li in body.line_items:
