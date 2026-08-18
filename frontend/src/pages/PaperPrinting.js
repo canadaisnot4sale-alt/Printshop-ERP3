@@ -99,15 +99,29 @@ export default function PaperPrinting() {
     }).catch(() => {});
   }, []);
 
-  const calc = async () => {
+  const calc = async (sheetKey = sheet, keepStockId = null) => {
+    if (typeof sheetKey !== "string") sheetKey = sheet;   // ignore event arg from onClick
     if (!productId) return toast.error("Select a product");
     setLoading(true);
     try {
-      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null, foil_sides: foilSides, round_corners: roundCorners });
+      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheetKey, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null, foil_sides: foilSides, round_corners: roundCorners });
       setResult(data);
-      setSelectedStock((data.results || []).find((r) => r.stock.is_default) || data.results[0] || null);
+      const rows = data.results || [];
+      setSelectedStock((keepStockId && rows.find((r) => r.stock.id === keepStockId)) || rows.find((r) => r.stock.is_default) || rows[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
     finally { setLoading(false); }
+  };
+
+  // Selecting a paper switches the Sheet Size to that paper's size and recalculates its layout.
+  const selectStock = (r) => {
+    const raw = (r.stock.size || "").toString().trim().toLowerCase().replace(/["\s]/g, "").replace(/×/g, "x");
+    const key = /^[\d.]+x[\d.]+$/.test(raw) ? raw : null;
+    if (key && key !== sheet) {
+      setSheet(key);
+      calc(key, r.stock.id);
+    } else {
+      setSelectedStock(r);
+    }
   };
 
   useRequote((rq) => {
@@ -292,7 +306,7 @@ export default function PaperPrinting() {
                         const isSel = selectedStock.stock.id === r.stock.id;
                         const isBest = bestId === r.stock.id;
                         return (
-                          <button key={r.stock.id} data-testid="paper-compare-row" onClick={() => setSelectedStock(r)}
+                          <button key={r.stock.id} data-testid="paper-compare-row" onClick={() => selectStock(r)}
                             className={`text-left rounded-xl border p-4 transition-all ${isSel ? "border-[#2495D3] ring-1 ring-[#2495D3]" : "border-slate-200 hover:border-slate-300"}`}>
                             <div className="flex items-center justify-between gap-2">
                               <div className="font-head font-bold text-sm">{r.stock.name}</div>
