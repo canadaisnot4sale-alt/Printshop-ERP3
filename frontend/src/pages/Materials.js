@@ -305,12 +305,12 @@ export default function Materials() {
                     <div className="text-slate-700">{m.supplier_company || "—"}</div>
                     <div className="text-[11px] text-slate-400">{m.supplier_email}</div>
                   </td>
-                  <td className="px-4 py-2.5 text-right num">{money(m.unit_cost)}</td>
-                  <td className="px-4 py-2.5 text-right num font-semibold">{money(m.finish_cost)}</td>
-                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-1">{m.category === "paper" ? money((m.finish_cost || 0) + (m.click_cost ?? 0.055)) : "—"}</td>
-                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-2">{m.category === "paper" ? money((m.finish_cost || 0) + 2 * (m.click_cost ?? 0.055)) : "—"}</td>
-                  <td className="px-4 py-2.5 text-right num text-[#2495D3]">{money(m.selling_price)}</td>
-                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-wholesale">{money(m.wholesale_price)}</td>
+                  <td className="px-4 py-2.5 text-right num">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.unit_cost)}</td>
+                  <td className="px-4 py-2.5 text-right num font-semibold">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.finish_cost)}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-1">{m.category === "paper" && (m.paper_type || "normal") === "normal" ? money((m.finish_cost || 0) + (m.click_cost ?? 0.055)) : "—"}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-printed-2">{m.category === "paper" && (m.paper_type || "normal") === "normal" ? money((m.finish_cost || 0) + 2 * (m.click_cost ?? 0.055)) : "—"}</td>
+                  <td className="px-4 py-2.5 text-right num text-[#2495D3]">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.selling_price)}</td>
+                  <td className="px-4 py-2.5 text-right num text-slate-600" data-testid="material-wholesale">{(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? "—" : money(m.wholesale_price)}</td>
                   <td className="px-4 py-2.5">
                     {(m.paper_type === "laminate" || m.paper_type === "hot_foil") ? (
                       <div className="text-center">
@@ -539,6 +539,7 @@ export default function Materials() {
                       <Input data-testid="material-field-roll_qty" type="number" value={form.roll_qty} onChange={(e) => set("roll_qty", e.target.value)} className="rounded-lg mt-1" /></div>
                   </>
                 )}
+                {!isLamFoil && (<>
                 <div><Label className="text-xs">Labor (min)</Label>
                   <Input data-testid="material-field-labor" type="number" value={form.labor_minutes} onChange={(e) => set("labor_minutes", e.target.value)} className="rounded-lg mt-1" /></div>
                 <div><Label className="text-xs">Machine{isRoll ? " (ink source)" : ""}</Label>
@@ -550,6 +551,7 @@ export default function Materials() {
                     </SelectContent>
                   </Select>
                 </div>
+                </>)}
                 {isPaper && !isLamFoil && (
                   <div><Label className="text-xs">Click cost / side ($)</Label>
                     <Input data-testid="material-field-click_cost" type="number" step="0.001" value={form.click_cost} onChange={(e) => set("click_cost", e.target.value)} className="rounded-lg mt-1" /></div>
@@ -562,6 +564,7 @@ export default function Materials() {
                   <div><Label className="text-xs">Ink coverage (%)</Label>
                     <Input type="number" value={form.ink_coverage_pct} onChange={(e) => set("ink_coverage_pct", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
+                {!isLamFoil && (<>
                 <div><Label className="text-xs">Retail override ($)</Label>
                   <Input data-testid="material-field-price_override" type="number" value={form.price_override} onChange={(e) => set("price_override", e.target.value)} className="rounded-lg mt-1" placeholder="auto" /></div>
                 <div><Label className="text-xs">Wholesale override ($)</Label>
@@ -570,6 +573,7 @@ export default function Materials() {
                   <Input data-testid="material-field-retail_markup" type="number" value={form.retail_markup_pct} onChange={(e) => set("retail_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder={`default ${defMk.retail}`} /></div>
                 <div><Label className="text-xs">Wholesale markup % (×{(1 + (wMk / 100)).toFixed(1)})</Label>
                   <Input data-testid="material-field-wholesale_markup" type="number" value={form.wholesale_markup_pct} onChange={(e) => set("wholesale_markup_pct", e.target.value)} className="rounded-lg mt-1" placeholder={`default ${defMk.wholesale}`} /></div>
+                </>)}
               </div>
               {isSubstrate && (
                 <div className="mt-3 grid grid-cols-3 gap-3" data-testid="substrate-cost">
@@ -588,6 +592,7 @@ export default function Materials() {
                   <div className="col-span-3 text-[11px] text-slate-500">{selMachine ? `Ink from ${selMachine.name} @ 100% coverage.` : "Select a machine to add ink cost per ft²."}</div>
                 </div>
               )}
+              {!isLamFoil && (
               <div className="mt-3 grid grid-cols-3 gap-3" data-testid="material-pricing-preview">
                 <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
                   <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Finish cost</div>
@@ -602,7 +607,8 @@ export default function Materials() {
                   <div className="num text-lg font-bold text-slate-600 mt-1" data-testid="preview-wholesale">{money(wholesaleLive)}</div>
                 </div>
               </div>
-              {isPaper && (
+              )}
+              {isPaper && !isLamFoil && (
                 <div className="mt-3 grid grid-cols-3 gap-3" data-testid="paper-printed-cost">
                   <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
                     <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Blank sheet</div>
