@@ -63,6 +63,8 @@ export default function Purchases() {
         ...data,
         default_category: data.suggested_category || "other",
         modules: data.suggested_modules || [],
+        supplier_unit_multiplier: data.supplier_unit_multiplier || 1,
+        supplier_unit_label: data.supplier_unit_label || "",
         update_inventory: true,
       });
       toast.success("Invoice parsed — review and save");
@@ -96,11 +98,15 @@ export default function Purchases() {
         default_category: draft.default_category,
         modules: draft.modules,
         update_inventory: draft.update_inventory,
+        supplier_unit_multiplier: Number(draft.supplier_unit_multiplier || 1),
+        supplier_unit_label: draft.supplier_unit_label || "",
         line_items: draft.line_items.map((li) => ({
           code: li.code || "", description: li.description || "", name: li.name || "",
           quantity: Number(li.quantity || 0), unit: li.unit || "",
           unit_price: Number(li.unit_price || 0), line_total: Number(li.line_total || 0),
           import_material: !!li.import,
+          material_id: li.material_id || "",
+          unit_multiplier: Number(draft.supplier_unit_multiplier || 1),
         })),
       };
       const { data } = await api.post("/purchases", payload);
@@ -281,6 +287,8 @@ export default function Purchases() {
                   <Input type="date" data-testid="draft-date" value={draft.date || ""} onChange={(e) => setD("date", e.target.value)} className="rounded-lg mt-1" /></div>
                 <div><Label className="text-xs">Supplier email</Label>
                   <Input value={draft.supplier?.email || ""} onChange={(e) => setSup("email", e.target.value)} className="rounded-lg mt-1" /></div>
+                <div><Label className="text-xs">Unit × (per-unit qty)</Label>
+                  <Input type="number" data-testid="draft-unit-multiplier" value={draft.supplier_unit_multiplier ?? 1} onChange={(e) => setD("supplier_unit_multiplier", e.target.value)} className="rounded-lg mt-1 num" placeholder="1000 for M Sheets" /></div>
                 <div><Label className="text-xs">Category (new materials)</Label>
                   <Select value={draft.default_category} onValueChange={(v) => setD("default_category", v)}>
                     <SelectTrigger data-testid="draft-category" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
@@ -309,21 +317,33 @@ export default function Purchases() {
                       <th className="text-left px-2 py-2">Name</th>
                       <th className="text-left px-2 py-2">Code</th>
                       <th className="text-right px-2 py-2">Qty</th>
-                      <th className="text-right px-2 py-2">Unit cost</th>
+                      <th className="text-right px-2 py-2">Unit price</th>
+                      <th className="text-right px-2 py-2">→ Stock</th>
+                      <th className="text-right px-2 py-2">→ $/unit</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {draft.line_items.map((li, i) => (
+                    {draft.line_items.map((li, i) => {
+                      const mult = Number(draft.supplier_unit_multiplier || 1);
+                      const stockUnits = (Number(li.quantity) || 0) * mult;
+                      const perUnit = stockUnits ? (Number(li.line_total) || 0) / stockUnits : (mult ? (Number(li.unit_price) || 0) / mult : 0);
+                      return (
                       <tr key={i} data-testid="draft-line-row" className="border-b border-slate-100">
                         <td className="px-2 py-1.5 text-center">
                           <Switch data-testid={`draft-line-import-${i}`} checked={!!li.import} onCheckedChange={(v) => setLine(i, "import", v)} />
                         </td>
-                        <td className="px-2 py-1.5"><Input value={li.name || ""} onChange={(e) => setLine(i, "name", e.target.value)} className="rounded h-7 text-xs" /></td>
+                        <td className="px-2 py-1.5">
+                          <Input value={li.name || ""} onChange={(e) => setLine(i, "name", e.target.value)} className="rounded h-7 text-xs" />
+                          {li.matched_name && <div className="text-[10px] text-emerald-600 mt-0.5" data-testid={`draft-line-matched-${i}`}>↳ matches: {li.matched_name}</div>}
+                        </td>
                         <td className="px-2 py-1.5"><Input value={li.code || ""} onChange={(e) => setLine(i, "code", e.target.value)} className="rounded h-7 text-xs w-28" /></td>
                         <td className="px-2 py-1.5"><Input type="number" value={li.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} className="rounded h-7 text-xs w-16 text-right num" /></td>
                         <td className="px-2 py-1.5"><Input type="number" value={li.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} className="rounded h-7 text-xs w-20 text-right num" /></td>
+                        <td className="px-2 py-1.5 text-right num text-slate-700 font-semibold" data-testid={`draft-line-stock-${i}`}>{stockUnits.toLocaleString()}</td>
+                        <td className="px-2 py-1.5 text-right num text-[#2495D3]" data-testid={`draft-line-percost-${i}`}>{money(perUnit)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

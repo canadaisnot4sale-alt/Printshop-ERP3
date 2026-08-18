@@ -1324,6 +1324,10 @@ class SupplierPreset(BaseModel):
     contact: str = ""
     phone: str = ""
     email: str = ""
+    unit_multiplier: float = 1.0            # e.g. 1000 for "M Sheets" (invoice qty & price are per-thousand)
+    unit_label: str = ""                    # display hint, e.g. "M Sheets"
+    default_category: str = ""
+    modules: List[str] = []
 
 @api_router.get("/suppliers")
 async def list_suppliers(user=Depends(require_admin)):
@@ -1514,12 +1518,30 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
     except Exception as e:
         logger.error(f"Invoice LLM parse failed: {e}")
         raise HTTPException(502, "Could not parse the invoice. Please try again.")
-    mods, cat = suggest_supplier_defaults((data.get("supplier") or {}).get("company", ""))
+    company = (data.get("supplier") or {}).get("company", "")
+    mods, cat = suggest_supplier_defaults(company)
+    sup_doc = await db.suppliers.find_one({"company": {"$regex": f"^{company}$", "$options": "i"}}) if company else None
+    mult = float((sup_doc or {}).get("unit_multiplier") or 1.0)
+    if sup_doc and sup_doc.get("modules"): mods = sup_doc["modules"]
+    if sup_doc and sup_doc.get("default_category"): cat = sup_doc["default_category"]
+    data["supplier_unit_multiplier"] = mult
+    data["supplier_unit_label"] = (sup_doc or {}).get("unit_label", "")
     data["suggested_modules"] = mods
     data["suggested_category"] = cat
     for li in data.get("line_items", []):
         li["import"] = True
         li["name"] = (li.get("description") or "")[:60]
+        li["unit_multiplier"] = mult
+        m = None
+        if li.get("code"):
+            m = await db.materials.find_one({"code": {"$regex": f"^{li['code']}$", "$options": "i"}})
+        if m:
+            li["material_id"] = str(m["_id"])
+            li["matched_name"] = m.get("name")
+        q = float(li.get("quantity") or 0) * mult
+        lt = float(li.get("line_total") or 0)
+        li["converted_qty"] = round(q, 2)
+        li["converted_unit_cost"] = round(lt / q, 4) if q else (round(float(li.get("unit_price") or 0) / mult, 4) if mult else float(li.get("unit_price") or 0))
     return data
 
 class PurchaseLine(BaseModel):
@@ -1531,6 +1553,8 @@ class PurchaseLine(BaseModel):
     unit_price: float = 0.0
     line_total: float = 0.0
     import_material: bool = True
+    material_id: str = ""
+    unit_multiplier: float = 1.0
 
 class PurchaseSupplier(BaseModel):
     company: str = ""
@@ -1553,6 +1577,8 @@ class PurchaseIn(BaseModel):
     default_category: str = "other"
     modules: List[str] = []
     update_inventory: bool = True
+    supplier_unit_multiplier: float = 1.0
+    supplier_unit_label: str = ""
     line_items: List[PurchaseLine] = []
 
 @api_router.post("/purchases")
@@ -1563,19 +1589,29 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
         for li in body.line_items:
             if not li.import_material:
                 continue
+            mult = li.unit_multiplier or 1.0
+            qty_units = round(li.quantity * mult, 2)                              # invoice qty → real stock units
+            unit_cost = round(li.line_total / qty_units, 4) if qty_units else (round(li.unit_price / mult, 4) if mult else li.unit_price)
             match = None
-            if li.code:
+            if li.material_id:
+                try:
+                    match = await db.materials.find_one({"_id": ObjectId(li.material_id)})
+                except Exception:
+                    match = None
+            if not match and li.code:
                 match = await db.materials.find_one({"code": {"$regex": f"^{li.code}$", "$options": "i"}})
             if not match and li.name:
                 match = await db.materials.find_one({"name": li.name})
             if match:
                 mods = list(set((match.get("modules") or []) + body.modules))
                 upd = {
-                    "unit_cost": li.unit_price,
-                    "stock_qty": (match.get("stock_qty") or 0.0) + li.quantity,
+                    "unit_cost": unit_cost,
+                    "stock_qty": (match.get("stock_qty") or 0.0) + qty_units,
                     "modules": mods,
                     "last_purchase_at": now_iso(),
                 }
+                if li.code and not match.get("code"):
+                    upd["code"] = li.code                                          # remember supplier code → material
                 for k, v in [("supplier_company", sup.company), ("supplier_contact", sup.contact),
                              ("supplier_phone", sup.phone), ("supplier_email", sup.email)]:
                     if v and not match.get(k):
@@ -1588,13 +1624,22 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                     "code": li.code, "category": body.default_category,
                     "supplier_company": sup.company, "supplier_contact": sup.contact,
                     "supplier_phone": sup.phone, "supplier_email": sup.email,
-                    "unit": li.unit or "each", "unit_cost": li.unit_price,
-                    "stock_qty": li.quantity, "reorder_point": 0.0, "reorder_target": 0.0,
+                    "unit": li.unit or "each", "unit_cost": unit_cost,
+                    "stock_qty": qty_units, "reorder_point": 0.0, "reorder_target": 0.0,
                     "modules": body.modules, "is_default": False,
                     "last_purchase_at": now_iso(), "created_at": now_iso(),
                 }
                 res = await db.materials.insert_one(doc)
                 affected.append({"id": str(res.inserted_id), "name": doc["name"], "action": "created"})
+        # Train the supplier rule: remember the unit multiplier for next time.
+        if sup.company:
+            await db.suppliers.update_one(
+                {"company": {"$regex": f"^{sup.company}$", "$options": "i"}},
+                {"$set": {"company": sup.company, "unit_multiplier": body.supplier_unit_multiplier or 1.0,
+                          "unit_label": body.supplier_unit_label or "",
+                          "contact": sup.contact, "phone": sup.phone, "email": sup.email,
+                          "default_category": body.default_category, "modules": body.modules}},
+                upsert=True)
     doc = body.model_dump()
     doc["materials_affected"] = affected
     doc["created_at"] = now_iso()
