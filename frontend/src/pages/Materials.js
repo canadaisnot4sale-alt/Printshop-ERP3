@@ -413,10 +413,14 @@ export default function Materials() {
                   </Select>
                 </div>
                 )}
+                {!isLamFoil && (
                 <div><Label className="text-xs">Size</Label>
                   <Input data-testid="material-field-size" value={form.size} onChange={(e) => set("size", e.target.value)} className="rounded-lg mt-1" placeholder={isPaper ? "12x18 in" : "4x8 ft"} /></div>
+                )}
+                {!isLamFoil && (
                 <div><Label className="text-xs">Weight</Label>
                   <Input data-testid="material-field-weight" value={form.weight} onChange={(e) => set("weight", e.target.value)} className="rounded-lg mt-1" placeholder={isPaper ? "100 lb cover" : ""} /></div>
+                )}
                 {isPaper && (
                   <>
                     <div><Label className="text-xs">Type</Label>
@@ -484,10 +488,16 @@ export default function Materials() {
                     <Input data-testid="material-field-misc_qty" type="number" value={form.misc_qty} onChange={(e) => set("misc_qty", e.target.value)} className="rounded-lg mt-1" placeholder="80" /></div>
                 )}
               </div>
-              {isPaper && (
+              {isPaper && !isLamFoil && (
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="paper-stock-hint">
                   Auto: unit cost <span className="num font-semibold">{money(paperUnitCost)}</span>/sheet · stock <span className="num font-semibold">{paperStock}</span> sheets
                 </div>
+              )}
+              {isLamFoil && (
+                <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="lamfoil-hint">
+                  Auto: cost <span className="num font-semibold">{money(Number(form.lam_length_ft) > 0 ? Number(form.lam_roll_cost || 0) / Number(form.lam_length_ft) : 0)}</span>/linear ft · charged by sheet length in Paper Printing
+                </div>
+              )}
               )}
               {isRoll && (
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="roll-stock-hint">
@@ -540,7 +550,7 @@ export default function Materials() {
                     </SelectContent>
                   </Select>
                 </div>
-                {isPaper && (
+                {isPaper && !isLamFoil && (
                   <div><Label className="text-xs">Click cost / side ($)</Label>
                     <Input data-testid="material-field-click_cost" type="number" step="0.001" value={form.click_cost} onChange={(e) => set("click_cost", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
