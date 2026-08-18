@@ -117,6 +117,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Fix (2026-06) — v43.1 PDF import: paper category default + size extraction
+- **Category default fixed**: Alfa Paper supplier rule + trained supplier doc now default new materials to `paper` (was `sheet`); added `paper` to the import dialog's category dropdown. New PDF-imported paper now behaves identically to manually-registered paper (printed 1/2 sides options).
+- **Size extraction fixed**: `_extract_size()` regex now tolerates inch marks (`18"x12"` → `18x12`); returned by `/purchases/parse` per line and shown as an editable **Size** column in the review table (data-testid `draft-line-size-{i}`). `PurchaseLine.size` stored + used on create (fallback to regex). Verified with real Alfa invoice #176837. User-confirmed working.
+
 ## Implemented (2026-06) — v43 Trainable supplier invoice import (unit conversion + code auto-match)
 - **Supplier unit rule** (trained once): SupplierPreset gains unit_multiplier + unit_label (+ default_category/modules). Alfa Paper seeded ×1000 ("M Sheets"). Saving a purchase upserts the supplier rule (auto-trained). /purchases/parse looks up the supplier → attaches supplier_unit_multiplier, per-line converted_qty/converted_unit_cost, and auto-match material_id by code.
 - **Unit conversion on import**: create_purchase converts invoice units → real stock. qty_units = quantity × unit_multiplier; unit_cost = line_total / qty_units (fallback unit_price/mult). Verified via curl: Alfa 0.4 M @ $254/M ($101.60 box) → +400 sheets, $0.254/sheet. Remembers supplier code on the matched material for future auto-match.
