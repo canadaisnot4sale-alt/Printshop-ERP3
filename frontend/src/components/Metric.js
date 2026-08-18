@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import { money } from "@/lib/format";
 import ProfitabilityPanel from "@/components/ProfitabilityPanel";
 
-// Rush surcharge rates (Same day / Next day) fetched once and cached across the app.
+// Rush surcharge rates + tax rates fetched once and cached across the app.
 let _rushCache = null;
 export function resetRushRatesCache() { _rushCache = null; }
 function useRushRates() {
@@ -12,11 +12,14 @@ function useRushRates() {
   useEffect(() => {
     if (_rushCache) return;
     api.get("/settings").then(({ data }) => {
-      _rushCache = { same: Number(data.rush_same_day_pct ?? 15), next: Number(data.rush_next_day_pct ?? 10) };
+      _rushCache = {
+        same: Number(data.rush_same_day_pct ?? 15), next: Number(data.rush_next_day_pct ?? 10),
+        gst: Number(data.gst_pct ?? 5), pst: Number(data.pst_pct ?? 7),
+      };
       setR(_rushCache);
     }).catch(() => {});
   }, []);
-  return r || { same: 15, next: 10 };
+  return r || { same: 15, next: 10, gst: 5, pst: 7 };
 }
 
 export function Metric({ icon: Icon, label, value, sub, accent }) {
@@ -116,6 +119,27 @@ export function PricingPanel({ r, className = "" }) {
               </tr>
               {rushRow(`Next day +${rush.next}%`, rush.next)}
               {rushRow(`Same day +${rush.same}%`, rush.same)}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {order != null && (
+        <div className="rounded-xl border border-slate-200 mt-2 overflow-hidden" data-testid="tax-pricing">
+          <div className="bg-slate-50 px-4 py-2 text-[10px] font-mono uppercase tracking-widest text-slate-500 border-b border-slate-200">Tax Included</div>
+          <table className="w-full text-sm">
+            <tbody>
+              {retail != null && (
+                <tr className="border-b border-slate-50">
+                  <td className="px-4 py-1.5 text-slate-500">Retail + GST {rush.gst}% + PST {rush.pst}%</td>
+                  <td className="px-4 py-1.5 text-right num text-[#2495D3] font-semibold" data-testid="tax-retail">{money(retail * (1 + (rush.gst + rush.pst) / 100))}</td>
+                </tr>
+              )}
+              {wholesale != null && (
+                <tr>
+                  <td className="px-4 py-1.5 text-slate-500">Wholesale + GST {rush.gst}%</td>
+                  <td className="px-4 py-1.5 text-right num text-slate-600" data-testid="tax-wholesale">{money(wholesale * (1 + rush.gst / 100))}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
