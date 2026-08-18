@@ -114,6 +114,12 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Implemented (2026-06) — v36 Paper Laminate & Hot Foil (roll materials)
+- Materials → Paper now has a **Type** select: Normal (default) | Laminate | Hot Foil. For Laminate/Foil the form captures roll specs (width in, length ft, roll cost) + Color (foil); Unit dropdown hidden. Fields on Material: paper_type, lam_width_in, lam_length_ft, lam_roll_cost, foil_color.
+- Paper Printing: Lamination switch → dropdown of registered laminates (assigned to paper) + 1/2 sides selector; new Hot Foil switch → dropdown of foils (shows color). New endpoint GET /api/paper-addons?type=laminate|hot_foil (no cost leaked).
+- Pricing: laminate/foil cost per sheet = (roll_cost ÷ roll_length_ft) × (sheet length ft) × sides; added to the printing bucket and marked up like click. 2 sides = ×2 (covers the "one roll per side" Gloss case). Fallback to settings.lamination_per_sheet when laminate on with no material selected.
+- Verified via API: Velvete ($275/500ft) on 12x18, 1000pc(50 sheets): lam 1-side $41.25, 2-side $82.50. Only Paper Printing consumes these for now; assignable to other modules via existing flags.
+
 ## Implemented (2026-06) — v35 Alphabetical + default extended to Sublimation & Garments
 - Sublimation products and DTF/Embroidery garments now support a single `is_default` (Default switch + badge column). Sublimation calculator pre-selects the default product; DTF & Embroidery pre-select the default garment. All catalogs already sort alphabetically (register_crud).
 - Backend: `is_default` added to Garment and SublimationProduct models; single-default enforcement is generic in register_crud.

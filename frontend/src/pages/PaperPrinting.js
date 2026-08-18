@@ -56,6 +56,12 @@ export default function PaperPrinting() {
   const [productId, setProductId] = useState("");
   const [sheet, setSheet] = useState("13x19");
   const [laminate, setLaminate] = useState(false);
+  const [laminateId, setLaminateId] = useState("");
+  const [laminateSides, setLaminateSides] = useState(1);
+  const [hotFoil, setHotFoil] = useState(false);
+  const [foilId, setFoilId] = useState("");
+  const [lamOptions, setLamOptions] = useState([]);
+  const [foilOptions, setFoilOptions] = useState([]);
   const [side, setSide] = useState("4_0");
   const [focusQty, setFocusQty] = useState(100);
   const [selectedStock, setSelectedStock] = useState(null);
@@ -75,11 +81,16 @@ export default function PaperPrinting() {
 
   const sheetOpts = [...new Set([...SHEETS, ...(sheet ? [sheet] : [])])];
 
+  useEffect(() => {
+    api.get("/paper-addons?type=laminate").then((r) => setLamOptions(r.data)).catch(() => {});
+    api.get("/paper-addons?type=hot_foil").then((r) => setFoilOptions(r.data)).catch(() => {});
+  }, []);
+
   const calc = async () => {
     if (!productId) return toast.error("Select a product");
     setLoading(true);
     try {
-      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate });
+      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheet, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null });
       setResult(data);
       setSelectedStock(data.results[0] || null);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
@@ -144,9 +155,39 @@ export default function PaperPrinting() {
                 ))}
               </div>
 
-              <div className="flex items-center justify-between py-2 mb-4">
-                <Label className="text-xs">Lamination</Label>
-                <Switch data-testid="laminate-switch" checked={laminate} onCheckedChange={setLaminate} />
+              <div className="py-2 border-t border-slate-100 pt-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Lamination</Label>
+                  <Switch data-testid="laminate-switch" checked={laminate} onCheckedChange={setLaminate} />
+                </div>
+                {laminate && (
+                  <div className="mt-2 space-y-2" data-testid="laminate-picker">
+                    <Select value={laminateId} onValueChange={setLaminateId}>
+                      <SelectTrigger data-testid="laminate-select" className="rounded-lg h-9"><SelectValue placeholder="Choose laminate" /></SelectTrigger>
+                      <SelectContent>{lamOptions.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-2">
+                      <button type="button" data-testid="lam-sides-1" onClick={() => setLaminateSides(1)} className={`flex-1 text-xs rounded-lg border py-1.5 ${laminateSides === 1 ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600"}`}>1 side</button>
+                      <button type="button" data-testid="lam-sides-2" onClick={() => setLaminateSides(2)} className={`flex-1 text-xs rounded-lg border py-1.5 ${laminateSides === 2 ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600"}`}>2 sides</button>
+                    </div>
+                    {lamOptions.length === 0 && <p className="text-[11px] text-slate-400">No laminates registered. Add one in Materials (Paper → Type: Laminate).</p>}
+                  </div>
+                )}
+              </div>
+              <div className="py-2 mb-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Hot Foil</Label>
+                  <Switch data-testid="hotfoil-switch" checked={hotFoil} onCheckedChange={setHotFoil} />
+                </div>
+                {hotFoil && (
+                  <div className="mt-2" data-testid="foil-picker">
+                    <Select value={foilId} onValueChange={setFoilId}>
+                      <SelectTrigger data-testid="foil-select" className="rounded-lg h-9"><SelectValue placeholder="Choose foil" /></SelectTrigger>
+                      <SelectContent>{foilOptions.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}{o.foil_color ? ` · ${o.foil_color}` : ""}</SelectItem>)}</SelectContent>
+                    </Select>
+                    {foilOptions.length === 0 && <p className="text-[11px] text-slate-400 mt-1">No foils registered. Add one in Materials (Paper → Type: Hot Foil).</p>}
+                  </div>
+                )}
               </div>
               <Button data-testid="calc-paper-button" onClick={calc} disabled={loading} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-11">
                 <Calculator size={16} className="mr-2" />{loading ? "Calculating…" : "Generate Quote"}

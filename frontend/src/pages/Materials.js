@@ -33,6 +33,7 @@ const BLANK = {
   roll_cost: 0, roll_qty: 1, printable_height: 0, waste_linear_ft: 1,
   color: "", sheet_price: 0, sheet_qty: 1,
   misc_qty: 1, misc_price: 0,
+  paper_type: "normal", lam_width_in: 0, lam_length_ft: 0, lam_roll_cost: 0, foil_color: "",
   price_override: "", wholesale_price_override: "", retail_markup_pct: "", wholesale_markup_pct: "",
   modules: [], is_default: false, default_modules: [],
   sheet_width: 0, sheet_height: 0, sheets_per_box: 0,
@@ -46,6 +47,7 @@ const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct
   "click_cost", "num_boxes", "price_per_box",
   "roll_cost", "roll_qty", "printable_height", "waste_linear_ft",
   "sheet_price", "sheet_qty", "misc_qty", "misc_price",
+  "lam_width_in", "lam_length_ft", "lam_roll_cost",
   "stock_qty", "reorder_point", "reorder_target", "waste_per_order",
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
@@ -81,6 +83,7 @@ export default function Materials() {
   const isSubstrate = form.category === "substrate";
   const isRoll = form.category === "roll";
   const isMisc = form.category === "miscellaneous";
+  const isLamFoil = form.category === "paper" && (form.paper_type === "laminate" || form.paper_type === "hot_foil");
 
   const pickCategory = (v) => {
     if (v === "__add__") {
@@ -387,6 +390,7 @@ export default function Materials() {
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-2">Specs</div>
               <div className="grid grid-cols-3 gap-4">
+                {!isLamFoil && (
                 <div><Label className="text-xs">Unit</Label>
                   <Select value={form.unit} onValueChange={pickUnit}>
                     <SelectTrigger data-testid="material-field-unit" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
@@ -396,18 +400,47 @@ export default function Materials() {
                     </SelectContent>
                   </Select>
                 </div>
+                )}
                 <div><Label className="text-xs">Size</Label>
                   <Input data-testid="material-field-size" value={form.size} onChange={(e) => set("size", e.target.value)} className="rounded-lg mt-1" placeholder={isPaper ? "12x18 in" : "4x8 ft"} /></div>
                 <div><Label className="text-xs">Weight</Label>
                   <Input data-testid="material-field-weight" value={form.weight} onChange={(e) => set("weight", e.target.value)} className="rounded-lg mt-1" placeholder={isPaper ? "100 lb cover" : ""} /></div>
                 {isPaper && (
                   <>
-                    <div><Label className="text-xs">Sheets per box</Label>
-                      <Input data-testid="material-field-sheets_per_box" type="number" value={form.sheets_per_box} onChange={(e) => set("sheets_per_box", e.target.value)} className="rounded-lg mt-1" /></div>
-                    <div><Label className="text-xs">Number of boxes</Label>
-                      <Input data-testid="material-field-num_boxes" type="number" value={form.num_boxes} onChange={(e) => set("num_boxes", e.target.value)} className="rounded-lg mt-1" /></div>
-                    <div><Label className="text-xs">Price per box ($)</Label>
-                      <Input data-testid="material-field-price_per_box" type="number" value={form.price_per_box} onChange={(e) => set("price_per_box", e.target.value)} className="rounded-lg mt-1" /></div>
+                    <div><Label className="text-xs">Type</Label>
+                      <Select value={form.paper_type || "normal"} onValueChange={(v) => set("paper_type", v)}>
+                        <SelectTrigger data-testid="material-field-paper_type" className="rounded-lg mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="laminate">Laminate</SelectItem>
+                          <SelectItem value="hot_foil">Hot Foil</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {(!form.paper_type || form.paper_type === "normal") && (
+                      <>
+                        <div><Label className="text-xs">Sheets per box</Label>
+                          <Input data-testid="material-field-sheets_per_box" type="number" value={form.sheets_per_box} onChange={(e) => set("sheets_per_box", e.target.value)} className="rounded-lg mt-1" /></div>
+                        <div><Label className="text-xs">Number of boxes</Label>
+                          <Input data-testid="material-field-num_boxes" type="number" value={form.num_boxes} onChange={(e) => set("num_boxes", e.target.value)} className="rounded-lg mt-1" /></div>
+                        <div><Label className="text-xs">Price per box ($)</Label>
+                          <Input data-testid="material-field-price_per_box" type="number" value={form.price_per_box} onChange={(e) => set("price_per_box", e.target.value)} className="rounded-lg mt-1" /></div>
+                      </>
+                    )}
+                    {isLamFoil && (
+                      <>
+                        <div><Label className="text-xs">Roll width (in)</Label>
+                          <Input data-testid="material-field-lam_width_in" type="number" value={form.lam_width_in} onChange={(e) => set("lam_width_in", e.target.value)} className="rounded-lg mt-1" placeholder="12.75" /></div>
+                        <div><Label className="text-xs">Roll length (ft)</Label>
+                          <Input data-testid="material-field-lam_length_ft" type="number" value={form.lam_length_ft} onChange={(e) => set("lam_length_ft", e.target.value)} className="rounded-lg mt-1" placeholder="500" /></div>
+                        <div><Label className="text-xs">Roll cost ($)</Label>
+                          <Input data-testid="material-field-lam_roll_cost" type="number" value={form.lam_roll_cost} onChange={(e) => set("lam_roll_cost", e.target.value)} className="rounded-lg mt-1" placeholder="275" /></div>
+                        {form.paper_type === "hot_foil" && (
+                          <div><Label className="text-xs">Color</Label>
+                            <Input data-testid="material-field-foil_color" value={form.foil_color} onChange={(e) => set("foil_color", e.target.value)} className="rounded-lg mt-1" placeholder="Gold" /></div>
+                        )}
+                      </>
+                    )}
                   </>
                 )}
                 {isSubstrate && (

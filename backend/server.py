@@ -276,6 +276,11 @@ class Material(BaseModel):
     num_boxes: float = 0.0                        # paper: boxes on hand (stock = num_boxes * sheets_per_box)
     price_per_box: float = 0.0                    # paper: box price (unit_cost = price_per_box / sheets_per_box)
     click_cost: float = 0.055                     # paper: press click cost per printed side
+    paper_type: str = "normal"                    # paper: normal | laminate | hot_foil
+    lam_width_in: float = 0.0                     # paper laminate/foil: roll width (in)
+    lam_length_ft: float = 0.0                    # paper laminate/foil: roll length (ft)
+    lam_roll_cost: float = 0.0                    # paper laminate/foil: cost per roll
+    foil_color: str = ""                          # paper hot_foil: color
     roll_cost: float = 0.0                        # roll: price of one full roll
     roll_qty: float = 0.0                          # roll: number of rolls on hand
     printable_height: float = 0.0                  # roll: usable printable length (inches) for layout
@@ -593,7 +598,7 @@ def grid_layout(SW, SH, w, h, gutter=0.0):
             best = {"n": n, "cols": cols, "rows": rows, "rotated": rot, "pw": pw, "ph": ph, "placements": placements}
     return best
 
-def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19"):
+def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19", lam_spec=None, foil_spec=None):
     sw, sh = SHEET_SIZES.get(sheet_key, (13, 19))
     pw = product.get("bleed_w") or product["finished_w"]
     ph = product.get("bleed_h") or product["finished_h"]
@@ -615,13 +620,25 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
     whole_ps = stock.get("wholesale_per_sheet")
     if whole_ps is None:
         whole_ps = markup_price(cps, whole_pct)
+    # Laminate/Hot-foil cost per sheet: by linear foot of the sheet length (roll consumed full-width per pass).
+    def _addon_ps(a):
+        if not a or not a.get("per_ft"):
+            return 0.0
+        return a["per_ft"] * (max(sw, sh) / 12.0) * a.get("sides", 1)
+    lam_ps = _addon_ps(lam_spec)
+    foil_ps = _addon_ps(foil_spec)
     rows = []
     for q in qtys:
         sheets = math.ceil(q / n_up) if n_up else 0
         material = round(sheets * cps, 2)                       # true material cost (for margin)
         cost_40 = round(sheets * settings["click_4_0"], 2)
         cost_44 = round(sheets * settings["click_4_4"], 2)
-        lam = round(sheets * settings["lamination_per_sheet"], 2) if laminate else 0.0
+        if lam_spec or foil_spec:
+            lam = round(sheets * (lam_ps + foil_ps), 2)
+        elif laminate:
+            lam = round(sheets * settings["lamination_per_sheet"], 2)
+        else:
+            lam = 0.0
         base_40 = material + cost_40 + lam                      # true production cost
         base_44 = material + cost_44 + lam
         paper_retail = round(sheets * retail_ps, 2)             # paper sold at its own retail/override
@@ -2004,7 +2021,17 @@ class PaperCalcIn(BaseModel):
     product_id: str
     sheet_key: str = "13x19"
     laminate: bool = False
+    laminate_id: Optional[str] = None
+    laminate_sides: int = 1
+    foil_id: Optional[str] = None
     stock_ids: Optional[List[str]] = None
+
+@api_router.get("/paper-addons")
+async def paper_addons(type: str = "laminate", user=Depends(get_current_user)):
+    q = {"category": "paper", "paper_type": type, "modules": {"$in": ["paper"]}}
+    docs = await db.materials.find(q).sort("name", 1).to_list(200)
+    return [{"id": str(d["_id"]), "name": d.get("name"), "foil_color": d.get("foil_color", ""),
+             "lam_width_in": d.get("lam_width_in", 0), "lam_length_ft": d.get("lam_length_ft", 0)} for d in docs]
 
 @api_router.post("/calc/paper")
 async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
@@ -2031,9 +2058,19 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
             cm = compute_material(d, biz, mbi, settings)
             st["retail_per_sheet"] = cm.get("selling_price")
             st["wholesale_per_sheet"] = cm.get("wholesale_price")
+    lam_spec = None
+    if body.laminate_id:
+        ld = await db.materials.find_one({"_id": ObjectId(body.laminate_id)})
+        if ld and ld.get("lam_length_ft"):
+            lam_spec = {"per_ft": ld.get("lam_roll_cost", 0) / ld["lam_length_ft"], "sides": max(1, body.laminate_sides or 1)}
+    foil_spec = None
+    if body.foil_id:
+        fd = await db.materials.find_one({"_id": ObjectId(body.foil_id)})
+        if fd and fd.get("lam_length_ft"):
+            foil_spec = {"per_ft": fd.get("lam_roll_cost", 0) / fd["lam_length_ft"], "sides": 1}
     results = []
     for st in stocks:
-        quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key)
+        quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key, lam_spec, foil_spec)
         results.append({"stock": st, "quote": quote})
     # per-sheet price helpers were only needed for pricing; drop before returning (avoid role leakage)
     for st in stocks:
