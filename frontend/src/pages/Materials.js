@@ -171,9 +171,17 @@ export default function Materials() {
     NUMS.forEach((k) => (payload[k] = Number(payload[k] || 0)));
     OPT_NUMS.forEach((k) => (payload[k] = payload[k] === "" || payload[k] == null ? null : Number(payload[k])));
     payload.machine_id = form.machine_id || null;
-    if (form.category === "paper" && Number(form.sheets_per_box) > 0) {
+    if (form.category === "paper" && !isLamFoil && Number(form.sheets_per_box) > 0) {
       payload.unit_cost = Number((Number(form.price_per_box || 0) / Number(form.sheets_per_box)).toFixed(4));
       payload.stock_qty = Number(form.num_boxes || 0) * Number(form.sheets_per_box);
+    }
+    if (isLamFoil) {
+      // Laminate/Hot Foil track inventory by rolls (stock_qty). Clear the normal-paper
+      // sheet helpers so they never override the roll count.
+      payload.sheets_per_box = 0;
+      payload.num_boxes = 0;
+      payload.price_per_box = 0;
+      payload.stock_qty = Number(form.stock_qty || 0);
     }
     if (form.category === "roll") {
       const w = Number((String(form.size || "").match(/(\d+(?:\.\d+)?)/) || [])[1]) || Number(form.roll_width || 0);
@@ -486,7 +494,6 @@ export default function Materials() {
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="lamfoil-hint">
                   Auto: cost <span className="num font-semibold">{money(Number(form.lam_length_ft) > 0 ? Number(form.lam_roll_cost || 0) / Number(form.lam_length_ft) : 0)}</span>/linear ft · inventory tracked by <span className="font-semibold">rolls</span> ({Number(form.stock_qty || 0)} rl × {Number(form.lam_length_ft || 0)} ft) · auto-deducts 1 roll per full roll consumed
                 </div>
-              )}
               )}
               {isRoll && (
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="roll-stock-hint">
