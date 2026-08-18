@@ -2061,6 +2061,8 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
         except Exception:
             pass
     raw = {str(d["_id"]): clean(d) for d in await db.materials.find({"_id": {"$in": ids}}).to_list(500)} if ids else {}
+    # Exclude laminate/hot-foil (they are add-ons to paper, not paper stocks to compare)
+    stocks = [st for st in stocks if (raw.get(st["id"], {}).get("paper_type") or "normal") == "normal"]
     for st in stocks:
         d = raw.get(st["id"])
         if d:

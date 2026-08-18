@@ -114,6 +114,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 - **Inventory value fix**: for roll materials, value = roll_cost × rolls (not unit_cost/ft² × rolls). Verified iteration_26 (100%).
 - **Category filter** on Materials page: client-side chips (All + one per category with counts) filter the table; metrics stay global. Verified iteration_27 (100%).
 
+## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
+- calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
+
 ## Implemented (2026-06) — v39 Laminate & Hot Foil cost breakdown (separate lines)
 - paper_quote now returns per-row lamination_cost/foil_cost (raw) + lamination_retail/foil_retail + lamination_wholesale/foil_wholesale (retail/wholesale marked-up; added to DISCOUNTABLE_FIELDS so volume discount applies consistently).
 - UI shows them separately in BOTH the price card (PricingPanel: "· Lamination" / "· Hot Foil" at selling price + per-pc) and the Profitability panel (cost lines, admin). Per-unit computed frontend by /qty. Role-scrubbed (client no cost/wholesale, reseller no retail).

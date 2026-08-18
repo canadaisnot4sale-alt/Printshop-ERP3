@@ -75,7 +75,7 @@ export default function PaperPrinting() {
     setProducts(list);
     if (!productId && list.length) setProductId((list.find((p) => p.is_default) || list[0]).id);
   });
-  const loadPaperMats = () => api.get("/materials").then((r) => setPaperMats((r.data || []).filter((m) => (m.modules || []).includes("paper")))).catch(() => {});
+  const loadPaperMats = () => api.get("/materials").then((r) => setPaperMats((r.data || []).filter((m) => (m.modules || []).includes("paper") && (m.paper_type || "normal") === "normal"))).catch(() => {});
   useEffect(() => { loadProducts(); if (isAdmin) loadPaperMats(); /* eslint-disable-next-line */ }, []);
   // Default Sheet Size to the size of this module's DEFAULT paper material (unless re-quoting)
   useDefaultSheetSize("/paper-stocks?module=paper", setSheet);
