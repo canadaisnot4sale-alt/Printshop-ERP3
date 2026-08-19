@@ -512,6 +512,49 @@ export default function Materials() {
                   Auto: cost <span className="num font-semibold">{money(Number(form.lam_length_ft) > 0 ? Number(form.lam_roll_cost || 0) / Number(form.lam_length_ft) : 0)}</span>/linear ft · inventory tracked by <span className="font-semibold">rolls</span> ({Number(form.stock_qty || 0)} rl × {Number(form.lam_length_ft || 0)} ft) · auto-deducts 1 roll per full roll consumed
                 </div>
               )}
+              {isLamFoil && Number(form.lam_width_in) > 0 && Number(form.lam_length_ft) > 0 && (() => {
+                const W = Number(form.lam_width_in), Lin = Number(form.lam_length_ft) * 12, waste = 2;
+                // Two orientations of a 12x18 sheet on the roll. Waste (2") only BETWEEN sheets along the roll length.
+                const view = (across_dim, along_dim) => {
+                  const across = Math.floor(W / across_dim);
+                  const along = Math.floor((Lin + waste) / (along_dim + waste));
+                  return { across, along: across > 0 ? along : 0, total: across * (across > 0 ? along : 0) };
+                };
+                const a = view(12, 18);   // 12" across the width, 18" along the roll
+                const b = view(18, 12);   // 18" across the width, 12" along the roll
+                return (
+                  <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden" data-testid="lam-sheet-reference">
+                    <div className="bg-slate-50 px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest text-slate-500 border-b border-slate-200">
+                      Reference · approx 12×18 sheets from this roll · 2" waste between sheets (length only)
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead><tr className="text-slate-400 text-[10px] font-mono uppercase">
+                        <th className="text-left px-3 py-1.5">Orientation</th>
+                        <th className="text-center px-3 py-1.5">Across roll</th>
+                        <th className="text-center px-3 py-1.5">Along roll</th>
+                        <th className="text-right px-3 py-1.5">≈ Sheets</th>
+                      </tr></thead>
+                      <tbody>
+                        <tr className="border-t border-slate-100" data-testid="lam-ref-view-a">
+                          <td className="px-3 py-1.5">12" across · 18" long</td>
+                          <td className="text-center px-3 py-1.5 num">{a.across}</td>
+                          <td className="text-center px-3 py-1.5 num">{a.along}</td>
+                          <td className="text-right px-3 py-1.5 num font-bold text-[#2495D3]">{a.total.toLocaleString()}</td>
+                        </tr>
+                        <tr className="border-t border-slate-100" data-testid="lam-ref-view-b">
+                          <td className="px-3 py-1.5">18" across · 12" long</td>
+                          <td className="text-center px-3 py-1.5 num">{b.across}</td>
+                          <td className="text-center px-3 py-1.5 num">{b.along}</td>
+                          <td className="text-right px-3 py-1.5 num font-bold text-[#2495D3]">{b.total.toLocaleString()}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div className="text-[10px] text-slate-400 px-3 py-1.5 border-t border-slate-100">
+                      Roll {form.lam_width_in}" wide × {form.lam_length_ft} ft. Reference only — for your planning.
+                    </div>
+                  </div>
+                );
+              })()}
               {isRoll && (
                 <div className="text-[11px] text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5" data-testid="roll-stock-hint">
                   Roll width <span className="num font-semibold">{rollWidthIn}"</span> · 1 roll = <span className="num font-semibold">{rollAreaSqft.toFixed(1)}</span> ft² · stock <span className="num font-semibold">{Number(form.roll_qty || 0)}</span> roll(s) · layout uses printable {form.printable_width}"×{form.printable_height}"

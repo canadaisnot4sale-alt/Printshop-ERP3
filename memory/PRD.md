@@ -117,6 +117,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v48 Laminate/Hot-foil roll yield reference (12×18 sheets per roll)
+- Materials edit form now shows a REFERENCE table for paper/Laminate & paper/Hot-foil rolls: approx number of 12×18 sheets obtainable from the roll, in 2 orientations (12" across/18" long and 18" across/12" long). Across = floor(roll_width/across_dim); along = floor((roll_length_in + 2)/(along_dim + 2)) — 2" waste applied ONLY along the roll length; total = across × along. Reference-only (display), auto-computes from lam_width_in/lam_length_ft (auto-filled on PDF import). Verified: Velvet 12.75"×500 → 300/0; PET 27"×500 → 600/428. data-testid `lam-sheet-reference`.
+
 ## Fix (2026-06) — v47.1 Rename per-module "Products" (naming clarity)
 - Estimating products (`db.products`, paper imposition products) are module-specific and were confusingly all labeled "Products", clashing with the Business → Product Catalog. Renamed per module: Paper Printing tab → "Paper Products", Sublimation tab → "Sublimation Products", Dashboard card → "Paper Products". Product Catalog (Business → Products, `db.catalog_products`) stays the storefront catalog. Future modules follow the "<Module> Products" pattern.
 
