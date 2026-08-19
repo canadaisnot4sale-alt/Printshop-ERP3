@@ -71,6 +71,31 @@ def test_paper_not_misdetected_as_substrate():
     assert srv._detect_media_category('60"X120" board') == "substrate"
 
 
+def test_laminate_southwest_detection_and_conversion():
+    # Southwest laminate rolls -> logical category "laminate" (stored as paper + paper_type=laminate)
+    assert srv._detect_media_category('12 3/4" x 500 1.2 mil Digital OPP Velvet Touch 1" core') == "laminate"
+    assert srv._detect_media_category('27" x 500 1.5mil PET lite Laminating film 1" Core') == "laminate"
+    # wide-format overlaminate roll (Grimco) must stay a roll, NOT laminate
+    assert srv._detect_media_category('54"X50YD BRITELINE GC LUS LAM') == "roll"
+    # 12 3/4" x 500ft, qty 2, total 206.56 -> roll_cost 103.28, cost/ft 0.2066, stock 2 rolls
+    uc, stock, size, extra, mods, label = srv._import_line_spec(
+        "laminate", 2, "", '12 3/4" x 500 1.2 mil Digital OPP Velvet Touch', 206.56, 103.28, 1)
+    assert stock == 2
+    assert extra["paper_type"] == "laminate"
+    assert extra["lam_width_in"] == 12.75
+    assert extra["lam_length_ft"] == 500.0
+    assert extra["lam_roll_cost"] == 103.28
+    assert approx(uc, 103.28 / 500.0, 0.001)
+    assert mods == ["paper"]
+    assert label == "rolls"
+
+
+def test_parse_frac():
+    assert srv._parse_frac("12 3/4") == 12.75
+    assert srv._parse_frac("27") == 27.0
+    assert srv._parse_frac("8.5") == 8.5
+
+
 def test_generic_paper_still_works():
     # Alfa-style: qty 0.4 (M sheets) x mult 1000, total 101.60 -> 400 sheets, $0.254
     uc, stock, size, extra, mods, label = srv._import_line_spec(
@@ -78,4 +103,6 @@ def test_generic_paper_still_works():
     assert approx(stock, 400.0)
     assert approx(uc, 0.254, 0.001)
     assert size == "12x18"
-    assert extra == {}
+    assert extra["sheets_per_box"] == 1000
+    assert extra["num_boxes"] == 0.4
+    assert approx(extra["price_per_box"], 254.0, 0.5)

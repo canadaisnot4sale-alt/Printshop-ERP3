@@ -1374,12 +1374,27 @@ async def _apply_default_modules(doc_id, default_modules, paper_type=None):
             flt["paper_type"] = {"$in": [None, "normal"]} if pt == "normal" else pt
         await db.materials.update_many(flt, {"$pull": {"default_modules": mod}})
 
+async def _upsert_supplier_from_material(doc):
+    """When a material's supplier info is entered/edited manually, remember it on the supplier record
+    so the next PDF import from that supplier auto-fills contact/phone/email (only non-empty values)."""
+    company = (doc.get("supplier_company") or "").strip()
+    if not company:
+        return
+    setv = {"company": company}
+    for mk, sk in [("supplier_contact", "contact"), ("supplier_phone", "phone"), ("supplier_email", "email")]:
+        v = (doc.get(mk) or "").strip()
+        if v:
+            setv[sk] = v
+    await db.suppliers.update_one(
+        {"company": {"$regex": f"^{re.escape(company)}$", "$options": "i"}}, {"$set": setv}, upsert=True)
+
 @api_router.post("/materials")
 async def create_material(body: Material, user=Depends(require_admin)):
     doc = body.model_dump()
     doc["created_at"] = now_iso()
     res = await db.materials.insert_one(doc)
     await _apply_default_modules(res.inserted_id, doc.get("default_modules"), doc.get("paper_type"))
+    await _upsert_supplier_from_material(doc)
     s = await get_settings()
     saved = clean(await db.materials.find_one({"_id": res.inserted_id}))
     return compute_material(saved, await _business_hourly(s), await _machines_by_id(s), s)
@@ -1390,6 +1405,7 @@ async def update_material(mid: str, body: Material, user=Depends(require_admin))
     oid = ObjectId(mid)
     await db.materials.update_one({"_id": oid}, {"$set": doc})
     await _apply_default_modules(oid, doc.get("default_modules"), doc.get("paper_type"))
+    await _upsert_supplier_from_material(doc)
     s = await get_settings()
     saved = clean(await db.materials.find_one({"_id": oid}))
     return compute_material(saved, await _business_hourly(s), await _machines_by_id(s), s)
@@ -1467,6 +1483,7 @@ SUPPLIER_MODULE_RULES = [
     ("alfa", ["paper"], "paper"),
     ("spicers", ["large-format", "direct-print"], "ink"),
     ("grimco", ["large-format", "direct-print"], "roll"),
+    ("southwest", ["paper"], "laminate"),
 ]
 
 def suggest_supplier_defaults(company: str):
@@ -1503,6 +1520,9 @@ def _detect_media_category(text: str) -> str:
     for kw in _SUBSTRATE_KEYWORDS:
         if kw in t:
             return "substrate"
+    for kw in _LAMINATE_KEYWORDS:
+        if kw in t:
+            return "laminate"
     for kw in _ROLL_KEYWORDS:
         if kw in t:
             return "roll"
@@ -1519,6 +1539,32 @@ def _roll_material_type(text: str) -> str:
         if kw in t:
             return label
     return "vinyl"
+
+# Lamination-film (thermal/pouch) keywords → paper material with paper_type=laminate (module: paper).
+# Kept specific so wide-format overlaminate rolls (e.g. Grimco "GC LUS LAM") are NOT caught here.
+_LAMINATE_KEYWORDS = ("laminating film", "laminating", "velvet touch", "soft touch", "opp velvet",
+                      "opp ", "pet lite", "lamination film", "lam film", "nap lam", "thermal lam")
+_FRAC_RE = re.compile(r"^(\d+)\s+(\d+)\s*/\s*(\d+)$")
+_LAM_SPEC_RE = re.compile(r"(\d+(?:\s+\d+\s*/\s*\d+)?(?:\.\d+)?)\s*[\"'”’]?\s*[xX×]\s*(\d+(?:\.\d+)?)")
+
+def _parse_frac(s):
+    s = (s or "").strip()
+    m = _FRAC_RE.match(s)
+    if m:
+        return float(m.group(1)) + float(m.group(2)) / float(m.group(3))
+    try:
+        return float(s)
+    except Exception:
+        return 0.0
+
+def _parse_laminate_spec(*texts):
+    for text in texts:
+        if not text:
+            continue
+        m = _LAM_SPEC_RE.search(text)
+        if m:
+            return {"width_in": _parse_frac(m.group(1)), "length_ft": float(m.group(2))}
+    return {}
 
 def _sheet_size_label(w, h) -> str:
     lo, hi = sorted([float(w), float(h)])
@@ -1585,6 +1631,16 @@ def _import_line_spec(category, quantity, size_override, desc_text, line_total, 
                      "sheet_qty": sheets, "sheet_width": sw, "sheet_height": sh,
                      "cnc_capable": True, "channel_capable": True, "size": size_str}
             return unit_cost, sheets, size_str, extra, ["direct-print", "laser", "channel-letters"], "sheets"
+    if cat == "laminate":
+        spec = _parse_laminate_spec(size_override, desc_text)
+        if spec.get("width_in") and spec.get("length_ft"):
+            w = spec["width_in"]; length_ft = spec["length_ft"]; rolls = qty or 1
+            roll_cost = round(lt / rolls, 4) if (rolls and lt) else round(up, 4)
+            unit_cost = round(roll_cost / length_ft, 4) if length_ft else 0.0   # cost per linear ft
+            size_str = f"{_fmt_num(w)}in x {_fmt_num(length_ft)}ft"
+            extra = {"unit": "roll", "paper_type": "laminate", "lam_width_in": w,
+                     "lam_length_ft": length_ft, "lam_roll_cost": roll_cost, "size": size_str}
+            return unit_cost, rolls, size_str, extra, ["paper"], "rolls"
     # generic (paper / other)
     mult = unit_multiplier or 1.0
     qty_units = round(qty * mult, 2)
@@ -1678,6 +1734,13 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
     data["supplier_unit_label"] = (sup_doc or {}).get("unit_label", "")
     data["suggested_modules"] = mods
     data["suggested_category"] = cat
+    # Backfill supplier contact/phone/email from the trained supplier record when the PDF omits them.
+    if sup_doc:
+        sup = data.get("supplier") or {}
+        for k in ("contact", "phone", "email"):
+            if not (sup.get(k) or "").strip() and sup_doc.get(k):
+                sup[k] = sup_doc[k]
+        data["supplier"] = sup
     for li in data.get("line_items", []):
         li["import"] = True
         li["name"] = (li.get("description") or "")[:60]
@@ -1765,6 +1828,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
             unit_cost, stock_units, size_str, extra, cat_mods, _ = _import_line_spec(
                 cat, li.quantity, li.size, li.description or li.name,
                 li.line_total, li.unit_price, li.unit_multiplier)
+            store_cat = "paper" if cat == "laminate" else cat   # laminate is stored as paper + paper_type=laminate
             line_modules = list(dict.fromkeys((cat_mods or []) + (body.modules or [])))
             match = None
             if li.material_id:
@@ -1793,7 +1857,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                 if size_str and not match.get("size"):
                     upd["size"] = size_str                                          # auto-derived sheet size for layout
                 if cat and not match.get("category"):
-                    upd["category"] = cat
+                    upd["category"] = store_cat
                 for k, v in extra.items():                                          # fill roll/substrate specs only if missing
                     if k in ("size", "unit"):
                         continue
@@ -1810,7 +1874,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                 _rp_default = 100.0 if cat == "paper" else (1.0 if cat == "substrate" else 0.0)
                 doc = {
                     "name": li.name or li.description[:60] or li.code,
-                    "code": li.code, "category": cat,
+                    "code": li.code, "category": store_cat,
                     "supplier_company": sup.company, "supplier_contact": sup.contact,
                     "supplier_phone": sup.phone, "supplier_email": sup.email,
                     "supplier_description": li.description.strip() if li.description else "",
@@ -1825,13 +1889,15 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                 affected.append({"id": str(res.inserted_id), "name": doc["name"], "action": "created"})
         # Train the supplier rule: remember the unit multiplier for next time.
         if sup.company:
+            sup_set = {"company": sup.company, "unit_multiplier": body.supplier_unit_multiplier or 1.0,
+                       "unit_label": body.supplier_unit_label or "",
+                       "default_category": body.default_category, "modules": body.modules}
+            for sk, val in [("contact", sup.contact), ("phone", sup.phone), ("email", sup.email)]:
+                if (val or "").strip():                                   # never overwrite saved info with blanks
+                    sup_set[sk] = val
             await db.suppliers.update_one(
-                {"company": {"$regex": f"^{sup.company}$", "$options": "i"}},
-                {"$set": {"company": sup.company, "unit_multiplier": body.supplier_unit_multiplier or 1.0,
-                          "unit_label": body.supplier_unit_label or "",
-                          "contact": sup.contact, "phone": sup.phone, "email": sup.email,
-                          "default_category": body.default_category, "modules": body.modules}},
-                upsert=True)
+                {"company": {"$regex": f"^{re.escape(sup.company)}$", "$options": "i"}},
+                {"$set": sup_set}, upsert=True)
     doc = body.model_dump()
     doc["materials_affected"] = affected
     doc["created_at"] = now_iso()
