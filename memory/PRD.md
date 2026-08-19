@@ -117,6 +117,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v51 Custom sheet/piece size in Paper Printing
+- Sheet Size dropdown now has a "Custom…" option; selecting it reveals W (in) & H (in) inputs. `calc/paper` accepts optional custom_w/custom_h → builds a synthetic product (finished = W×H, bleed = +0.25" per dimension, gutter 0) imposed on a forced 12x18 sheet, so the layout/n_up compute correctly for one-off custom-size jobs (no product needed). Auto-recalc includes customW/customH. `PaperCalcIn.product_id` now optional. Verified via curl (5.55×8.90 → 3-up on 12x18, piece 9.15×5.8 w/ bleed) + screenshot. Note: added missing `Input` import to PaperPrinting.js.
+
 ## Implemented (2026-06) — v50.2 Paper Stocks tab grouped by paper class
 - Paper Printing → Paper Stocks reference table now uses the same colored grouping/order as Compare Papers & Materials (Cardstock→Text→Copy→Other, colored header rows + left accent border). Reuses `paperClass`/`PAPER_GROUPS`. Verified via screenshot.
 

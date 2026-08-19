@@ -9,6 +9,7 @@ import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { money, num } from "@/lib/format";
@@ -119,13 +120,20 @@ export default function PaperPrinting() {
     }).catch(() => {});
   }, []);
 
+  const [customW, setCustomW] = useState("");
+  const [customH, setCustomH] = useState("");
+  const isCustom = sheet === "custom";
+
   const calc = async (sheetKey = sheet, keepStockId = null) => {
     if (typeof sheetKey !== "string") sheetKey = sheet;   // ignore event arg from onClick
-    sheetKey = canonSheet(sheetKey);
-    if (!productId) return toast.error("Select a product");
+    const custom = sheetKey === "custom";
+    if (custom) { if (!Number(customW) || !Number(customH)) return toast.error("Enter custom W and H (in)"); }
+    else { sheetKey = canonSheet(sheetKey); if (!productId) return toast.error("Select a product"); }
     setLoading(true);
     try {
-      const { data } = await api.post("/calc/paper", { product_id: productId, sheet_key: sheetKey, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null, foil_sides: foilSides, round_corners: roundCorners });
+      const payload = { product_id: productId || null, sheet_key: sheetKey, laminate, laminate_id: laminate ? (laminateId || null) : null, laminate_sides: laminateSides, foil_id: hotFoil ? (foilId || null) : null, foil_sides: foilSides, round_corners: roundCorners };
+      if (custom) { payload.custom_w = Number(customW); payload.custom_h = Number(customH); }
+      const { data } = await api.post("/calc/paper", payload);
       setResult(data);
       const rows = data.results || [];
       setSelectedStock((keepStockId && rows.find((r) => r.stock.id === keepStockId)) || rows.find((r) => r.stock.is_default) || rows[0] || null);
@@ -165,7 +173,7 @@ export default function PaperPrinting() {
     const t = setTimeout(() => { calc(sheet, selectedStock?.stock?.id); }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [laminate, laminateId, laminateSides, hotFoil, foilId, foilSides, roundCorners]);
+  }, [laminate, laminateId, laminateSides, hotFoil, foilId, foilSides, roundCorners, customW, customH]);
 
   const qtys = result?.qtys || [];
   const rowFor = (r, qty) => r?.quote.rows.find((x) => x.qty === qty);
@@ -201,10 +209,23 @@ export default function PaperPrinting() {
                 <SelectContent>{products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
               </Select>
               <Label className="text-xs">Sheet Size</Label>
-              <Select value={canonSheet(sheet)} onValueChange={setSheet}>
-                <SelectTrigger data-testid="sheet-select" className="rounded-lg mt-1 mb-4"><SelectValue /></SelectTrigger>
-                <SelectContent>{sheetOpts.map((s) => <SelectItem key={s} value={s}>{fmtSheet(s)}</SelectItem>)}</SelectContent>
+              <Select value={isCustom ? "custom" : canonSheet(sheet)} onValueChange={setSheet}>
+                <SelectTrigger data-testid="sheet-select" className="rounded-lg mt-1 mb-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {sheetOpts.filter((s) => s !== "custom").map((s) => <SelectItem key={s} value={s}>{fmtSheet(s)}</SelectItem>)}
+                  <SelectItem value="custom" data-testid="sheet-custom-option">Custom…</SelectItem>
+                </SelectContent>
               </Select>
+              {isCustom && (
+                <div className="grid grid-cols-2 gap-2 mb-4" data-testid="custom-size-inputs">
+                  <div><Label className="text-[11px] text-slate-500">W (in)</Label>
+                    <Input data-testid="custom-w" type="number" step="0.01" value={customW} onChange={(e) => setCustomW(e.target.value)} placeholder="5.55" className="rounded-lg mt-1" /></div>
+                  <div><Label className="text-[11px] text-slate-500">H (in)</Label>
+                    <Input data-testid="custom-h" type="number" step="0.01" value={customH} onChange={(e) => setCustomH(e.target.value)} placeholder="8.90" className="rounded-lg mt-1" /></div>
+                  <div className="col-span-2 text-[11px] text-slate-400">+0.25" bleed auto · imposed on 12"x18"</div>
+                </div>
+              )}
+              {!isCustom && <div className="mb-4" />}
 
               <Label className="text-xs">Print Side</Label>
               <div className="grid grid-cols-2 gap-2 mt-1 mb-4">

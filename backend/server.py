@@ -2415,7 +2415,7 @@ async def write_settings(body: Settings, user=Depends(require_admin)):
 
 # ---------------- Calculation routes ----------------
 class PaperCalcIn(BaseModel):
-    product_id: str
+    product_id: Optional[str] = None
     sheet_key: str = "13x19"
     laminate: bool = False
     laminate_id: Optional[str] = None
@@ -2424,6 +2424,8 @@ class PaperCalcIn(BaseModel):
     foil_sides: int = 1
     round_corners: bool = False
     stock_ids: Optional[List[str]] = None
+    custom_w: Optional[float] = None
+    custom_h: Optional[float] = None
 
 @api_router.get("/paper-addons")
 async def paper_addons(type: str = "laminate", user=Depends(get_current_user)):
@@ -2437,10 +2439,16 @@ async def paper_addons(type: str = "laminate", user=Depends(get_current_user)):
 async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
     set_calc_module("paper")
     settings = await get_settings()
-    product = await db.products.find_one({"_id": ObjectId(body.product_id)})
-    if not product:
-        raise HTTPException(404, "Product not found")
-    product = clean(product)
+    if body.custom_w and body.custom_h:
+        # Custom finished size: 0.25" total bleed per dimension, imposed on a 12x18 sheet.
+        product = {"name": "Custom", "finished_w": body.custom_w, "finished_h": body.custom_h,
+                   "bleed_w": round(body.custom_w + 0.25, 3), "bleed_h": round(body.custom_h + 0.25, 3), "gutter": 0.0}
+        body.sheet_key = "12x18"
+    else:
+        product = await db.products.find_one({"_id": ObjectId(body.product_id)})
+        if not product:
+            raise HTTPException(404, "Product not found")
+        product = clean(product)
     stocks = await materials_by_ids("paper_stocks", body.stock_ids, module="paper")
     # Attach each paper's own per-sheet Retail/Wholesale price (markup or manual override honored)
     biz = await _business_hourly(settings)
