@@ -373,6 +373,7 @@ class Settings(BaseModel):
     wholesale_markup_pct: float = 100.0
     click_4_0: float = 0.08
     click_4_4: float = 0.16
+    double_sided_surcharge_pct: float = 20.0      # paper: 4/4 selling price = 4/0 printing price × (1 + this%)
     lamination_per_sheet: float = 0.25
     lf_lamination_per_sqft: float = 1.50
     lf_diecut_transfer_per_sqft: float = 2.50
@@ -684,11 +685,17 @@ def paper_quote(product, stock, settings, qtys, laminate=False, sheet_key="13x19
         gen_ws = markup_price(gen_lam, whole_pct)
         rc_ret = markup_price(rc_cost, retail_pct)
         rc_ws = markup_price(rc_cost, whole_pct)
-        # Paper priced at retail/wholesale; printing (click) marked up; add-ons priced (override or markup) on top.
-        cust_40 = round(paper_retail + markup_price(cost_40, retail_pct) + lam_ret + foil_ret + gen_ret + rc_ret, 2)
-        cust_44 = round(paper_retail + markup_price(cost_44, retail_pct) + lam_ret + foil_ret + gen_ret + rc_ret, 2)
-        ws_40 = round(paper_whole + markup_price(cost_40, whole_pct) + lam_ws + foil_ws + gen_ws + rc_ws, 2)
-        ws_44 = round(paper_whole + markup_price(cost_44, whole_pct) + lam_ws + foil_ws + gen_ws + rc_ws, 2)
+        # Paper priced at retail/wholesale; printing (click) marked up. 4/4 selling = 4/0 printing × surcharge.
+        # Add-ons (laminate/foil/round-corner) are priced on top and NOT affected by the double-sided surcharge.
+        dbl = 1 + (settings.get("double_sided_surcharge_pct", 20.0) or 0.0) / 100.0
+        print_ret_40 = paper_retail + markup_price(cost_40, retail_pct)
+        print_ws_40 = paper_whole + markup_price(cost_40, whole_pct)
+        addons_ret = lam_ret + foil_ret + gen_ret + rc_ret
+        addons_ws = lam_ws + foil_ws + gen_ws + rc_ws
+        cust_40 = round(print_ret_40 + addons_ret, 2)
+        cust_44 = round(print_ret_40 * dbl + addons_ret, 2)
+        ws_40 = round(print_ws_40 + addons_ws, 2)
+        ws_44 = round(print_ws_40 * dbl + addons_ws, 2)
         rows.append({
             "qty": q, "sheets": sheets, "n_up": n_up,
             "material_cost": material, "cost_4_0": cost_40, "cost_4_4": cost_44,

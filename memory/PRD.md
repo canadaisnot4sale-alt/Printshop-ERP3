@@ -117,6 +117,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v46 Double-sided (4/4) surcharge %
+- Paper 4/4 selling price now = 4/0 printing price × (1 + `double_sided_surcharge_pct`), default **20%**, applied equally to retail & wholesale. Previously 4/4 only added the 2nd-side click cost (cents difference). Add-ons (laminate/foil/round-corner) are priced on top and NOT surcharged. True production cost (base_cost_4_4) unchanged. Configurable in Settings → "Paper Click Charges & Lamination" → "Double-sided (4/4) surcharge %". Verified via curl (4/4 = 4/0 × 1.2 for retail & WS).
+
 ## Fix (2026-06) — v45.4 Duplicate Sheet Size option (12"x18" + 18"x12")
 - **Bug**: a paper stored with a rotated size (e.g. "18x12") was appended to the Sheet Size dropdown as a separate option, duplicating "12x18".
 - **Fix**: `canonSheet()` normalizes any WxH to ascending-dim canonical form ("18x12" → "12x18") wherever the sheet key is set/displayed (dropdown value, options list, default-size hook, requote, selectStock, calc). Dropdown now shows a single clean list. Verified via screenshot.

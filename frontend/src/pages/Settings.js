@@ -21,6 +21,7 @@ const GROUPS = [
     fields: [
       { name: "click_4_0", label: "4/0 Click / sheet (CAD)" },
       { name: "click_4_4", label: "4/4 Click / sheet (CAD)" },
+      { name: "double_sided_surcharge_pct", label: "Double-sided (4/4) surcharge %" },
       { name: "lamination_per_sheet", label: "Lamination / sheet (CAD)" },
     ],
   },
