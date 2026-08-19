@@ -117,6 +117,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Fix (2026-06) — v45.1 Paper inventory unit clarity (reorder / waste)
+- **Confusion**: paper inventory (stock, reorder point/target, waste per order) is counted in individual SHEETS, but the "Waste per order" label used the purchase unit "M Sheets" (implying 1 = 1000 sheets) and reorder fields had no unit label.
+- **Fix (labels only, no calc change)**: reorder point/target and waste-per-order labels now show "(sheets)" for paper & substrate ("(rolls)" for roll) via `invUnit`. Added a note: stock/reorder/waste are all in individual sheets — e.g. reorder point 100 = reorder at 100 sheets left; waste per order 1 = 1 sheet scrapped per job. Backend reorder logic (`low_stock = stock <= reorder_point`) already operates in sheets; waste_per_order feeds product BoM as sheets. No behavior change, only clearer UI.
+
 ## Implemented (2026-06) — v45 View/download original invoice PDF from Purchases
 - The uploaded invoice PDF is now stored in object storage during `/purchases/parse` (file record in `db.files`); `pdf_file_id`/`pdf_filename` flow through `PurchaseIn` → saved on the purchase doc → returned by `GET /purchases`.
 - Purchases list rows show a FileText icon linking to `/api/files/{id}/download?auth=<token>` (opens/downloads the original PDF). Only appears for invoices imported after this change. Verified via curl e2e (parse stores PDF → download returns valid application/pdf, exact byte match).

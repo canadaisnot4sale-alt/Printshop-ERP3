@@ -86,6 +86,7 @@ export default function Materials() {
   const isRoll = form.category === "roll";
   const isMisc = form.category === "miscellaneous";
   const isLamFoil = form.category === "paper" && (form.paper_type === "laminate" || form.paper_type === "hot_foil");
+  const invUnit = (isPaper || isSubstrate) ? "sheets" : (isRoll ? "rolls" : (form.unit || "units"));
 
   const pickCategory = (v) => {
     if (v === "__add__") {
@@ -692,15 +693,20 @@ export default function Materials() {
                   <div><Label className="text-xs">Stock qty</Label>
                     <Input data-testid="material-field-stock_qty" type="number" value={form.stock_qty} onChange={(e) => set("stock_qty", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
-                <div><Label className="text-xs">Reorder point{isRoll ? " (rolls)" : ""}</Label>
+                <div><Label className="text-xs">Reorder point ({invUnit})</Label>
                   <Input data-testid="material-field-reorder_point" type="number" value={form.reorder_point} onChange={(e) => set("reorder_point", e.target.value)} className="rounded-lg mt-1" /></div>
-                <div><Label className="text-xs">Reorder target{isRoll ? " (rolls)" : ""}</Label>
+                <div><Label className="text-xs">Reorder target ({invUnit})</Label>
                   <Input data-testid="material-field-reorder_target" type="number" value={form.reorder_target} onChange={(e) => set("reorder_target", e.target.value)} className="rounded-lg mt-1" /></div>
                 {!isRoll && (
-                  <div><Label className="text-xs">Waste per order ({form.unit})</Label>
+                  <div><Label className="text-xs">Waste per order ({invUnit})</Label>
                     <Input data-testid="material-field-waste_per_order" type="number" step="0.1" value={form.waste_per_order} onChange={(e) => set("waste_per_order", e.target.value)} className="rounded-lg mt-1" /></div>
                 )}
               </div>
+              {(isPaper || isSubstrate) && (
+                <div className="text-[11px] text-slate-400 mt-1" data-testid="paper-inventory-note">
+                  Stock, reorder point/target and waste are all counted in <b>individual sheets</b> — not boxes or M. E.g. set reorder point to <b>100</b> to reorder when 100 sheets remain, and waste per order = <b>1</b> for 1 sheet scrapped once per job.
+                </div>
+              )}
               {isRoll && (
                 <div className="text-[11px] text-slate-400 mt-1" data-testid="roll-inventory-note">
                   Stock is tracked in <b>rolls</b> (set via "Quantity (rolls)" above → {Number(form.roll_qty || 0)} roll(s)). Waste is set as linear feet above (≈ {rollWasteSqft.toFixed(2)} ft² per order). Reorder point = level that triggers a reorder; reorder target = level to restock up to.
