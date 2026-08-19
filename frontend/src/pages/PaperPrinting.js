@@ -85,6 +85,7 @@ export default function PaperPrinting() {
   useDefaultSheetSize("/paper-stocks?module=paper", setSheet);
 
   const sheetOpts = [...new Set([...SHEETS, ...(sheet ? [sheet] : [])])];
+  const fmtSheet = (s) => (s ? String(s).replace(/x/i, '"x') + '"' : s);
 
   useEffect(() => {
     api.get("/paper-addons?type=laminate").then((r) => {
@@ -141,7 +142,7 @@ export default function PaperPrinting() {
   const rowFor = (r, qty) => r?.quote.rows.find((x) => x.qty === qty);
   const retailOf = (row) => row?.[`customer_price_${side}`];
   const wholesaleOf = (row) => row?.[`wholesale_price_${side}`];
-  const bestVal = (r) => { const row = rowFor(r, focusQty); return retailOf(row) ?? wholesaleOf(row) ?? Infinity; };
+  const bestVal = (r) => { const dq = r.native || r.quote; const row = dq.rows.find((x) => x.qty === focusQty); return retailOf(row) ?? wholesaleOf(row) ?? Infinity; };
 
   const focusRow = useMemo(() => selectedStock && rowFor(selectedStock, focusQty), [selectedStock, focusQty]);
   const bestId = useMemo(() => {
@@ -173,7 +174,7 @@ export default function PaperPrinting() {
               <Label className="text-xs">Sheet Size</Label>
               <Select value={sheet} onValueChange={setSheet}>
                 <SelectTrigger data-testid="sheet-select" className="rounded-lg mt-1 mb-4"><SelectValue /></SelectTrigger>
-                <SelectContent>{sheetOpts.map((s) => <SelectItem key={s} value={s}>{s}"</SelectItem>)}</SelectContent>
+                <SelectContent>{sheetOpts.map((s) => <SelectItem key={s} value={s}>{fmtSheet(s)}</SelectItem>)}</SelectContent>
               </Select>
 
               <Label className="text-xs">Print Side</Label>
@@ -261,7 +262,7 @@ export default function PaperPrinting() {
                   {/* nesting + selected paper */}
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="bg-white border border-slate-200 rounded-xl p-5">
-                      <div className="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">Sheet Layout · {selectedStock.quote.sheet}"</div>
+                      <div className="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">Sheet Layout · {fmtSheet(selectedStock.quote.sheet)}</div>
                       <NestingCanvas layout={selectedStock.quote.layout} />
                       <div className="text-xs text-slate-500 num mt-1">{selectedStock.quote.piece_w}×{selectedStock.quote.piece_h}" per piece{selectedStock.quote.rotated ? " (rotated)" : ""}</div>
                     </div>
@@ -302,7 +303,8 @@ export default function PaperPrinting() {
                         if (ad !== bd) return ad - bd;
                         return bestVal(a) - bestVal(b);
                       }).map((r) => {
-                        const row = rowFor(r, focusQty);
+                        const dq = r.native || r.quote;
+                        const row = dq.rows.find((x) => x.qty === focusQty);
                         const isSel = selectedStock.stock.id === r.stock.id;
                         const isBest = bestId === r.stock.id;
                         return (
@@ -315,7 +317,7 @@ export default function PaperPrinting() {
                                 {isBest && <span className="text-[10px] font-mono uppercase bg-emerald-500 text-white px-2 py-0.5 rounded-full">Best Value</span>}
                               </div>
                             </div>
-                            <div className="text-[11px] font-mono text-slate-400 mt-0.5">{r.quote.n_up}-up · {row?.sheets} sheets</div>
+                            <div className="text-[11px] font-mono text-slate-400 mt-0.5">{dq.n_up}-up · {row?.sheets} sheets{r.native ? ` · ${fmtSheet(dq.sheet)}` : ""}</div>
                             {(() => {
                               const isRetail = retailOf(row) != null;
                               const base = isRetail ? retailOf(row) : wholesaleOf(row);

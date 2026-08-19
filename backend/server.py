@@ -2403,16 +2403,23 @@ async def calc_paper(body: PaperCalcIn, user=Depends(get_current_user)):
                 foil_spec["retail_per_ft"] = fd["lam_retail_per_sheet"] / 3.0
             if fd.get("lam_wholesale_per_sheet"):
                 foil_spec["wholesale_per_ft"] = fd["lam_wholesale_per_sheet"] / 3.0
+    def _same_sheet(a, b):
+        da, db = _parse_dims(a), _parse_dims(b)
+        return bool(da and db and sorted(da) == sorted(db))
+
     results = []
     for st in stocks:
-        # Each paper is compared at ITS OWN sheet size when known (so 8.5x11 copy paper
-        # shows 8-up regardless of the globally selected layout); falls back to body.sheet_key.
+        # MAIN quote uses the Sheet Size chosen in the dropdown so the layout & pricing always match
+        # the user's selection. Each paper's NATIVE size is shown only in the compare cards (`native`).
+        quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, body.sheet_key, lam_spec, foil_spec, body.round_corners)
         own_size = (raw.get(st["id"], {}) or {}).get("size") or st.get("size")
         if not (own_size and _parse_dims(own_size)):
             own_size = _extract_size(st.get("name") or "")   # fallback: derive from the paper name
-        eff_key = own_size if (own_size and _parse_dims(own_size)) else body.sheet_key
-        quote = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, eff_key, lam_spec, foil_spec, body.round_corners)
-        results.append({"stock": st, "quote": quote})
+        native = None
+        if own_size and _parse_dims(own_size) and not _same_sheet(own_size, body.sheet_key):
+            nq = paper_quote(product, st, settings, STANDARD_QTYS, body.laminate, own_size, lam_spec, foil_spec, body.round_corners)
+            native = {"n_up": nq["n_up"], "sheet": nq["sheet"], "rows": nq["rows"]}
+        results.append({"stock": st, "quote": quote, "native": native})
     # per-sheet price helpers were only needed for pricing; drop before returning (avoid role leakage)
     for st in stocks:
         st.pop("retail_per_sheet", None)
