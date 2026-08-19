@@ -1799,6 +1799,8 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                 await db.materials.update_one({"_id": match["_id"]}, {"$set": upd})
                 affected.append({"id": str(match["_id"]), "name": match.get("name"), "action": "updated"})
             else:
+                # Sensible reorder defaults on new materials: alert at a low buffer, refill up to what was bought.
+                _rp_default = 100.0 if cat == "paper" else (1.0 if cat == "substrate" else 0.0)
                 doc = {
                     "name": li.name or li.description[:60] or li.code,
                     "code": li.code, "category": cat,
@@ -1807,7 +1809,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                     "supplier_description": li.description.strip() if li.description else "",
                     "unit": extra.get("unit") or li.unit or "each", "unit_cost": unit_cost,
                     "size": size_str,
-                    "stock_qty": stock_units, "reorder_point": 0.0, "reorder_target": 0.0,
+                    "stock_qty": stock_units, "reorder_point": _rp_default, "reorder_target": round(stock_units, 2),
                     "modules": line_modules, "is_default": False,
                     "last_purchase_at": now_iso(), "created_at": now_iso(),
                 }

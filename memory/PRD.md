@@ -117,6 +117,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v45.2 Default reorder point/target on imported materials
+- New materials created via PDF import now get sensible reorder defaults: `reorder_target` = stock purchased (refill back to what was bought), `reorder_point` = 100 sheets for paper, 1 sheet for substrate, 0 otherwise. Matched (existing) materials are NOT touched. Verified via curl (paper import → point=100, target=750).
+
 ## Fix (2026-06) — v45.1 Paper inventory unit clarity (reorder / waste)
 - **Confusion**: paper inventory (stock, reorder point/target, waste per order) is counted in individual SHEETS, but the "Waste per order" label used the purchase unit "M Sheets" (implying 1 = 1000 sheets) and reorder fields had no unit label.
 - **Fix (labels only, no calc change)**: reorder point/target and waste-per-order labels now show "(sheets)" for paper & substrate ("(rolls)" for roll) via `invUnit`. Added a note: stock/reorder/waste are all in individual sheets — e.g. reorder point 100 = reorder at 100 sheets left; waste per order 1 = 1 sheet scrapped per job. Backend reorder logic (`low_stock = stock <= reorder_point`) already operates in sheets; waste_per_order feeds product BoM as sheets. No behavior change, only clearer UI.
