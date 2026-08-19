@@ -82,9 +82,13 @@ export default function PaperPrinting() {
   const loadPaperMats = () => api.get("/materials").then((r) => setPaperMats((r.data || []).filter((m) => (m.modules || []).includes("paper") && (m.paper_type || "normal") === "normal"))).catch(() => {});
   useEffect(() => { loadProducts(); if (isAdmin) loadPaperMats(); /* eslint-disable-next-line */ }, []);
   // Default Sheet Size to the size of this module's DEFAULT paper material (unless re-quoting)
-  useDefaultSheetSize("/paper-stocks?module=paper", setSheet);
+  const canonSheet = (s) => {
+    const p = String(s || "").toLowerCase().replace(/["\s]/g, "").replace(/×/g, "x").split("x").map(parseFloat);
+    return (p.length === 2 && p.every((n) => !isNaN(n))) ? p.sort((a, b) => a - b).join("x") : s;
+  };
+  useDefaultSheetSize("/paper-stocks?module=paper", (s) => setSheet(canonSheet(s)));
 
-  const sheetOpts = [...new Set([...SHEETS, ...(sheet ? [sheet] : [])])];
+  const sheetOpts = [...new Set([...SHEETS, ...(sheet ? [canonSheet(sheet)] : [])])];
   const fmtSheet = (s) => (s ? String(s).replace(/x/i, '"x') + '"' : s);
 
   useEffect(() => {
@@ -102,6 +106,7 @@ export default function PaperPrinting() {
 
   const calc = async (sheetKey = sheet, keepStockId = null) => {
     if (typeof sheetKey !== "string") sheetKey = sheet;   // ignore event arg from onClick
+    sheetKey = canonSheet(sheetKey);
     if (!productId) return toast.error("Select a product");
     setLoading(true);
     try {
@@ -116,7 +121,7 @@ export default function PaperPrinting() {
   // Selecting a paper switches the Sheet Size to that paper's size and recalculates its layout.
   const selectStock = (r) => {
     const raw = (r.stock.size || "").toString().trim().toLowerCase().replace(/["\s]/g, "").replace(/×/g, "x");
-    const key = /^[\d.]+x[\d.]+$/.test(raw) ? raw : null;
+    const key = /^[\d.]+x[\d.]+$/.test(raw) ? canonSheet(raw) : null;
     if (key && key !== sheet) {
       setSheet(key);
       calc(key, r.stock.id);
@@ -127,7 +132,7 @@ export default function PaperPrinting() {
 
   useRequote((rq) => {
     if (rq.productId) setProductId(rq.productId);
-    if (rq.sheet) setSheet(rq.sheet);
+    if (rq.sheet) setSheet(canonSheet(rq.sheet));
     if (rq.laminate != null) setLaminate(rq.laminate);
     if (rq.laminate_id) setLaminateId(rq.laminate_id);
     if (rq.laminate_sides) setLaminateSides(rq.laminate_sides);
@@ -172,7 +177,7 @@ export default function PaperPrinting() {
                 <SelectContent>{products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
               </Select>
               <Label className="text-xs">Sheet Size</Label>
-              <Select value={sheet} onValueChange={setSheet}>
+              <Select value={canonSheet(sheet)} onValueChange={setSheet}>
                 <SelectTrigger data-testid="sheet-select" className="rounded-lg mt-1 mb-4"><SelectValue /></SelectTrigger>
                 <SelectContent>{sheetOpts.map((s) => <SelectItem key={s} value={s}>{fmtSheet(s)}</SelectItem>)}</SelectContent>
               </Select>

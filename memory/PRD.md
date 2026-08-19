@@ -117,6 +117,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Fix (2026-06) — v45.4 Duplicate Sheet Size option (12"x18" + 18"x12")
+- **Bug**: a paper stored with a rotated size (e.g. "18x12") was appended to the Sheet Size dropdown as a separate option, duplicating "12x18".
+- **Fix**: `canonSheet()` normalizes any WxH to ascending-dim canonical form ("18x12" → "12x18") wherever the sheet key is set/displayed (dropdown value, options list, default-size hook, requote, selectStock, calc). Dropdown now shows a single clean list. Verified via screenshot.
+
 ## Fix (2026-06) — v45.3 Paper Sheet Layout followed paper's stored size (orientation flip) + inch-mark label
 - **Bug**: v43.2 made the MAIN Sheet Layout use the selected paper's stored native size. A paper stored as "18x12" flipped the layout to landscape even though the user picked "12x18" in the dropdown (same sheet, rotated).
 - **Fix**: `calc_paper` main quote now always uses the dropdown `sheet_key`; each paper's native size is computed separately as `native` (only when it's a genuinely different sheet, sorted-dims aware) and used ONLY by the Compare Papers cards (n_up/sheets/price + native size label). Dropdown controls main layout/pricing; clicking a compare card still auto-switches the dropdown to that paper's size.
