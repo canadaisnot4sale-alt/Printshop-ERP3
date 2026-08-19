@@ -117,6 +117,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v45 View/download original invoice PDF from Purchases
+- The uploaded invoice PDF is now stored in object storage during `/purchases/parse` (file record in `db.files`); `pdf_file_id`/`pdf_filename` flow through `PurchaseIn` → saved on the purchase doc → returned by `GET /purchases`.
+- Purchases list rows show a FileText icon linking to `/api/files/{id}/download?auth=<token>` (opens/downloads the original PDF). Only appears for invoices imported after this change. Verified via curl e2e (parse stores PDF → download returns valid application/pdf, exact byte match).
+
 ## Fix (2026-06) — v44.2 Imported paper: empty Supplier description + box fields
 - **Bug**: newly-created materials from PDF import never stored `supplier_description` (only matched ones did), and imported paper left `sheets_per_box`/`price_per_box`/`num_boxes` at 0 (cost still correct via unit_cost).
 - **Fix**: create doc now stores `supplier_description`. Paper bought in M now back-fills box helpers consistently (1 box = 1 M = `mult` sheets → sheets_per_box=mult, price_per_box=unit_cost×mult, num_boxes=qty, unit="M Sheets"). Note: saving an imported paper with sheets_per_box=0 does NOT wipe unit_cost (frontend skips the box recompute). Verified via curl e2e. NOTE: preview DB was empty (user's data was on production) — user must re-import + Re-publish.

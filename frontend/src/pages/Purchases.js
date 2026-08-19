@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import api, { apiErr } from "@/lib/api";
+import api, { apiErr, API } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import { Metric } from "@/components/Metric";
 import { money } from "@/lib/format";
@@ -28,6 +28,7 @@ const MODULES = [
 ];
 
 export default function Purchases() {
+  const authToken = localStorage.getItem("pns_token");
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({ quarters: [], by_supplier: [] });
   const [filters, setFilters] = useState({ supplier: "", date_from: "", date_to: "" });
@@ -65,6 +66,8 @@ export default function Purchases() {
         modules: data.suggested_modules || [],
         supplier_unit_multiplier: data.supplier_unit_multiplier || 1,
         supplier_unit_label: data.supplier_unit_label || "",
+        pdf_file_id: data.pdf_file_id || "",
+        pdf_filename: data.pdf_filename || "",
         update_inventory: true,
       });
       toast.success("Invoice parsed — review and save");
@@ -100,6 +103,8 @@ export default function Purchases() {
         update_inventory: draft.update_inventory,
         supplier_unit_multiplier: Number(draft.supplier_unit_multiplier || 1),
         supplier_unit_label: draft.supplier_unit_label || "",
+        pdf_file_id: draft.pdf_file_id || "",
+        pdf_filename: draft.pdf_filename || "",
         line_items: draft.line_items.map((li) => ({
           code: li.code || "", description: li.description || "", name: li.name || "",
           quantity: Number(li.quantity || 0), unit: li.unit || "",
@@ -252,7 +257,14 @@ export default function Purchases() {
                   <td className="px-4 py-2.5 text-right num">{money(p.shipping)}</td>
                   <td className="px-4 py-2.5 text-right num font-semibold text-[#2495D3]">{money(p.total)}</td>
                   <td className="px-4 py-2.5">
-                    <button data-testid="purchase-delete" onClick={() => remove(p.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                    <div className="flex items-center justify-end gap-1">
+                      {p.pdf_file_id && (
+                        <a data-testid="purchase-view-pdf" href={`${API}/files/${p.pdf_file_id}/download?auth=${encodeURIComponent(authToken)}`}
+                          target="_blank" rel="noopener noreferrer" title="View / download the original invoice PDF"
+                          className="p-1.5 text-slate-400 hover:text-[#2495D3]"><FileText size={15} /></a>
+                      )}
+                      <button data-testid="purchase-delete" onClick={() => remove(p.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                    </div>
                   </td>
                 </tr>
               ))}

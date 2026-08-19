@@ -1639,6 +1639,21 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
     except Exception as e:
         logger.error(f"PDF text extraction failed: {e}")
         raise HTTPException(400, "Could not read PDF")
+    # Persist the original PDF so it can be viewed/downloaded later from the purchases list.
+    pdf_file_id, pdf_filename = "", (file.filename or "invoice.pdf")
+    try:
+        ext = (pdf_filename.rsplit(".", 1)[-1].lower() if "." in pdf_filename else "pdf")
+        ctype = file.content_type or MIME_TYPES.get(ext, "application/pdf")
+        path = f"{APP_NAME}/invoices/{uuid.uuid4()}.{ext}"
+        result = storage_put(path, raw, ctype)
+        pdf_file_id = str(uuid.uuid4())
+        await db.files.insert_one({
+            "id": pdf_file_id, "storage_path": result["path"], "original_filename": pdf_filename,
+            "content_type": ctype, "size": result.get("size", len(raw)),
+            "is_deleted": False, "created_at": now_iso(),
+        })
+    except Exception as e:
+        logger.error(f"Invoice PDF store failed: {e}")
     if not text.strip():
         raise HTTPException(400, "No text found in PDF (scanned image PDFs are not supported)")
     try:
@@ -1679,6 +1694,8 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
         li["converted_unit_cost"] = uc
         li["stock_unit_label"] = ulabel
         li["suggested_modules_line"] = cat_mods
+    data["pdf_file_id"] = pdf_file_id
+    data["pdf_filename"] = pdf_filename
     return data
 
 class PurchaseLine(BaseModel):
@@ -1718,6 +1735,8 @@ class PurchaseIn(BaseModel):
     update_inventory: bool = True
     supplier_unit_multiplier: float = 1.0
     supplier_unit_label: str = ""
+    pdf_file_id: str = ""
+    pdf_filename: str = ""
     line_items: List[PurchaseLine] = []
 
 @api_router.post("/purchases")
