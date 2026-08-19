@@ -316,6 +316,16 @@ export default function Materials() {
                       {m.below_cost && <Badge className="bg-red-100 text-red-700 border-0 text-[10px]" data-testid="material-belowcost-badge">BELOW COST</Badge>}
                     </div>
                     <div className="text-[11px] text-slate-400 font-mono">{m.category}{m.code ? ` · ${m.code}` : ""}{m.size ? ` · ${m.size}` : ""}</div>
+                    {(m.paper_type === "laminate" || m.paper_type === "hot_foil") && Number(m.lam_width_in) > 0 && Number(m.lam_length_ft) > 0 && (() => {
+                      const W = Number(m.lam_width_in), Lin = Number(m.lam_length_ft) * 12, waste = 2;
+                      const yld = (ad, al) => { const ac = Math.floor(W / ad); return ac > 0 ? ac * Math.floor((Lin + waste) / (al + waste)) : 0; };
+                      const a = yld(12, 18), b = yld(18, 12), best = Math.max(a, b), bestAcross = Math.floor(W / (a >= b ? 12 : 18));
+                      return (
+                        <div className="text-[11px] text-emerald-700 font-mono mt-0.5" data-testid="material-lam-yield">
+                          ≈ {best.toLocaleString()} sheets 12×18/roll ({bestAcross}-up)
+                        </div>
+                      );
+                    })()}
                     {m.modules?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
                         {m.modules.map((x) => <span key={x} className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">{x}</span>)}
