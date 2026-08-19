@@ -117,6 +117,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Fix (2026-06) — v44.2 Imported paper: empty Supplier description + box fields
+- **Bug**: newly-created materials from PDF import never stored `supplier_description` (only matched ones did), and imported paper left `sheets_per_box`/`price_per_box`/`num_boxes` at 0 (cost still correct via unit_cost).
+- **Fix**: create doc now stores `supplier_description`. Paper bought in M now back-fills box helpers consistently (1 box = 1 M = `mult` sheets → sheets_per_box=mult, price_per_box=unit_cost×mult, num_boxes=qty, unit="M Sheets"). Note: saving an imported paper with sheets_per_box=0 does NOT wipe unit_cost (frontend skips the box recompute). Verified via curl e2e. NOTE: preview DB was empty (user's data was on production) — user must re-import + Re-publish.
+
 ## Fix (2026-06) — v44.1 Paper misdetected as substrate on PDF import (Grimco detection bug)
 - **Bug**: after v44, Alfa paper lines (descriptions like `18"x12"`, `12"x18"`) were auto-classified as **substrate** because any inch×inch dimension matched. This gave them unit=sqft, wrong stock (1.2 instead of 1200) and wrong $/ft², and lost the paper "printed 1/2 sides" pricing.
 - **Root cause**: `_detect_media_category` treated ANY inch×inch as substrate. Paper is also sold in inch sheets.

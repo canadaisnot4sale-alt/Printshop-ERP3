@@ -1583,7 +1583,12 @@ def _import_line_spec(category, quantity, size_override, desc_text, line_total, 
     qty_units = round(qty * mult, 2)
     unit_cost = round(lt / qty_units, 4) if (qty_units and lt) else (round(up / mult, 4) if mult else up)
     size_str = (size_override or "").strip() or _extract_size(desc_text)
-    return unit_cost, qty_units, size_str, {}, [], ""
+    extra = {}
+    if cat == "paper" and mult and mult != 1:
+        # paper bought in M (thousands): 1 "box" == 1 M == `mult` sheets, so the box helpers stay consistent
+        extra = {"unit": "M Sheets", "sheets_per_box": mult,
+                 "price_per_box": round(unit_cost * mult, 4), "num_boxes": qty}
+    return unit_cost, qty_units, size_str, extra, [], ""
 
 def extract_pdf_text(raw: bytes) -> str:
     import pypdfium2 as pdfium
@@ -1780,6 +1785,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                     "code": li.code, "category": cat,
                     "supplier_company": sup.company, "supplier_contact": sup.contact,
                     "supplier_phone": sup.phone, "supplier_email": sup.email,
+                    "supplier_description": li.description.strip() if li.description else "",
                     "unit": extra.get("unit") or li.unit or "each", "unit_cost": unit_cost,
                     "size": size_str,
                     "stock_qty": stock_units, "reorder_point": 0.0, "reorder_target": 0.0,
