@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import api, { apiErr } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import { Metric } from "@/components/Metric";
@@ -54,6 +54,21 @@ const NUMS = ["sheet_area_sqft", "unit_cost", "labor_minutes", "ink_coverage_pct
   "sheet_width", "sheet_height", "sheets_per_box", "roll_width", "printable_width",
   "min_linear_feet", "pieces_per_roll", "sticker_w", "sticker_h"];
 const OPT_NUMS = ["price_override", "wholesale_price_override", "retail_markup_pct", "wholesale_markup_pct"];
+
+const MAT_GROUPS = [
+  { key: "cardstock", label: "Cardstock", dot: "bg-indigo-500", text: "text-indigo-700", accentL: "border-l-indigo-400" },
+  { key: "text", label: "Text", dot: "bg-amber-500", text: "text-amber-700", accentL: "border-l-amber-400" },
+  { key: "copy", label: "Copy Paper", dot: "bg-slate-500", text: "text-slate-600", accentL: "border-l-slate-400" },
+  { key: "other", label: "Other", dot: "bg-slate-400", text: "text-slate-500", accentL: "border-l-slate-300" },
+];
+const MAT_ORDER = { cardstock: 0, text: 1, copy: 2, other: 3 };
+const matPaperClass = (name = "") => {
+  const t = String(name).toLowerCase();
+  if (/(cover|cardstock|card stock|c2s|c1s|\d+\s*pt\b)/.test(t)) return "cardstock";
+  if (/(copy|digital copy)/.test(t)) return "copy";
+  if (/(text|book|bond|writing)/.test(t)) return "text";
+  return "other";
+};
 
 export default function Materials() {
   const [items, setItems] = useState([]);
@@ -304,9 +319,19 @@ export default function Materials() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((m) => (
-                <tr key={m.id} data-testid="material-row"
-                  className={`border-b border-slate-100 hover:bg-slate-50 ${m.below_cost ? "bg-red-50/60" : ""}`}>
+              {(catFilter === "paper"
+                ? [...filtered].sort((a, b) => MAT_ORDER[matPaperClass(a.name)] - MAT_ORDER[matPaperClass(b.name)])
+                : filtered
+              ).map((m, idx, arr) => {
+                const g = catFilter === "paper" ? MAT_GROUPS.find((x) => x.key === matPaperClass(m.name)) : null;
+                const showHeader = g && (idx === 0 || matPaperClass(arr[idx - 1].name) !== g.key);
+                return (
+                <Fragment key={m.id}>
+                {showHeader && (
+                  <tr data-testid={`mat-group-${g.key}`}><td colSpan={10} className={`px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest ${g.text} bg-slate-50/70`}><span className={`inline-block w-2 h-2 rounded-full ${g.dot} mr-2 align-middle`}></span>{g.label}</td></tr>
+                )}
+                <tr data-testid="material-row"
+                  className={`border-b border-slate-100 hover:bg-slate-50 ${g ? `border-l-4 ${g.accentL}` : ""} ${m.below_cost ? "bg-red-50/60" : ""}`}>
                   <td className="px-4 py-2.5">
                     <div className="font-medium flex items-center gap-2">
                       {m.name}
@@ -357,7 +382,9 @@ export default function Materials() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                </Fragment>
+                );
+              })}
               {filtered.length === 0 && (
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{items.length === 0 ? "No materials yet." : "No materials in this category."}</td></tr>
               )}

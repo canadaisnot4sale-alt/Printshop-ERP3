@@ -1744,6 +1744,7 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
     for li in data.get("line_items", []):
         li["import"] = True
         li["name"] = (li.get("description") or "")[:60]
+        li["code"] = (li.get("code") or "").strip().rstrip(".").strip()   # drop parser ellipsis/whitespace so codes match
         li["unit_multiplier"] = mult
         desc = li.get("description") or li.get("name") or ""
         det = _detect_media_category(desc)
@@ -1824,6 +1825,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
         for li in body.line_items:
             if not li.import_material:
                 continue
+            li.code = (li.code or "").strip().rstrip(".").strip()   # drop parser ellipsis so codes match existing materials
             cat = (li.category or body.default_category or "other").lower()
             unit_cost, stock_units, size_str, extra, cat_mods, _ = _import_line_spec(
                 cat, li.quantity, li.size, li.description or li.name,

@@ -117,6 +117,10 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Fix + Feature (2026-06) — v50.1 Import dup code fix + Materials paper grouping
+- **Duplicate material bug**: PDF parser sometimes appended "..." to a code (e.g. `cwh1001218LynGs...`), breaking the code match and creating a duplicate on re-import. Fix: sanitize li.code (strip trailing dots/whitespace) in `parse_purchase` and `create_purchase`. Merged the existing duplicate into "100lb Uncoated Cover" (stock 1600) and deleted it.
+- **Materials list paper grouping**: when the Paper category filter is active, rows are grouped by paper class (Cardstock→Text→Copy→Other) with the same colors as Compare Papers (indigo/amber/slate), colored group header rows + left accent border per row. Other filters render normally. Frontend-only (`matPaperClass`/`MAT_GROUPS` in Materials.js). Verified via screenshot.
+
 ## Implemented (2026-06) — v50 Compare Papers grouped by paper class (Cardstock/Text/Copy)
 - Compare Papers cards are now grouped into colored sections stacked in order: Cardstock (indigo) → Text (amber) → Copy Paper (slate) → Other. Each card gets a left accent border of its group color; group header shows a colored dot + count. Auto-classified from the paper name (keyword-only, NO schema change): Cover/cardstock/C2S/C1S/"pt" → cardstock; copy/digital copy → copy; text/book/bond/writing → text; else other. Existing default/Best-Value sort preserved within each group. Frontend-only (PaperPrinting.js `paperClass` + `PAPER_GROUPS`). Verified via screenshot.
 
