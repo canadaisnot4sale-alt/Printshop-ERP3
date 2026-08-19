@@ -117,6 +117,11 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Fix (2026-06) — v44.1 Paper misdetected as substrate on PDF import (Grimco detection bug)
+- **Bug**: after v44, Alfa paper lines (descriptions like `18"x12"`, `12"x18"`) were auto-classified as **substrate** because any inch×inch dimension matched. This gave them unit=sqft, wrong stock (1.2 instead of 1200) and wrong $/ft², and lost the paper "printed 1/2 sides" pricing.
+- **Root cause**: `_detect_media_category` treated ANY inch×inch as substrate. Paper is also sold in inch sheets.
+- **Fix**: inch×inch is only treated as a rigid substrate when it's a LARGE sheet (max side ≥ 40" → 48x96 / 60x120); small sheets fall back to the invoice default (paper for Alfa). Cleaned up the 2 wrongly-created materials + bad purchase. Regression test added (7/7 pass). User to re-import the Alfa invoice.
+
 ## Implemented (2026-06) — v44 Grimco supplier import: per-line roll vs substrate detection + unit conversion
 - **Mixed invoice support**: PDF import now detects EACH line as roll or substrate (YD/FT length → roll; inch×inch → substrate; + keyword hints ORAJET/BRITELINE/vinyl/banner vs ACM/coroplast/acrylic/max-metal/PVC). Per-line editable **Category** dropdown added to the review table.
 - **Unit conversion** (`_import_line_spec`): ROLL → unit_cost=$/ft² (roll_cost ÷ (width_ft × length_ft), YD×3→ft), stock=rolls×area ft², sets roll_width/printable_width(−2)/roll_cost/roll_qty/material_type, modules=[large-format]. SUBSTRATE → unit_cost=$/ft² (sheet_price ÷ area), stock=sheets, sets sheet_area_sqft/sheet_price/sheet_width/height/cnc_capable/channel_capable, size label 4x8 / 5x10, modules=[direct-print, laser, channel-letters].

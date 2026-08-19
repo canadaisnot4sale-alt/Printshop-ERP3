@@ -1499,7 +1499,10 @@ def _detect_media_category(text: str) -> str:
     for kw in _ROLL_KEYWORDS:
         if kw in t:
             return "roll"
-    if _SHEET_SPEC_RE.search(text or ""):
+    # inch×inch alone is NOT a substrate signal (paper is also inch sheets).
+    # Only treat it as a rigid substrate when it's a large sheet (e.g. 48x96, 60x120).
+    m = _SHEET_SPEC_RE.search(text or "")
+    if m and max(float(m.group(1)), float(m.group(2))) >= 40:
         return "substrate"
     return ""
 

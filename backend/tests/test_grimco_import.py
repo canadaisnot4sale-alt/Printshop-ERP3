@@ -62,6 +62,15 @@ def test_substrate_size_labels():
     assert srv._sheet_size_label(24, 18) == "24x18"
 
 
+def test_paper_not_misdetected_as_substrate():
+    # Alfa paper sheets are inch x inch but SMALL -> must NOT be substrate (bug fix)
+    assert srv._detect_media_category('18"x12" 100lb Digital Copy Cover FSC (Lynx 83.08M 270gsm)') == ""
+    assert srv._detect_media_category('12"x18" 100 lb Digital White Text (Lynx 45.47M 148gsm)') == ""
+    # large rigid sheets ARE substrate even without keywords
+    assert srv._detect_media_category('48"X96" panel') == "substrate"
+    assert srv._detect_media_category('60"X120" board') == "substrate"
+
+
 def test_generic_paper_still_works():
     # Alfa-style: qty 0.4 (M sheets) x mult 1000, total 101.60 -> 400 sheets, $0.254
     uc, stock, size, extra, mods, label = srv._import_line_spec(
