@@ -164,7 +164,7 @@ export default function PaperPrinting() {
           <TabsList className="rounded-full bg-slate-100 p-1">
             <TabsTrigger value="calc" data-testid="tab-calc" className="rounded-full">Calculator</TabsTrigger>
             {isAdmin && <TabsTrigger value="stocks" data-testid="tab-stocks" className="rounded-full">Paper Stocks</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="products" data-testid="tab-products" className="rounded-full">Products</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="products" data-testid="tab-products" className="rounded-full">Paper Products</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="calc" className="mt-6 grid lg:grid-cols-12 gap-6">

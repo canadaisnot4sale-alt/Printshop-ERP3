@@ -36,12 +36,12 @@ export default function Dashboard() {
   const metrics = isAdmin
     ? [
         { label: "Paper Stocks", value: stats.paper_stocks, cap: 100 },
-        { label: "Estimating Products", value: stats.products, cap: 250 },
+        { label: "Paper Products", value: stats.products, cap: 250 },
         { label: "Rolls + Sheets", value: (stats.roll_materials || 0) + (stats.sheet_materials || 0) },
         { label: "Quotes", value: stats.quotes },
       ]
     : [
-        { label: "Estimating Products", value: stats.products },
+        { label: "Paper Products", value: stats.products },
         { label: "Roll Materials", value: stats.roll_materials },
         { label: "My Quotes", value: stats.quotes },
       ];

@@ -117,6 +117,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Fix (2026-06) — v47.1 Rename per-module "Products" (naming clarity)
+- Estimating products (`db.products`, paper imposition products) are module-specific and were confusingly all labeled "Products", clashing with the Business → Product Catalog. Renamed per module: Paper Printing tab → "Paper Products", Sublimation tab → "Sublimation Products", Dashboard card → "Paper Products". Product Catalog (Business → Products, `db.catalog_products`) stays the storefront catalog. Future modules follow the "<Module> Products" pattern.
+
 ## Implemented (2026-06) — v47 Southwest laminate import + supplier auto-persist
 - **Southwest supplier training**: `SUPPLIER_MODULE_RULES` adds southwest → default category "laminate". Laminate-film lines auto-detected (keywords: laminating/velvet touch/OPP/PET lite/soft touch — kept specific so Grimco wide-format "GC LUS LAM" rolls stay category=roll). `_import_line_spec` "laminate" branch stores category=paper + paper_type=laminate + lam_width_in/lam_length_ft/lam_roll_cost, unit_cost=$/linear ft, stock in rolls, module=paper. Handles fractional widths ("12 3/4" → 12.75). Stored category translated laminate→paper via `store_cat`.
 - **Supplier info auto-persist**: editing a material's supplier Company/Contact/Phone/Email now upserts the supplier record (`_upsert_supplier_from_material`, only non-empty values). `create_purchase` supplier training no longer overwrites saved contact/phone/email with blanks. `parse_purchase` backfills missing supplier contact/phone/email from the trained supplier record → next PDF import auto-fills them.

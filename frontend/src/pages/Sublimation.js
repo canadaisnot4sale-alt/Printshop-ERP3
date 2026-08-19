@@ -70,7 +70,7 @@ export default function Sublimation() {
         <Tabs defaultValue="calc">
           <TabsList className="rounded-full bg-slate-100 p-1">
             <TabsTrigger value="calc" data-testid="tab-calc" className="rounded-full">Calculator</TabsTrigger>
-            {isAdmin && <TabsTrigger value="products" data-testid="tab-sub-products" className="rounded-full">Products</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="products" data-testid="tab-sub-products" className="rounded-full">Sublimation Products</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="calc" className="mt-6 grid lg:grid-cols-12 gap-6">
