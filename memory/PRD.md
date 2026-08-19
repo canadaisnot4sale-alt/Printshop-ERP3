@@ -117,6 +117,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v49 Live add-on recalc in Paper Printing
+- After a quote is generated, toggling Lamination / Hot Foil / Round Corners — or switching the laminate/foil material or its sides — now recalculates prices automatically (300ms debounced useEffect on [laminate, laminateId, laminateSides, hotFoil, foilId, foilSides, roundCorners]), preserving the selected paper & sheet size. No need to re-click Generate. First quote still requires Generate; Print Side 4/0↔4/4 remains instant (client-side). Verified via screenshot (enabling Lamination: $19.38 → $33.63 auto).
+
 ## Implemented (2026-06) — v48.1 Laminate roll-yield reference in Materials LIST
 - Materials list rows for paper/Laminate & paper/Hot-foil now show a compact green line under the material name: "≈ N sheets 12×18/roll (K-up)" = best-orientation yield with sheets-across count (same 2" length-only waste math as the form reference). Only shows for laminate/hot-foil rows. data-testid `material-lam-yield`. Verified: PET 27"×500 → 600 (2-up), Velvet 12.75"×500 → 300 (1-up).
 

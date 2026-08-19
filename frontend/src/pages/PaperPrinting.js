@@ -143,6 +143,15 @@ export default function PaperPrinting() {
     if (rq.focusQty) setFocusQty(rq.focusQty);
   }, calc);
 
+  // Auto-recalc when add-ons change (once a quote already exists) so toggling Lamination / Hot Foil /
+  // Round Corners — or switching the laminate/foil material or sides — updates prices without re-clicking Generate.
+  useEffect(() => {
+    if (!result || !productId) return;
+    const t = setTimeout(() => { calc(sheet, selectedStock?.stock?.id); }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laminate, laminateId, laminateSides, hotFoil, foilId, foilSides, roundCorners]);
+
   const qtys = result?.qtys || [];
   const rowFor = (r, qty) => r?.quote.rows.find((x) => x.qty === qty);
   const retailOf = (row) => row?.[`customer_price_${side}`];
