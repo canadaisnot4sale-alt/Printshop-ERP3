@@ -117,6 +117,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Implemented (2026-06) — v50 Compare Papers grouped by paper class (Cardstock/Text/Copy)
+- Compare Papers cards are now grouped into colored sections stacked in order: Cardstock (indigo) → Text (amber) → Copy Paper (slate) → Other. Each card gets a left accent border of its group color; group header shows a colored dot + count. Auto-classified from the paper name (keyword-only, NO schema change): Cover/cardstock/C2S/C1S/"pt" → cardstock; copy/digital copy → copy; text/book/bond/writing → text; else other. Existing default/Best-Value sort preserved within each group. Frontend-only (PaperPrinting.js `paperClass` + `PAPER_GROUPS`). Verified via screenshot.
+
 ## Implemented (2026-06) — v49 Live add-on recalc in Paper Printing
 - After a quote is generated, toggling Lamination / Hot Foil / Round Corners — or switching the laminate/foil material or its sides — now recalculates prices automatically (300ms debounced useEffect on [laminate, laminateId, laminateSides, hotFoil, foilId, foilSides, roundCorners]), preserving the selected paper & sheet size. No need to re-click Generate. First quote still requires Generate; Print Side 4/0↔4/4 remains instant (client-side). Verified via screenshot (enabling Lamination: $19.38 → $33.63 auto).
 

@@ -49,6 +49,21 @@ function Metric({ icon: Icon, label, value, accent }) {
   );
 }
 
+const PAPER_GROUPS = [
+  { key: "cardstock", label: "Cardstock", dot: "bg-indigo-500", text: "text-indigo-700", accentL: "border-l-indigo-400" },
+  { key: "text", label: "Text", dot: "bg-amber-500", text: "text-amber-700", accentL: "border-l-amber-400" },
+  { key: "copy", label: "Copy Paper", dot: "bg-slate-500", text: "text-slate-600", accentL: "border-l-slate-400" },
+  { key: "other", label: "Other", dot: "bg-slate-400", text: "text-slate-500", accentL: "border-l-slate-300" },
+];
+// Classify a paper into a display group from its name (Cover/pt → Cardstock, Copy → Copy Paper, Text/Bond/Book → Text).
+const paperClass = (name = "") => {
+  const t = String(name).toLowerCase();
+  if (/(cover|cardstock|card stock|c2s|c1s|\d+\s*pt\b)/.test(t)) return "cardstock";
+  if (/(copy|digital copy)/.test(t)) return "copy";
+  if (/(text|book|bond|writing)/.test(t)) return "text";
+  return "other";
+};
+
 export default function PaperPrinting() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -308,22 +323,23 @@ export default function PaperPrinting() {
                     </div>
                   </div>
 
-                  {/* comparison across papers */}
+                  {/* comparison across papers, grouped by paper class */}
                   <div>
                     <div className="text-xs font-mono uppercase tracking-widest text-slate-500 mb-2">Compare Papers · {focusQty} pcs · {side.replace("_", "/")}</div>
-                    <div className="grid sm:grid-cols-2 gap-3">
-                      {[...result.results].sort((a, b) => {
+                    {(() => {
+                      const sorted = [...result.results].sort((a, b) => {
                         const ad = a.stock.is_default ? 0 : 1, bd = b.stock.is_default ? 0 : 1;
                         if (ad !== bd) return ad - bd;
                         return bestVal(a) - bestVal(b);
-                      }).map((r) => {
+                      });
+                      const card = (r, g) => {
                         const dq = r.native || r.quote;
                         const row = dq.rows.find((x) => x.qty === focusQty);
                         const isSel = selectedStock.stock.id === r.stock.id;
                         const isBest = bestId === r.stock.id;
                         return (
                           <button key={r.stock.id} data-testid="paper-compare-row" onClick={() => selectStock(r)}
-                            className={`text-left rounded-xl border p-4 transition-all ${isSel ? "border-[#2495D3] ring-1 ring-[#2495D3]" : "border-slate-200 hover:border-slate-300"}`}>
+                            className={`text-left rounded-xl border border-slate-200 border-l-4 ${g.accentL} p-4 transition-all ${isSel ? "border-[#2495D3] ring-1 ring-[#2495D3]" : "hover:border-slate-300"}`}>
                             <div className="flex items-center justify-between gap-2">
                               <div className="font-head font-bold text-sm">{r.stock.name}</div>
                               <div className="flex items-center gap-1">
@@ -350,8 +366,22 @@ export default function PaperPrinting() {
                             </div>
                           </button>
                         );
-                      })}
-                    </div>
+                      };
+                      return PAPER_GROUPS.map((g) => {
+                        const items = sorted.filter((r) => paperClass(r.stock.name) === g.key);
+                        if (items.length === 0) return null;
+                        return (
+                          <div key={g.key} className="mb-4" data-testid={`paper-group-${g.key}`}>
+                            <div className={`flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest ${g.text} mb-2`}>
+                              <span className={`inline-block w-2 h-2 rounded-full ${g.dot}`}></span>{g.label} · {items.length}
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              {items.map((r) => card(r, g))}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
 
                   {/* Volume pricing table — see savings as quantity grows */}
