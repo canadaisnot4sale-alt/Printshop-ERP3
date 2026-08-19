@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Fragment } from "react";
 import api, { apiErr } from "@/lib/api";
 import { useDefaultSheetSize } from "@/lib/useDefaultSheetSize";
 import { useAuth } from "@/context/AuthContext";
@@ -449,8 +449,15 @@ export default function PaperPrinting() {
                       </tr>
                     </thead>
                     <tbody>
-                      {paperMats.map((m) => (
-                        <tr key={m.id} data-testid="paper-stock-row" className="border-b border-slate-100 hover:bg-slate-50">
+                      {[...paperMats].sort((a, b) => (PAPER_GROUPS.findIndex((g) => g.key === paperClass(a.name))) - (PAPER_GROUPS.findIndex((g) => g.key === paperClass(b.name)))).map((m, idx, arr) => {
+                        const g = PAPER_GROUPS.find((x) => x.key === paperClass(m.name));
+                        const showHeader = idx === 0 || paperClass(arr[idx - 1].name) !== g.key;
+                        return (
+                        <Fragment key={m.id}>
+                        {showHeader && (
+                          <tr data-testid={`stock-group-${g.key}`}><td colSpan={8} className={`px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest ${g.text} bg-slate-50/70`}><span className={`inline-block w-2 h-2 rounded-full ${g.dot} mr-2 align-middle`}></span>{g.label}</td></tr>
+                        )}
+                        <tr data-testid="paper-stock-row" className={`border-b border-slate-100 hover:bg-slate-50 border-l-4 ${g.accentL}`}>
                           <td className="px-4 py-2.5">
                             <div className="font-medium flex items-center gap-2">
                               {m.name}
@@ -466,7 +473,9 @@ export default function PaperPrinting() {
                           <td className="px-4 py-2.5 text-right num text-slate-600">{money(m.wholesale_price)}</td>
                           <td className="px-4 py-2.5 text-center num">{m.stock_qty}</td>
                         </tr>
-                      ))}
+                        </Fragment>
+                        );
+                      })}
                       {paperMats.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No paper materials assigned to this module. Add one in Materials.</td></tr>}
                     </tbody>
                   </table>
