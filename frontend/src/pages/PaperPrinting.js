@@ -18,7 +18,7 @@ import { useRequote } from "@/lib/useRequote";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Calculator, Layers, FileStack, DollarSign, Tag, Package } from "lucide-react";
+import { Calculator, Layers, FileStack, DollarSign, Tag, Package, X } from "lucide-react";
 
 const SHEETS = ["8.5x11", "8.5x14", "11x17", "12x18", "13x19"];
 const STD_TIERS = [25, 50, 100, 250, 500, 1000, 2500, 5000];
@@ -196,17 +196,27 @@ export default function PaperPrinting() {
       name: result.product?.name || "Product", category: "Business Cards", description: "", published: true,
       autoByClass: true, paperClass: cls, allowedIds: clsIds.length ? clsIds : paperMats.map((m) => m.id),
       sides: ["4_0", "4_4"], defaultSides: side,
+      turnarounds: [
+        { id: "standard", label: "Standard", pct: 0 },
+        { id: "next_day", label: "Next day", pct: rush.next },
+        { id: "same_day", label: "Same day", pct: rush.same },
+      ],
+      defaultTurn: "standard",
       addons: { lamination: laminate, hot_foil: hotFoil, round_corners: roundCorners },
     });
     setConvOpen(true);
   };
   const toggleAllowed = (id) => setConvForm((f) => ({ ...f, allowedIds: f.allowedIds.includes(id) ? f.allowedIds.filter((x) => x !== id) : [...f.allowedIds, id] }));
   const toggleSide = (s) => setConvForm((f) => ({ ...f, sides: f.sides.includes(s) ? f.sides.filter((x) => x !== s) : [...f.sides, s] }));
+  const setTurn = (id, patch) => setConvForm((f) => ({ ...f, turnarounds: f.turnarounds.map((t) => (t.id === id ? { ...t, ...patch } : t)) }));
+  const addTurn = () => setConvForm((f) => ({ ...f, turnarounds: [...f.turnarounds, { id: `t${Date.now()}`, label: "", pct: 0 }] }));
+  const removeTurn = (id) => setConvForm((f) => { const list = f.turnarounds.filter((t) => t.id !== id); return { ...f, turnarounds: list, defaultTurn: f.defaultTurn === id ? (list[0]?.id || "") : f.defaultTurn }; });
   const saveProduct = async () => {
     const f = convForm;
     if (!f.name.trim()) return toast.error("Name required");
     if (!f.autoByClass && f.allowedIds.length === 0) return toast.error("Select at least one paper");
     if (f.sides.length === 0) return toast.error("Allow at least one print side");
+    if (!f.turnarounds || f.turnarounds.length === 0) return toast.error("Add at least one turnaround option");
     try {
       await api.post("/catalog-products", {
         name: f.name, category: f.category, description: f.description, published: f.published,
@@ -216,6 +226,8 @@ export default function PaperPrinting() {
           sheet: canonSheet(sheet), auto_by_class: f.autoByClass, paper_class: f.paperClass,
           allowed_paper_ids: f.autoByClass ? [] : f.allowedIds,
           quantities: STD_TIERS, sides: f.sides, default_sides: f.defaultSides, addons: f.addons,
+          turnarounds: f.turnarounds.map((t) => ({ id: t.id, label: (t.label || "").trim() || "Option", pct: Number(t.pct) || 0 })),
+          default_turnaround: f.defaultTurn || (f.turnarounds[0]?.id || ""),
           default_paper_id: selectedStock?.stock?.id || "",
           laminate_id: laminateId || "", laminate_sides: laminateSides, foil_id: foilId || "", foil_sides: foilSides,
         },
@@ -622,6 +634,26 @@ export default function PaperPrinting() {
                       <Switch data-testid={`conv-addon-${k}`} checked={!!convForm.addons[k]} onCheckedChange={(v) => setConvForm((f) => ({ ...f, addons: { ...f.addons, [k]: v } }))} />
                     </div>
                   ))}
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Turnaround / production times</Label>
+                    <button type="button" onClick={addTurn} className="text-[11px] text-[#2495D3] hover:underline" data-testid="conv-add-turn">+ Add option</button>
+                  </div>
+                  {convForm.turnarounds.map((t) => (
+                    <div key={t.id} className="flex items-center gap-2" data-testid="conv-turn-row">
+                      <button type="button" onClick={() => setConvForm((f) => ({ ...f, defaultTurn: t.id }))} title="Set as default"
+                        className={`text-[10px] rounded px-1.5 py-1 border shrink-0 ${convForm.defaultTurn === t.id ? "bg-emerald-500 text-white border-emerald-500" : "bg-white text-slate-500 border-slate-300"}`} data-testid={`conv-turn-default-${t.id}`}>Default</button>
+                      <Input value={t.label} onChange={(e) => setTurn(t.id, { label: e.target.value })} placeholder="Name (e.g. 2 hour same day)" className="rounded-lg h-8 text-xs flex-1" data-testid={`conv-turn-name-${t.id}`} />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Input type="number" value={t.pct} onChange={(e) => setTurn(t.id, { pct: e.target.value })} className="rounded-lg h-8 text-xs w-16 num" data-testid={`conv-turn-pct-${t.id}`} />
+                        <span className="text-xs text-slate-400">%</span>
+                      </div>
+                      <button type="button" onClick={() => removeTurn(t.id)} className="text-slate-300 hover:text-red-500 shrink-0" data-testid={`conv-turn-remove-${t.id}`}><X size={14} /></button>
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-slate-400">Surcharge % applies to both Retail &amp; Wholesale. The Default is preselected in the store.</p>
                 </div>
 
                 <div className="flex items-center justify-between">

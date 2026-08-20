@@ -3237,6 +3237,7 @@ async def _configurable_paper_options(prod, req, user):
         price = row.get(price_key)
         if price is None:
             price = row.get("customer_price_" + side) or row.get("wholesale_price_" + side) or 0
+        price = round((price or 0) * (1 + float(req.get("turnaround_pct") or 0) / 100.0), 2)
         gst_amt = round((price or 0) * gst / 100.0, 2)
         pst_amt = 0.0 if is_ws else round((price or 0) * pst / 100.0, 2)
         options.append({
@@ -3257,6 +3258,7 @@ class StorePaperPriceIn(BaseModel):
     laminate: bool = False
     hot_foil: bool = False
     round_corners: bool = False
+    turnaround_id: Optional[str] = None
 
 @api_router.post("/store/paper-price")
 async def store_paper_price(body: StorePaperPriceIn, user=Depends(get_current_user)):
@@ -3269,6 +3271,11 @@ async def store_paper_price(body: StorePaperPriceIn, user=Depends(get_current_us
         raise HTTPException(404, "Product not found")
     options = await _configurable_paper_options(prod, body.model_dump(), user)
     cfg = prod.get("config") or {}
+    turns = cfg.get("turnarounds") or []
+    tid = body.turnaround_id or cfg.get("default_turnaround") or (turns[0]["id"] if turns else None)
+    tpct = next((t.get("pct", 0) for t in turns if t.get("id") == tid), 0)
+    req = body.model_dump(); req["turnaround_pct"] = tpct
+    options = await _configurable_paper_options(prod, req, user)
     st = await get_settings()
     role = eff_role(user)
     return {"product": {"id": str(prod["_id"]), "name": prod.get("name"),
@@ -3278,6 +3285,7 @@ async def store_paper_price(body: StorePaperPriceIn, user=Depends(get_current_us
                        "sides": cfg.get("sides") or ["4_0", "4_4"],
                        "default_sides": cfg.get("default_sides") or "4_0",
                        "addons": cfg.get("addons") or {},
+                       "turnarounds": turns, "default_turnaround": tid, "selected_turnaround": tid,
                        "gst_pct": float(st.get("gst_pct", 5) or 0),
                        "pst_pct": float(st.get("pst_pct", 7) or 0),
                        "role": role},
@@ -3383,7 +3391,13 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
             continue
         p = clean(prod)
         if prod.get("product_type") == "configurable_paper" and it.config:
-            opts = await _configurable_paper_options(prod, it.config, user)
+            cfgp = prod.get("config") or {}
+            turns = cfgp.get("turnarounds") or []
+            tid = it.config.get("turnaround_id") or cfgp.get("default_turnaround")
+            tpct = next((t.get("pct", 0) for t in turns if t.get("id") == tid), 0)
+            tlabel = next((t.get("label") for t in turns if t.get("id") == tid), None)
+            req = dict(it.config); req["turnaround_pct"] = tpct
+            opts = await _configurable_paper_options(prod, req, user)
             chosen = next((o for o in opts if o["paper_id"] == it.config.get("paper_id")), None) or (opts[0] if opts else None)
             if not chosen:
                 continue
@@ -3391,7 +3405,7 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
             lt = round(price * it.qty, 2)
             total += lt
             sides_lbl = str(it.config.get("sides") or "4_0").replace("_", "/")
-            name = f"{p.get('name')} · {chosen['paper_name']} · {it.config.get('quantity')} pcs · {sides_lbl}"
+            name = f"{p.get('name')} · {chosen['paper_name']} · {it.config.get('quantity')} pcs · {sides_lbl}" + (f" · {tlabel}" if tlabel else "")
             line_items.append({"product_id": it.product_id, "name": name, "category": p.get("category"),
                                "qty": it.qty, "unit_price": price, "line_total": lt, "config": it.config})
             continue

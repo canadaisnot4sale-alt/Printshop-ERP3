@@ -30,17 +30,19 @@ export default function StoreProduct() {
   const [sides, setSides] = useState("4_0");
   const [addons, setAddons] = useState({ lamination: false, hot_foil: false, round_corners: false });
   const [paperId, setPaperId] = useState(null);
+  const [turnaround, setTurnaround] = useState(null);
 
   const fetchPrice = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.post("/store/paper-price", {
-        product_id: id, quantity: qty, sides,
+        product_id: id, quantity: qty, sides, turnaround_id: turnaround,
         laminate: !!addons.lamination, hot_foil: !!addons.hot_foil, round_corners: !!addons.round_corners,
       });
       setProduct(data.product);
       setCfg(data.config);
       setOptions(data.options || []);
+      if (turnaround == null && data.config?.default_turnaround) setTurnaround(data.config.default_turnaround);
       setPaperId((prev) => {
         if (prev && (data.options || []).some((o) => o.paper_id === prev)) return prev;
         const def = (data.options || []).find((o) => o.is_default) || (data.options || [])[0];
@@ -48,7 +50,7 @@ export default function StoreProduct() {
       });
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
     finally { setLoading(false); }
-  }, [id, qty, sides, addons]);
+  }, [id, qty, sides, addons, turnaround]);
 
   useEffect(() => { fetchPrice(); }, [fetchPrice]);
 
@@ -58,13 +60,14 @@ export default function StoreProduct() {
 
   const addToCart = () => {
     if (!selected) return;
-    const lineKey = `${id}|${paperId}|${qty}|${sides}|${addons.lamination ? 1 : 0}${addons.hot_foil ? 1 : 0}${addons.round_corners ? 1 : 0}`;
+    const turnLabel = (cfg?.turnarounds || []).find((t) => t.id === turnaround)?.label;
+    const lineKey = `${id}|${paperId}|${qty}|${sides}|${addons.lamination ? 1 : 0}${addons.hot_foil ? 1 : 0}${addons.round_corners ? 1 : 0}|${turnaround}`;
     const extras = [addons.lamination && "Lam", addons.hot_foil && "Foil", addons.round_corners && "Round"].filter(Boolean).join(", ");
-    const label = `${product?.name} · ${selected.paper_name} · ${qty} pcs · ${SIDE_LABEL[sides]}${extras ? ` · ${extras}` : ""}`;
+    const label = `${product?.name} · ${selected.paper_name} · ${qty} pcs · ${SIDE_LABEL[sides]}${extras ? ` · ${extras}` : ""}${turnLabel ? ` · ${turnLabel}` : ""}`;
     cart.add({
       lineKey, product_id: id, name: label, unitPrice: selected.price, priceInclTax: selected.price_incl_tax,
       gst: selected.gst, pst: selected.pst, qty: 1,
-      config: { quantity: qty, sides, paper_id: paperId, laminate: !!addons.lamination, hot_foil: !!addons.hot_foil, round_corners: !!addons.round_corners },
+      config: { quantity: qty, sides, paper_id: paperId, turnaround_id: turnaround, laminate: !!addons.lamination, hot_foil: !!addons.hot_foil, round_corners: !!addons.round_corners },
     });
     toast.success("Added to cart");
     nav("/store");
@@ -134,6 +137,23 @@ export default function StoreProduct() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Turnaround */}
+          {(cfg?.turnarounds?.length > 0) && (
+            <div>
+              <div className="text-sm font-semibold mb-2">Turnaround</div>
+              {cfg.turnarounds.length > 1 ? (
+                <div className="flex flex-wrap gap-2" data-testid="sp-turnarounds">
+                  {cfg.turnarounds.map((t) => (
+                    <button key={t.id} onClick={() => setTurnaround(t.id)} data-testid={`sp-turn-${t.id}`}
+                      className={`rounded-full px-4 py-2 text-sm border transition-colors ${turnaround === t.id ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-700 border-slate-300 hover:border-slate-400"}`}>{t.label}</button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium" data-testid="sp-turn-fixed">{cfg.turnarounds[0].label}</div>
+              )}
             </div>
           )}
 
