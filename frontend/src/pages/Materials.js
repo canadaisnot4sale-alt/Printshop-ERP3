@@ -81,6 +81,7 @@ export default function Materials() {
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
   const [catFilter, setCatFilter] = useState("all");
+  const [supFilter, setSupFilter] = useState("all");
   const [defMk, setDefMk] = useState({ retail: 200, wholesale: 100 });
 
   const load = async () => {
@@ -269,7 +270,10 @@ export default function Materials() {
   }, 0);
   const defaults = items.filter((m) => (m.default_modules || []).length > 0).length;
   const cats = [...new Set(items.map((m) => m.category).filter(Boolean))].sort();
-  const filtered = catFilter === "all" ? items : items.filter((m) => m.category === catFilter);
+  const supNames = [...new Set(items.map((m) => (m.supplier_company || "").trim()).filter(Boolean))].sort();
+  const filtered = items
+    .filter((m) => catFilter === "all" || m.category === catFilter)
+    .filter((m) => supFilter === "all" || (m.supplier_company || "").trim() === supFilter);
 
   return (
     <div data-testid="materials-page">
@@ -300,6 +304,21 @@ export default function Materials() {
               {c} ({items.filter((m) => m.category === c).length})
             </button>
           ))}
+          {supNames.length > 0 && (
+            <>
+              <span className="text-[11px] font-mono uppercase tracking-widest text-slate-400 ml-2">Supplier</span>
+              <select data-testid="material-supplier-filter" value={supFilter} onChange={(e) => setSupFilter(e.target.value)}
+                className="text-xs rounded-full px-3 py-1 border border-slate-200 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#2495D3]">
+                <option value="all">All suppliers ({items.length})</option>
+                {supNames.map((s) => (
+                  <option key={s} value={s}>{s} ({items.filter((m) => (m.supplier_company || "").trim() === s).length})</option>
+                ))}
+              </select>
+              {supFilter !== "all" && (
+                <button onClick={() => setSupFilter("all")} data-testid="material-supplier-clear" className="text-xs text-slate-400 hover:text-slate-600 underline">clear</button>
+              )}
+            </>
+          )}
         </div>
 
         <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
