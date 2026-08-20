@@ -34,6 +34,8 @@ import QuoteBuilder from "@/pages/QuoteBuilder";
 import ProductsCatalog from "@/pages/ProductsCatalog";
 import Storefront from "@/pages/Storefront";
 import StoreProduct from "@/pages/StoreProduct";
+import StoreHome from "@/pages/StoreHome";
+import StoreLayout from "@/components/StoreLayout";
 import Orders from "@/pages/Orders";
 import PaymentReturn from "@/pages/PaymentReturn";
 
@@ -42,7 +44,14 @@ function Protected({ children, adminOnly }) {
   if (!ready) return <div className="p-10 font-mono text-sm">Loading…</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/" replace />;
-  return <Layout>{children}</Layout>;
+  const isCustomer = user.role === "client" || user.role === "reseller";
+  const Shell = isCustomer ? StoreLayout : Layout;
+  return <Shell>{children}</Shell>;
+}
+
+function HomeRouter() {
+  const { user } = useAuth();
+  return (user?.role === "client" || user?.role === "reseller") ? <StoreHome /> : <Dashboard />;
 }
 
 function App() {
@@ -54,7 +63,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Protected><Dashboard /></Protected>} />
+            <Route path="/" element={<Protected><HomeRouter /></Protected>} />
             <Route path="/paper" element={<Protected><PaperPrinting /></Protected>} />
             <Route path="/booklet" element={<Protected><Booklet /></Protected>} />
             <Route path="/large-format" element={<Protected><LargeFormat /></Protected>} />

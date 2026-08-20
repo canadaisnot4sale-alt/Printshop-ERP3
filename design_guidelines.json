@@ -1,177 +1,153 @@
 {
-  "project_name": "Print and Save",
-  "slogan": "Your Brand in Focus",
-  "app_type": "hybrid_fullstack",
-  "design_archetype": "Swiss & High-Contrast (Archetype 4)",
-  "theme_strategy": "Light mode by default (best for dense data/ERP reading). Dark mode toggle required, but optimize for high-contrast light mode.",
-  "brand": {
-    "primary_accent": "#2495D3",
-    "neutrals": ["#FFFFFF", "#0A0A0A"],
-    "emotion": "Authoritative, Precise, Industrial, Fast"
+  "theme_archetype": "Swiss & High-Contrast (E-Commerce Variant)",
+  "brand_identity": {
+    "name": "Print and Save",
+    "tagline": "YOUR BRAND IN FOCUS",
+    "primary_color": "#2495D3",
+    "primary_hover": "#1E7AA9"
   },
   "typography": {
-    "strategy": "The 'Old Money Tech' variant for industrial tools: Structural sans headings with mono-spaced numbers for precision.",
-    "fonts": {
-      "headings": "Chivo",
-      "body": "Manrope",
-      "data_and_numbers": "IBM Plex Mono",
-      "fallback": "sans-serif"
-    },
+    "heading_font": "font-head (existing class - MUST be preserved and used for all headings h1-h6)",
+    "body_font": "Inter or Figtree (sans-serif, optimized for legibility in complex forms)",
     "scale": {
-      "h1": "text-4xl tracking-tight font-black text-black",
-      "h2": "text-2xl tracking-tight font-bold text-black",
-      "h3": "text-xl font-semibold text-black",
-      "h4": "text-lg font-semibold text-black",
-      "body": "text-sm leading-relaxed",
-      "table_header": "text-xs font-bold uppercase tracking-[0.1em] text-slate-500 font-mono",
-      "table_data": "text-sm font-mono",
-      "metric_large": "text-5xl font-black text-blue-500 tracking-tighter"
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-none",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight",
+      "h3": "text-xl sm:text-2xl tracking-tight",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-gray-500",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em]"
     },
     "rules": [
-      "NEVER use Inter, Roboto, or Open Sans for headings.",
-      "ALL numeric values (currency, inches, quantities, pricing) MUST use IBM Plex Mono to align decimals vertically.",
-      "Table headers must be uppercase, heavily tracked (tracking-widest)."
+      "NEVER use generic sans for headings, always apply font-head.",
+      "Use tracking-tight for all headings above 32px.",
+      "Price displays must use large, clear typography (text-3xl or 4xl) and high contrast."
     ]
   },
   "colors": {
-    "background": {
-      "app": "#F8F9FA",
-      "surface": "#FFFFFF",
-      "surface_hover": "#F1F5F9",
-      "overlay": "rgba(0, 0, 0, 0.4)"
+    "backgrounds": {
+      "primary": "#FFFFFF",
+      "secondary": "#F9FAFB (gray-50 - for alternating sections)",
+      "accent": "#F3F4F6 (gray-100 - for product card hover/backgrounds)"
+    },
+    "brand": {
+      "primary": "#2495D3",
+      "hover": "#1E7AA9",
+      "light": "#E0F2FE (sky-100 - for active states or subtle highlights)"
     },
     "text": {
-      "primary": "#0A0A0A",
-      "secondary": "#64748B",
-      "accent": "#2495D3",
+      "primary": "#111827 (gray-900)",
+      "secondary": "#4B5563 (gray-600)",
+      "muted": "#9CA3AF (gray-400)",
       "inverse": "#FFFFFF"
     },
-    "border": {
-      "default": "#E2E8F0",
+    "borders": {
+      "subtle": "#F3F4F6 (gray-100)",
+      "default": "#E5E7EB (gray-200)",
       "focus": "#2495D3"
     },
     "status": {
-      "success": "#10B981",
-      "warning": "#F59E0B",
-      "danger": "#EF4444"
-    },
-    "rules": [
-      "95% of the UI must be monochrome (White, Grays, Black).",
-      "The blue accent (#2495D3) is reserved EXCLUSIVELY for interactive elements (primary buttons, active tabs, focus rings, selected rows) and key final calculation metrics.",
-      "DO NOT use full-screen gradients. Color is function only."
-    ]
+      "sale": "#EF4444 (red-500 - for badges and discounts)",
+      "success": "#10B981 (emerald-500 - for order completion/stepper)",
+      "warning": "#F59E0B (amber-500 - for pending approval)"
+    }
   },
-  "spacing_and_layout": {
-    "strategy": "Mode B: High Density Grid (Dashboards / Analytics) modified for ERP.",
-    "grid": {
-      "base": "grid-cols-1 lg:grid-cols-12 gap-6",
-      "calculator_layout": "lg:col-span-8 (Inputs/Grid) + lg:col-span-4 (Sticky Results Panel)"
+  "visual_enhancers": {
+    "borders": "1px solid #E5E7EB on cards, minimal border-radius (rounded-md or rounded-none) for a clean, Shopify-Dawn-like Swiss aesthetic.",
+    "shadows": {
+      "sm": "shadow-sm (for small interactive elements)",
+      "md": "shadow-md (for dropdowns, hover states)",
+      "drawer": "shadow-[-10px_0_30px_rgba(0,0,0,0.1)] (for sliding cart panel)"
     },
-    "spacing_scale": "p-2, p-4, p-6 for nested elements; p-8 for main module containers.",
-    "rules": [
-      "No dead space, but no visual clutter. Use 1px borders instead of deep shadows to separate zones.",
-      "All major modules must follow a Split Layout: Data/Inputs on the left (stretches), Real-time Estimate/Summary on the right (sticky).",
-      "Containers with borders MUST have internal padding (e.g., p-6) to prevent text collision."
-    ]
+    "surfaces": "Solid flat backgrounds. NO glassmorphism on main product areas to ensure price/configuration legibility. Cart drawer overlay uses bg-black/40."
   },
-  "surfaces_and_components": {
-    "strategy": "Grid Borders (The 'Technical' Look). Expose the skeleton.",
-    "border_radius": "Max 4px (rounded-sm) globally. No bubbly or overly rounded corners. Industrial and sharp.",
-    "shadows": "Minimal. Use 1px solid borders for definition. Only use shadow-lg on dropdowns, modals, and sticky floating bars.",
+  "layouts": {
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "spacing_scale": "p-4, p-6, p-8, p-12, p-16, p-24. Use generous padding (py-16 or py-24) between major homepage sections.",
+    "product_grid": "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6. Images must maintain consistent aspect ratios (e.g., aspect-[4/5] or aspect-square).",
+    "pdp_layout": "grid grid-cols-1 lg:grid-cols-12 gap-12. Left (Gallery): col-span-7 sticky top-24. Right (Form): col-span-5 scrollable."
+  },
+  "components": {
+    "announcement_bar": {
+      "style": "bg-[#111827] text-white text-sm py-2 text-center flex justify-center items-center gap-2",
+      "content": "Welcome to our store"
+    },
     "header": {
-      "style": "Solid Background (bg-white) with a hard 1px bottom border (border-slate-200).",
-      "rules": "NEVER use transparent backgrounds for the header or dropdowns."
+      "style": "sticky top-0 z-50 bg-white border-b border-gray-200 transition-all duration-300",
+      "structure": "Logo on left (w-32), center nav (Brochure, Business Cards, etc.), right icons (Search, Account, Cart with badge)."
     },
-    "tables": {
-      "style": "High-density, border-collapse.",
-      "features": [
-        "Sticky header (bg-slate-50) and sticky first column (ID/Name).",
-        "Row height: compact (32px) or regular (40px). No massive padding in data tables.",
-        "Hover state: bg-slate-50 for the entire row.",
-        "Alignment: Text left, Numbers/Currency right.",
-        "Virtualization must be simulated/implemented for tables with 100+ rows (e.g., Paper Stocks, Products)."
-      ]
+    "hero_section": {
+      "style": "relative w-full bg-gray-50 flex items-center min-h-[70vh] overflow-hidden",
+      "structure": "Two-column on desktop (Text left, Image right) or Full-bleed with centralized content box. Headline 'Browse our latest products', CTA 'Shop all' (pill or crisp square button in #2495D3)."
     },
-    "forms_and_inputs": {
-      "style": "Sharp borders, explicit boundaries.",
-      "focus": "ring-2 ring-offset-1 ring-[#2495D3] border-[#2495D3]",
-      "components": "Use Shadcn JS components (NOT TSX) for Input, Select, Checkbox. Heavily customize to remove rounding."
+    "product_card": {
+      "style": "group cursor-pointer flex flex-col gap-3 relative",
+      "image_container": "bg-gray-100 aspect-[4/5] overflow-hidden relative",
+      "sale_badge": "absolute top-2 left-2 bg-red-500 text-white text-xs px-2 py-1 uppercase tracking-wider z-10",
+      "text": "Title in font-head, price below. Price hidden if guest ('Sign in to view')."
     },
-    "buttons": {
-      "primary": "bg-[#2495D3] hover:bg-[#1E7AA9] text-white rounded-sm font-semibold transition-colors",
-      "secondary": "bg-white border border-slate-200 hover:bg-slate-50 text-black rounded-sm transition-colors",
-      "ghost": "hover:bg-slate-100 text-slate-600 rounded-sm"
+    "product_detail_page": {
+      "quantity_selector": "Pill-style buttons (e.g. 100, 250, 500) wrapping in flex-row.",
+      "paper_options": "Side-by-side radio cards (grid grid-cols-2 gap-4) showing 'Standard', 'Premium', etc. with inline prices.",
+      "add_ons": "Toggle switches for Lamination, Foil, Round Corners.",
+      "pricing_display": "Only visible if logged in. Dynamic update. If guest: prominent banner 'Sign in to see prices' instead of Add to Cart.",
+      "file_upload": "Dashed border dropzone (border-2 border-dashed border-gray-300 p-6). Checkbox for 'File-setup fee'.",
+      "tax_breakdown": "Subtotal, GST, PST, Total shown clearly before Add to Cart."
     },
-    "cards": {
-      "style": "Flat solid surfaces, 1px border border-slate-200, bg-white, NO shadow by default.",
-      "hover": "-translate-y-[1px] shadow-sm transition-all"
+    "cart_drawer": {
+      "style": "Fixed right-0 top-0 h-full w-full sm:w-[400px] bg-white shadow-2xl z-50 transform transition-transform translate-x-0",
+      "content": "List of items, variant details (paper, qty), Tax breakdown, Checkout button."
+    },
+    "auth_screens": {
+      "style": "Centered card layout (max-w-md w-full mx-auto p-8 border border-gray-200 bg-white).",
+      "features": "Email/password, Google Login button (outline style), Captcha placeholder on Register. Alert banner for 'Email verification required'."
+    },
+    "account_orders": {
+      "order_stepper": "Visual progress bar: Received -> In production -> Ready -> Completed. Green (#10B981) for completed steps.",
+      "actions": "Buttons for 'Upload Artwork', 'Download Proofs', 'Reorder'."
     }
   },
-  "modules_specs": {
-    "auth": {
-      "layout": "Minimalist center block. White card on gray background. Blue accent for submit.",
-      "focus": "Speed of entry."
-    },
-    "dashboard": {
-      "layout": "Bento Grid. High density. Top-left North Star Metric (e.g., Daily Quotes Volume).",
-      "components": "Quick access cards to modules, recent estimates table."
-    },
-    "paper_printing": {
-      "layout": "Split view. Left: Tabular selection of 100+ stocks. Right: Imposition Calculator.",
-      "calculator": "Input fields for flat size, finished size. Auto-calculate 'up' on sheet. Display comparison grid of costs across standard quantities (e.g., 250, 500, 1000)."
-    },
-    "booklet_module": {
-      "layout": "Wizard or Stepper approach inside a single view.",
-      "steps": "Cover Paper -> Inside Paper -> Page Count -> Binding Option.",
-      "pricing": "Sticky bottom or right-side summary updating in real-time."
-    },
-    "large_format": {
-      "layout": "Material selection table + Multi-size estimating grid.",
-      "grid": "Spreadsheet-like grid allowing up to 25 size inputs (W x H x Qty).",
-      "visualization": "Abstract visual representation of nesting/tiling (e.g., small bounding boxes inside a roll width). Use D3 or basic canvas for simple 2D nesting vis."
-    },
-    "sticker_calculator": {
-      "inputs": "Sliders or numeric inputs for size (1-8 inches).",
-      "comparison": "Side-by-side card comparison of 'Paper' vs 'Vinyl' vs 'Holographic' costs."
-    },
-    "equipment_settings": {
-      "layout": "Master-detail view. Left sidebar with printers, right pane with ink config, click charges, and markup %.",
-      "style": "Dense form grids."
-    }
+  "motion": {
+    "hover": "Images in product cards scale up slightly (scale-105) with transform duration-500 ease-out.",
+    "buttons": "Active scale-95, bg-hover transitions.",
+    "drawers": "Slide in from right (translate-x-full to translate-x-0) using ease-in-out duration-300.",
+    "page_load": "Fade in primary elements using simple opacity transitions."
   },
-  "motion_and_interaction": {
-    "rules": [
-      "Micro-animations ONLY. No large sweeping page transitions.",
-      "Use framer-motion for calculator number ticking (animating from $10.00 to $15.00).",
-      "Hover states must be instant (150ms) for a snappy, technical feel.",
-      "All dropdowns and select menus must slide in with subtle opacity (duration 200ms)."
-    ]
+  "accessibility": {
+    "contrast": "Ensure white text on #2495D3 button passes WCAG AA.",
+    "focus": "All interactive elements must have focus-visible:ring-2 focus-visible:ring-[#2495D3] focus-visible:ring-offset-2.",
+    "aria": "Use aria-expanded on dropdowns, aria-hidden on decorative icons.",
+    "test_ids": "CRITICAL: Add data-testid attributes to ALL interactive elements (e.g., data-testid='add-to-cart-btn', data-testid='login-submit')."
   },
-  "accessibility_and_testing": {
-    "contrast": "Ensure text meets APCA minimums. #2495D3 against white is accessible for UI, but text inside blue buttons must be pure white.",
-    "testing_attributes": [
-      "CRITICAL: All interactive and key informational elements MUST include a data-testid attribute.",
-      "Convention: kebab-case, role-based (e.g., data-testid='calculator-submit-button', data-testid='paper-stock-row-1')."
-    ]
+  "media": {
+    "image_urls": {
+      "logo": "/logo.webp",
+      "hero_print_shop": "https://images.pexels.com/photos/37394506/pexels-photo-37394506.jpeg",
+      "product_business_cards": "https://images.unsplash.com/photo-1718670013921-2f144aba173a",
+      "product_brochures": "https://images.unsplash.com/photo-1695634281181-b2357af34c61",
+      "product_flyers": "https://images.unsplash.com/photo-1624567881801-a5a85867d990",
+      "account_avatar_placeholder": "https://ui-avatars.com/api/?name=User\u0026background=2495D3\u0026color=fff"
+    },
+    "rules": "NEVER use generic placeholders (like via.placeholder.com). Use the provided Unsplash/Pexels URLs. Apply object-cover to all images."
   },
   "instructions_to_main_agent": [
-    "You are building a B2B ERP tool, not a consumer landing page. Prioritize information density, alignment, and fast data entry.",
-    "Use Javascript (.js/.jsx) for all components, NOT TypeScript (.tsx).",
-    "Install and use 'lucide-react' for crisp, technical iconography. (e.g., Settings, Calculator, Printer, LayoutGrid).",
-    "Use 'sonner' for toast notifications on save/calculate actions.",
-    "Shadcn Setup: Initialize with base color 'slate', radius '0'. Customize components heavily to match the sharp, industrial 'Grid Borders' style.",
-    "Do NOT center align the app container (.App { text-align: center; } is FORBIDDEN). Everything is left-aligned unless specific to a numeric table column.",
-    "No emojis in the UI. Use proper SVG icons.",
-    "Calculators MUST clearly visually separate inputs (forms) from outputs (large blue text).",
-    "Table headers must stick to the top on scroll.",
-    "Avoid TS-specific syntax; provide vanilla JS React functional components."
+    "IMPLEMENT A STOREFRONT SEPARATE FROM ADMIN. Do not alter existing admin dashboard layouts or styles. Add layouts to customer-facing routes.",
+    "Use Shadcn UI for interactive forms (Select, Tabs, Dialogs, Checkboxes) but apply custom Tailwind classes to match the 'Swiss/Dawn' aesthetic (remove heavy default Vercel radii).",
+    "Integrate the font-head class into heading components (H1-H6).",
+    "GUEST VS LOGGED IN: Build conditional rendering for prices. Guests see catalog but NO prices and NO add-to-cart. They see a 'Sign in to view prices' button.",
+    "Product Detail Page configuration must feel like a modern print shop (like Vistaprint or Moo) with side-by-side selectable cards for paper types.",
+    "Order Stepper in Account area is critical for print shops. Implement a visually clear horizontal or vertical step tracker.",
+    "Use 'lucide-react' for all icons. Avoid importing heavy icon packs unnecessarily."
   ],
-  "universal_agent_guidelines": [
-    "Do not converge toward generic 'AI slop'. Give the UI a sharp, deliberate, technical aesthetic.",
-    "Do not use dark colors as gradients.",
-    "Create depth through 1px borders and layered z-index hierarchy, NOT massive shadows.",
-    "NEVER use generic transition: all.",
-    "Always use modern button styles, specifically the sharp rectangular buttons defined in surfaces_and_components.",
-    "Ensure all interactive elements have data-testid attributes for testing."
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Create depth through layered design elements with z-index hierarchy, but avoid muddy gray transparency.",
+    "Never apply transition: all globally. Add transitions for specific interactive elements.",
+    "Do not center-align the app container (no .App { text-align: center; }). Keep text left-aligned for readability.",
+    "Use modern button styles (sharp or slightly rounded corners) with interaction animations. Limit use of primary color (#2495D3) to main CTAs.",
+    "Never use AI assistant emojis for icons.",
+    "Every interaction needs micro-animations (hover states, transitions).",
+    "Missing categories/images MUST NOT fallback to placeholder text. Use the provided media URLs.",
+    "Prioritize reusing existing UI components if available, but adapt their styling to this storefront.",
+    "Ensure the shopping experience feels distinct, high-quality, and completely separate from the internal ERP tool."
   ]
 }
