@@ -6,6 +6,9 @@
   - Editable overhead ($/h) and machine hourly directly from the Profitability panel.
   - Suggest a "recommended retail price" to hit a chosen margin.
 
+## Done (2026-06)
+- Paper Printing **Product dropdown** now matches the Paper Products table: sorted by finished area ascending (11x17/12x18 at the bottom) and labeled with both dimensions in inch marks (e.g. `Business Card — 3.50" × 2.00"`). Verified via screenshot.
+
 ## P0 / P1 backlog
 - Save chosen Rush turnaround + tax-inclusive price onto the quote/order when converting to an order/invoice.
 - Show GST/PST breakdown + tax-included total on the client-facing PDF/quote.

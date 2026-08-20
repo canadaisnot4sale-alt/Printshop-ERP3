@@ -91,7 +91,7 @@ export default function PaperPrinting() {
 
   const [paperMats, setPaperMats] = useState([]);
   const loadProducts = () => api.get("/products").then((r) => {
-    const list = [...r.data].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const list = [...r.data].sort((a, b) => (Number(a.finished_w) * Number(a.finished_h)) - (Number(b.finished_w) * Number(b.finished_h)) || Number(a.finished_w) - Number(b.finished_w));
     setProducts(list);
     if (!productId && list.length) setProductId((list.find((p) => p.is_default) || list[0]).id);
   });
