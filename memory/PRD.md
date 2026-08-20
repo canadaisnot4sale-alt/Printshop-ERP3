@@ -1,5 +1,5 @@
 ## Implemented (2026-08-20) — Materials supplier filter
-- Added a "Supplier" dropdown filter next to the category filter on the Materials page (with per-supplier counts + clear link). Combines with the category filter. Verified: selecting a supplier narrows the list to that supplier's materials.
+- Added a "Supplier" dropdown filter next to the category filter on the Materials page (with per-supplier counts + clear link). Filters are MUTUALLY EXCLUSIVE — choosing a supplier resets the category to All and vice-versa (only one active at a time). Verified.
 
 - Trained the existing PDF invoice parser for Spicers (rolls/inks/substrates). Added `machine_id` to `PurchaseLine`; parser now auto-detects "ink" lines and auto-suggests the machine by brand keyword match (Roland ink → Roland machine, Mimaki ink → Mimaki machine). Import review UI shows a per-ink-line **machine dropdown** (only when category=ink); on save the material is linked to that machine (`machine_id`). Rolls (laminate/vinyl/banner 54"x150') parse as `roll` with linear specs, no machine.
 - Verified end-to-end with real Spicers PDFs: 4 Roland inks + 3 Mimaki inks auto-mapped to correct machines; 4 rolls classified correctly; materials saved with machine link.

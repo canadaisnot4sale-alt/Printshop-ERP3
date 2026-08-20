@@ -294,12 +294,12 @@ export default function Materials() {
 
         <div className="flex items-center gap-2" data-testid="material-category-filter">
           <span className="text-[11px] font-mono uppercase tracking-widest text-slate-400">Filter</span>
-          <button onClick={() => setCatFilter("all")} data-testid="catfilter-all"
+          <button onClick={() => { setCatFilter("all"); setSupFilter("all"); }} data-testid="catfilter-all"
             className={`text-xs rounded-full px-3 py-1 border transition-colors ${catFilter === "all" ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
             All ({items.length})
           </button>
           {cats.map((c) => (
-            <button key={c} onClick={() => setCatFilter(c)} data-testid={`catfilter-${c}`}
+            <button key={c} onClick={() => { setCatFilter(c); setSupFilter("all"); }} data-testid={`catfilter-${c}`}
               className={`text-xs rounded-full px-3 py-1 border capitalize transition-colors ${catFilter === c ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
               {c} ({items.filter((m) => m.category === c).length})
             </button>
@@ -307,7 +307,7 @@ export default function Materials() {
           {supNames.length > 0 && (
             <>
               <span className="text-[11px] font-mono uppercase tracking-widest text-slate-400 ml-2">Supplier</span>
-              <select data-testid="material-supplier-filter" value={supFilter} onChange={(e) => setSupFilter(e.target.value)}
+              <select data-testid="material-supplier-filter" value={supFilter} onChange={(e) => { setSupFilter(e.target.value); setCatFilter("all"); }}
                 className="text-xs rounded-full px-3 py-1 border border-slate-200 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#2495D3]">
                 <option value="all">All suppliers ({items.length})</option>
                 {supNames.map((s) => (
