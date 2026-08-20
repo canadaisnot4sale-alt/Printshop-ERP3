@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import TrainingVideoManager from "@/components/TrainingVideoManager";
-import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye, AlertTriangle, Megaphone, Copy, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye, AlertTriangle, Megaphone, Copy, Sparkles, Video } from "lucide-react";
 
 const BLANK = { name: "", category: "Other", price: 0, wholesale_price: 0, description: "", published: false, bom: [] };
 
@@ -28,6 +28,8 @@ export default function ProductsCatalog() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
+  const [dlgVideos, setDlgVideos] = useState([]);
+  const [removedVideoIds, setRemovedVideoIds] = useState([]);
   const [cfgProd, setCfgProd] = useState(null);
   const [regenTone, setRegenTone] = useState("professional");
   const [regenLoading, setRegenLoading] = useState(false);
@@ -60,10 +62,13 @@ export default function ProductsCatalog() {
     api.get("/materials").then(({ data }) => setMaterials(data)).catch(() => {});
   }, []);
 
-  const openNew = () => { setForm(BLANK); setEditId(null); setOpen(true); };
+  const openNew = () => { setForm(BLANK); setEditId(null); setDlgVideos([]); setRemovedVideoIds([]); setOpen(true); };
   const openEdit = (p) => {
     setForm({ name: p.name, category: p.category, module: p.module || "", price: p.price, wholesale_price: p.wholesale_price || 0, description: p.description || "", published: !!p.published, bom: (p.bom || []).map((b) => ({ waste_per_order: 0, waste_per_unit: 0, ...b })) });
-    setEditId(p.id); setOpen(true);
+    setEditId(p.id); setRemovedVideoIds([]); setOpen(true);
+    api.get("/training/videos", { params: { category: "product", ref_id: p.id } })
+      .then(({ data }) => setDlgVideos(data.map((v) => ({ id: v.id, url: v.url, title_es: v.title_es || "", title_en: v.title_en || "" }))))
+      .catch(() => setDlgVideos([]));
   };
   const addBom = () => setForm((f) => ({ ...f, bom: [...f.bom, { material_id: "", material_name: "", qty_per_unit: 1, waste_per_order: 0, waste_per_unit: 0 }] }));
   const setBom = (i, k, v) => setForm((f) => {
@@ -91,8 +96,16 @@ export default function ProductsCatalog() {
     const payload = { ...form, price: Number(form.price || 0), wholesale_price: Number(form.wholesale_price || 0),
       bom: form.bom.filter((b) => b.material_id).map((b) => ({ ...b, qty_per_unit: Number(b.qty_per_unit || 0), waste_per_order: Number(b.waste_per_order || 0), waste_per_unit: Number(b.waste_per_unit || 0) })) };
     try {
+      let pid = editId;
       if (editId) await api.put(`/catalog-products/${editId}`, payload);
-      else await api.post("/catalog-products", payload);
+      else { const res = await api.post("/catalog-products", payload); pid = res.data.id; }
+      for (const rid of removedVideoIds) { try { await api.delete(`/training/videos/${rid}`); } catch (e) {} }
+      for (const v of dlgVideos) {
+        if (!v.url || !v.url.trim()) continue;
+        const body = { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: pid, ref_label: form.name };
+        if (v.id) await api.put(`/training/videos/${v.id}`, body);
+        else await api.post("/training/videos", body);
+      }
       toast.success("Product saved"); setOpen(false); load();
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
   };
@@ -250,6 +263,23 @@ export default function ProductsCatalog() {
             <div className="flex items-center gap-3">
               <Switch data-testid="product-field-published" checked={form.published} onCheckedChange={(v) => setForm({ ...form, published: v })} />
               <Label className="text-xs">Published (visible in future storefront)</Label>
+            </div>
+            <div className="border-t border-slate-100 pt-3">
+              <div className="flex items-center justify-between mb-1">
+                <Label className="text-xs font-semibold flex items-center gap-1"><Video size={13} /> Training videos</Label>
+                <Button type="button" size="sm" variant="outline" className="h-7 rounded-lg" data-testid="dlg-add-video" onClick={() => setDlgVideos((v) => [...v, { url: "", title_es: "", title_en: "" }])}>+ video</Button>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-2">Paste a YouTube (unlisted) / Vimeo / Drive link and name it (e.g. "Add dry-erase lamination"). Add as many as you want — employees see them in the Training Center.</p>
+              <div className="space-y-2">
+                {dlgVideos.map((v, i) => (
+                  <div key={i} className="flex gap-2 items-center" data-testid="dlg-video-row">
+                    <Input placeholder="Nombre / Name" value={v.title_es} onChange={(e) => setDlgVideos((list) => list.map((x, idx) => (idx === i ? { ...x, title_es: e.target.value } : x)))} className="rounded-lg h-8 text-xs w-44" data-testid={`dlg-video-title-${i}`} />
+                    <Input placeholder="https://youtu.be/..." value={v.url} onChange={(e) => setDlgVideos((list) => list.map((x, idx) => (idx === i ? { ...x, url: e.target.value } : x)))} className="rounded-lg h-8 text-xs flex-1 num" data-testid={`dlg-video-url-${i}`} />
+                    <button type="button" onClick={() => { setDlgVideos((list) => list.filter((_, idx) => idx !== i)); if (v.id) setRemovedVideoIds((r) => [...r, v.id]); }} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+                {dlgVideos.length === 0 && <p className="text-[11px] text-slate-400">No videos yet.</p>}
+              </div>
             </div>
           </div>
           <DialogFooter>

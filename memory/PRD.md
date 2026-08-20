@@ -1,7 +1,8 @@
 ## Implemented (2026-08-20) — 1-Click Video Attach + In-Tour Language Switch
+- **In-product-dialog video manager**: the product New/Edit dialog now has a "Training videos" block — add multiple videos, name/rename each (e.g. "Add dry-erase lamination"), and remove. For NEW products the videos are buffered and created (linked via ref_id) right after the product saves. Verified: add 2 videos on create → persist on reopen.
 - **`TrainingVideoManager` component** (`components/TrainingVideoManager.js`): reusable per-item video attach. A video icon button now lives on every **product row** (ProductsCatalog) and a "Training Videos per Machine" list on **Machinery** — opens a dialog pre-linked to that product/machine to paste a YouTube/Vimeo/Drive/OneDrive link and save (no need to go to the Training Center and pick from a dropdown). Verified: attach + list on a product.
 - **In-tour language switch**: driver.js popover now renders an ES/EN toggle (`onPopoverRender`) that swaps the tour language in-place at the current step (via `getActiveIndex()` + rebuild), without restarting. Verified: ES→EN at step 1.
-- NOTE: There is NO auto-upload to YouTube (user asked). Workflow is: upload to YouTube unlisted → paste link. Auto-upload via YouTube Data API + Google OAuth is a possible future build (Option B).
+- NOTE: There is NO auto-upload to YouTube (user decided 2026-08-20 to keep the simple paste-link flow — no daily quota limits, no Google Cloud setup). Option B (YouTube Data API upload + Google OAuth) explicitly declined for now. YouTube channel would have been under info@printandsave.net if revisited.
 
 
 ## Implemented (2026-08-20) — Interactive Guided Tours (driver.js)
