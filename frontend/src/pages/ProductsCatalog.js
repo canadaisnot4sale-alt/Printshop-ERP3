@@ -30,11 +30,18 @@ export default function ProductsCatalog() {
   const [editId, setEditId] = useState(null);
   const [dlgVideos, setDlgVideos] = useState([]);
   const [removedVideoIds, setRemovedVideoIds] = useState([]);
+  const [cfgVideos, setCfgVideos] = useState([]);
+  const [cfgRemovedVideoIds, setCfgRemovedVideoIds] = useState([]);
   const [cfgProd, setCfgProd] = useState(null);
   const [regenTone, setRegenTone] = useState("professional");
   const [regenLoading, setRegenLoading] = useState(false);
   const copy = (t) => { navigator.clipboard.writeText(t || ""); toast.success("Copied"); };
-  const openConfig = (p) => { setCfgProd(JSON.parse(JSON.stringify(p))); setRegenTone("professional"); };
+  const openConfig = (p) => {
+    setCfgProd(JSON.parse(JSON.stringify(p))); setRegenTone("professional"); setCfgRemovedVideoIds([]);
+    api.get("/training/videos", { params: { category: "product", ref_id: p.id } })
+      .then(({ data }) => setCfgVideos(data.map((v) => ({ id: v.id, url: v.url, title_es: v.title_es || "", title_en: v.title_en || "" }))))
+      .catch(() => setCfgVideos([]));
+  };
   const setC = (patch) => setCfgProd((p) => ({ ...p, ...patch }));
   const setCfgField = (k, v) => setCfgProd((p) => ({ ...p, config: { ...(p.config || {}), [k]: v } }));
   const setTurn2 = (id, patch) => setCfgProd((p) => ({ ...p, config: { ...p.config, turnarounds: (p.config.turnarounds || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) } }));
@@ -50,8 +57,17 @@ export default function ProductsCatalog() {
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); } finally { setRegenLoading(false); }
   };
   const saveConfig = async () => {
-    try { const { id, your_price, dynamic_pricing, computed_cost, ...rest } = cfgProd; await api.put(`/catalog-products/${id}`, rest); toast.success("Product updated"); setCfgProd(null); load(); }
-    catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
+    try {
+      const { id, your_price, dynamic_pricing, computed_cost, ...rest } = cfgProd;
+      await api.put(`/catalog-products/${id}`, rest);
+      for (const rid of cfgRemovedVideoIds) { try { await api.delete(`/training/videos/${rid}`); } catch (e) {} }
+      for (const v of cfgVideos) {
+        if (!v.url || !v.url.trim()) continue;
+        const body = { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: id, ref_label: cfgProd.name };
+        if (v.id) await api.put(`/training/videos/${v.id}`, body); else await api.post("/training/videos", body);
+      }
+      toast.success("Product updated"); setCfgProd(null); load();
+    } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
   };
   const gt = (v) => (v && typeof v === "object" ? `EN: ${v.en || ""}\n\nES: ${v.es || ""}` : (v || ""));
 
@@ -328,6 +344,20 @@ export default function ProductsCatalog() {
                       <button key={x.id} type="button" onClick={() => toggleRel(x.id)} className={`text-[11px] rounded-full px-2 py-0.5 border ${(cfgProd.config?.related_ids || []).includes(x.id) ? "bg-[#2495D3] text-white border-[#2495D3]" : "border-slate-300 text-slate-600"}`}>{x.name}</button>
                     ))}
                   </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1"><Video size={13} /> Training videos</Label>
+                    <button type="button" onClick={() => setCfgVideos((v) => [...v, { url: "", title_es: "", title_en: "" }])} className="text-[11px] text-[#2495D3] hover:underline" data-testid="cfg-add-video">+ Add</button>
+                  </div>
+                  {cfgVideos.map((v, i) => (
+                    <div key={i} className="flex items-center gap-1.5 mb-1.5" data-testid="cfg-video-row">
+                      <Input value={v.title_es} onChange={(e) => setCfgVideos((l) => l.map((x, idx) => (idx === i ? { ...x, title_es: e.target.value } : x)))} placeholder="Nombre / Name" className="rounded-lg h-8 text-xs w-32" data-testid={`cfg-video-title-${i}`} />
+                      <Input value={v.url} onChange={(e) => setCfgVideos((l) => l.map((x, idx) => (idx === i ? { ...x, url: e.target.value } : x)))} placeholder="https://youtu.be/..." className="rounded-lg h-8 text-xs flex-1 num" data-testid={`cfg-video-url-${i}`} />
+                      <button type="button" onClick={() => { setCfgVideos((l) => l.filter((_, idx) => idx !== i)); if (v.id) setCfgRemovedVideoIds((r) => [...r, v.id]); }} className="text-slate-300 hover:text-red-500"><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                  {cfgVideos.length === 0 && <p className="text-[11px] text-slate-400 mt-1">No videos yet.</p>}
                 </div>
               </div>
 
