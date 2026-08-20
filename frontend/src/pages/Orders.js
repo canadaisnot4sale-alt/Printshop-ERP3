@@ -25,9 +25,20 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [detail, setDetail] = useState(null);
   const [paying, setPaying] = useState(null);
+  const [machines, setMachines] = useState([]);
+  const [ink, setInk] = useState({ machine_id: "", area_sqft: "", coverage_pct: 100 });
 
   const load = () => api.get("/orders").then(({ data }) => setOrders(data));
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); if (isAdmin) api.get("/machines").then(({ data }) => setMachines(data)).catch(() => {}); }, []);
+
+  const deductInk = async () => {
+    if (!ink.machine_id || !ink.area_sqft) { toast.error("Pick a machine and enter the area (ft²)"); return; }
+    try {
+      const { data } = await api.post(`/orders/${detail.id}/deduct-ink`, { machine_id: ink.machine_id, area_sqft: Number(ink.area_sqft), coverage_pct: Number(ink.coverage_pct) });
+      toast.success(`Deducted ${data.ml} ml of ink`);
+      setDetail({ ...detail, ink_deducted: { ml: data.ml, lines: data.lines } });
+    } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
+  };
 
   const pay = async (order) => {
     setPaying(order.id);
@@ -191,6 +202,28 @@ export default function Orders() {
                       <span className="num">{d.used} + {d.waste} waste = {d.total} {d.unit} → stock {d.new_stock}{d.short ? " ⚠" : ""}</span>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+          {isAdmin && (
+            <div className="rounded-lg border border-slate-200 p-3 print:hidden" data-testid="ink-deduct-panel">
+              <div className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mb-2">Ink used (deduct when in production)</div>
+              {detail?.ink_deducted ? (
+                <div className="text-xs text-emerald-600" data-testid="ink-deducted-note">✓ Ink deducted: {detail.ink_deducted.ml} ml</div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={ink.machine_id} onValueChange={(v) => setInk({ ...ink, machine_id: v })}>
+                    <SelectTrigger className="rounded-lg h-9 w-44" data-testid="ink-machine"><SelectValue placeholder="Machine" /></SelectTrigger>
+                    <SelectContent>{machines.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <input type="number" value={ink.area_sqft} onChange={(e) => setInk({ ...ink, area_sqft: e.target.value })} placeholder="Area ft²" data-testid="ink-area"
+                    className="rounded-lg h-9 w-24 border border-slate-200 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#2495D3]" />
+                  <Select value={String(ink.coverage_pct)} onValueChange={(v) => setInk({ ...ink, coverage_pct: Number(v) })}>
+                    <SelectTrigger className="rounded-lg h-9 w-28" data-testid="ink-coverage"><SelectValue /></SelectTrigger>
+                    <SelectContent>{[25, 50, 75, 100].map((c) => <SelectItem key={c} value={String(c)}>{c}% coverage</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Button onClick={deductInk} className="bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg h-9" data-testid="ink-deduct-btn">Deduct ink</Button>
                 </div>
               )}
             </div>

@@ -270,6 +270,7 @@ class Material(BaseModel):
     labor_minutes: float = 0.0                   # labor to finish one unit
     machine_id: Optional[str] = None             # machine that fabricates (ink + hourly)
     ink_coverage_pct: float = 0.0
+    ink_volume_ml: float = 0.0                   # ink: volume per bottle (1000=1L, 440, 220); stock_qty = # bottles
     price_override: Optional[float] = None       # manual RETAIL price
     wholesale_price_override: Optional[float] = None  # manual WHOLESALE price
     retail_markup_pct: Optional[float] = None    # per-material override
@@ -1892,6 +1893,7 @@ class PurchaseLine(BaseModel):
     size: str = ""
     category: str = ""
     machine_id: str = ""
+    ink_volume_ml: float = 0.0
 
 class PurchaseSupplier(BaseModel):
     company: str = ""
@@ -1941,6 +1943,17 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                 cat, li.quantity, li.size, li.description or li.name,
                 li.line_total, li.unit_price, li.unit_multiplier)
             store_cat = "paper" if cat == "laminate" else cat   # laminate is stored as paper + paper_type=laminate
+            if store_cat == "ink":
+                vol = float(li.ink_volume_ml or 0)
+                if not vol:
+                    _dl = (li.description or li.name or "").lower()
+                    _m = re.search(r"(\d+(?:\.\d+)?)\s*(l|ml)\b", _dl)
+                    if _m:
+                        _v = float(_m.group(1)); vol = _v * 1000 if _m.group(2) == "l" else _v
+                li.ink_volume_ml = vol
+                stock_units = li.quantity      # ink stock is counted in bottles
+                unit_cost = li.unit_price       # cost per bottle
+                extra = {}; size_str = ""
             line_modules = list(dict.fromkeys((cat_mods or []) + (body.modules or [])))
             match = None
             if li.material_id:
@@ -1981,6 +1994,10 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                         upd[k] = v
                 if li.machine_id:
                     upd["machine_id"] = li.machine_id
+                if store_cat == "ink":
+                    upd["unit"] = "bottle"
+                    if li.ink_volume_ml:
+                        upd["ink_volume_ml"] = li.ink_volume_ml
                 await db.materials.update_one({"_id": match["_id"]}, {"$set": upd})
                 affected.append({"id": str(match["_id"]), "name": match.get("name"), "action": "updated"})
             else:
@@ -1997,9 +2014,12 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                     "stock_qty": stock_units, "reorder_point": _rp_default, "reorder_target": round(stock_units, 2),
                     "modules": line_modules, "is_default": False,
                     "machine_id": li.machine_id or None,
+                    "ink_volume_ml": li.ink_volume_ml or 0.0,
                     "last_purchase_at": now_iso(), "created_at": now_iso(),
                 }
                 doc.update({k: v for k, v in extra.items() if k not in ("unit", "size")})
+                if store_cat == "ink":
+                    doc["unit"] = "bottle"
                 res = await db.materials.insert_one(doc)
                 affected.append({"id": str(res.inserted_id), "name": doc["name"], "action": "created"})
         # Train the supplier rule: remember the unit multiplier for next time.
@@ -3711,6 +3731,39 @@ async def update_order_status(oid: str, body: OrderStatusIn, user=Depends(requir
 async def delete_order(oid: str, user=Depends(require_admin)):
     await db.orders.delete_one({"_id": ObjectId(oid)})
     return {"ok": True}
+
+class InkDeductIn(BaseModel):
+    machine_id: str
+    area_sqft: float
+    coverage_pct: float = 100.0
+
+@api_router.post("/orders/{oid}/deduct-ink")
+async def deduct_order_ink(oid: str, body: InkDeductIn, user=Depends(require_admin)):
+    order = await db.orders.find_one({"_id": ObjectId(oid)})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.get("ink_deducted"):
+        raise HTTPException(400, "Ink already deducted for this order")
+    s = await get_settings()
+    rate = float(s.get("ink_ml_per_sqft_full") or 10.0)
+    ml = round(float(body.area_sqft) * (float(body.coverage_pct) / 100.0) * rate, 2)
+    inks = await db.materials.find({"category": "ink", "machine_id": body.machine_id}).to_list(200)
+    if not inks:
+        raise HTTPException(400, "No inks are linked to this machine")
+    total_ml = sum((float(m.get("stock_qty") or 0) * float(m.get("ink_volume_ml") or 0)) for m in inks)
+    if total_ml <= 0:
+        raise HTTPException(400, "No ink stock available for this machine")
+    deducted = []
+    for m in inks:
+        vol = float(m.get("ink_volume_ml") or 0) or 1
+        cur_ml = float(m.get("stock_qty") or 0) * vol
+        share = (cur_ml / total_ml) * ml
+        new_bottles = round(max(0.0, cur_ml - share) / vol, 4)
+        await db.materials.update_one({"_id": m["_id"]}, {"$set": {"stock_qty": new_bottles}})
+        deducted.append({"id": str(m["_id"]), "name": m.get("name"), "ml": round(share, 2), "bottles_left": new_bottles})
+    info = {"machine_id": body.machine_id, "area_sqft": body.area_sqft, "coverage_pct": body.coverage_pct, "ml": ml, "at": now_iso(), "lines": deducted}
+    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"ink_deducted": info}})
+    return {"ok": True, "ml": ml, "lines": deducted}
 
 class OrderFileIn(BaseModel):
     file_id: str

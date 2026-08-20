@@ -114,6 +114,7 @@ export default function Purchases() {
           import_material: !!li.import,
           material_id: li.material_id || "",
           machine_id: li.machine_id || "",
+          ink_volume_ml: li.ink_volume_ml || 0,
           size: li.size || "",
           category: li.category || "",
           unit_multiplier: Number(draft.supplier_unit_multiplier || 1),
@@ -364,13 +365,20 @@ export default function Purchases() {
                             className="rounded h-7 text-xs border border-slate-200 bg-white px-1 focus:outline-none focus:ring-1 focus:ring-[#2495D3]">
                             {["roll", "substrate", "paper", "sheet", "ink", "laminate", "other"].map((c) => <option key={c} value={c}>{c}</option>)}
                           </select>
-                          {li.category === "ink" && (
+                          {li.category === "ink" && (<>
                             <select data-testid={`draft-line-machine-${i}`} value={li.machine_id || ""} onChange={(e) => setLine(i, "machine_id", e.target.value)}
                               className="rounded h-7 text-xs border border-slate-200 bg-white px-1 mt-1 block w-full focus:outline-none focus:ring-1 focus:ring-[#2495D3]">
                               <option value="">— machine —</option>
                               {machines.map((mm) => <option key={mm.id} value={mm.id}>{mm.name}</option>)}
                             </select>
-                          )}
+                            <select data-testid={`draft-line-volume-${i}`} value={li.ink_volume_ml || ""} onChange={(e) => setLine(i, "ink_volume_ml", Number(e.target.value))}
+                              className="rounded h-7 text-xs border border-slate-200 bg-white px-1 mt-1 block w-full focus:outline-none focus:ring-1 focus:ring-[#2495D3]">
+                              <option value="">— volume —</option>
+                              <option value="1000">1L (1000 ml)</option>
+                              <option value="440">440 ml</option>
+                              <option value="220">220 ml</option>
+                            </select>
+                          </>)}
                         </td>
                         <td className="px-2 py-1.5"><Input data-testid={`draft-line-size-${i}`} value={li.size || ""} onChange={(e) => setLine(i, "size", e.target.value)} placeholder="12x18" className="rounded h-7 text-xs w-20" /></td>
                         <td className="px-2 py-1.5"><Input type="number" value={li.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} className="rounded h-7 text-xs w-16 text-right num" /></td>
