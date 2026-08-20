@@ -54,6 +54,15 @@ export default function StoreProduct() {
 
   useEffect(() => { fetchPrice(); }, [fetchPrice]);
 
+  useEffect(() => {
+    if (product?.name) {
+      document.title = product.seo_title || `${product.name} · Print and Save`;
+      let m = document.querySelector('meta[name="description"]');
+      if (!m) { m = document.createElement("meta"); m.name = "description"; document.head.appendChild(m); }
+      if (product.seo_description) m.content = product.seo_description;
+    }
+  }, [product]);
+
   const selected = options.find((o) => o.paper_id === paperId);
   const allowedAddons = cfg?.addons || {};
   const showAddon = (k) => allowedAddons[k];
@@ -206,6 +215,27 @@ export default function StoreProduct() {
           </div>
         </div>
       </div>
+
+      {/* You may also like */}
+      {(product?.related?.length > 0) && (
+        <div className="mt-12" data-testid="sp-related">
+          <h2 className="font-head font-black text-xl mb-4">You may also like</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {product.related.map((r) => (
+              <button key={r.id} data-testid="sp-related-card" onClick={() => (r.configurable ? nav(`/store/product/${r.id}`) : nav("/store"))}
+                className="text-left bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
+                {r.image_url
+                  ? <img src={r.image_url} alt={r.name} className="w-full h-28 object-cover" />
+                  : <div className="w-full h-28 bg-slate-100 flex items-center justify-center text-slate-300"><ShoppingBag size={26} /></div>}
+                <div className="p-3">
+                  <div className="text-sm font-semibold line-clamp-1">{r.name}</div>
+                  <div className="text-[11px] text-slate-400">{r.configurable ? "Configure options" : money(r.price)}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Sticky add bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-slate-200 px-6 py-3 flex items-center justify-between z-20" data-testid="sp-sticky-bar">

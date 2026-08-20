@@ -3034,6 +3034,7 @@ class CatalogProduct(BaseModel):
     specs: dict = {}
     product_type: str = "static"       # "static" | "configurable_paper"
     config: dict = {}                  # for configurable_paper: base_product_id, sheet, allowed papers, addons, sides...
+    marketing: dict = {}               # AI-generated: descriptions, SEO meta, hashtags, social posts (EN + ES)
     # BoM: [{material_id, material_name, qty_per_unit, waste_per_order, waste_per_unit}]
     bom: List[dict] = []
 
@@ -3278,9 +3279,26 @@ async def store_paper_price(body: StorePaperPriceIn, user=Depends(get_current_us
     options = await _configurable_paper_options(prod, req, user)
     st = await get_settings()
     role = eff_role(user)
+    rel_ids = []
+    for x in (cfg.get("related_ids") or []):
+        try:
+            rel_ids.append(ObjectId(x))
+        except Exception:
+            pass
+    related = []
+    if rel_ids:
+        rdocs = await db.catalog_products.find({"_id": {"$in": rel_ids}, "published": True}).to_list(20)
+        related = [{"id": str(d["_id"]), "name": d.get("name"), "category": d.get("category"),
+                    "image_url": d.get("image_url", ""), "price": d.get("price") or 0,
+                    "configurable": d.get("product_type") == "configurable_paper"} for d in rdocs]
+    mk = prod.get("marketing") or {}
+    def _en(v):
+        return v.get("en") if isinstance(v, dict) else v
     return {"product": {"id": str(prod["_id"]), "name": prod.get("name"),
                         "category": prod.get("category"), "description": prod.get("description", ""),
-                        "image_url": prod.get("image_url", "")},
+                        "image_url": prod.get("image_url", ""),
+                        "seo_title": _en(mk.get("seo_title")), "seo_description": _en(mk.get("seo_description")),
+                        "related": related},
             "config": {"quantities": cfg.get("quantities") or STANDARD_QTYS,
                        "sides": cfg.get("sides") or ["4_0", "4_4"],
                        "default_sides": cfg.get("default_sides") or "4_0",
@@ -3296,6 +3314,56 @@ async def paper_match(product_id: str, user=Depends(require_admin)):
     docs = await db.catalog_products.find(
         {"product_type": "configurable_paper", "config.base_product_id": product_id}).to_list(50)
     return [{"id": str(d["_id"]), "name": d.get("name"), "published": bool(d.get("published"))} for d in docs]
+
+class MarketingGenIn(BaseModel):
+    name: str
+    category: str = ""
+    paper_class: str = ""
+    size: str = ""
+    sides: List[str] = []
+    addons: dict = {}
+    turnarounds: List[dict] = []
+    sample_price: Optional[float] = None
+
+@api_router.post("/marketing/generate")
+async def marketing_generate(body: MarketingGenIn, user=Depends(require_admin)):
+    import uuid as _uuid, json as _json
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    key = os.environ.get("EMERGENT_LLM_KEY")
+    if not key:
+        raise HTTPException(500, "LLM key not configured")
+    addons_on = [k for k, v in (body.addons or {}).items() if v]
+    turns = ", ".join(f"{t.get('label')} (+{t.get('pct')}%)" for t in (body.turnarounds or [])) or "Standard"
+    ctx = (f"Product name: {body.name}\nCategory: {body.category}\nPaper/material: {body.paper_class}\n"
+           f"Finished size: {body.size or 'n/a'}\nPrint sides: {', '.join(body.sides) or 'single'}\n"
+           f"Add-ons available: {', '.join(addons_on) or 'none'}\nTurnaround options: {turns}\n"
+           f"Starting price: {body.sample_price if body.sample_price is not None else 'n/a'}\n"
+           f"Business: a Canadian print shop called Print and Save.")
+    schema = ('{"short_description":{"en":"","es":""},"long_description":{"en":"","es":""},'
+              '"features":{"en":["",""],"es":["",""]},"seo_title":{"en":"","es":""},'
+              '"seo_description":{"en":"","es":""},"slug":"","keywords":{"en":["",""],"es":["",""]},'
+              '"hashtags":["#tag"],"instagram":{"en":"","es":""},"facebook":{"en":"","es":""},'
+              '"kijiji":{"en":{"title":"","body":""},"es":{"title":"","body":""}},"image_alt":{"en":"","es":""}}')
+    system = ("You are an expert e-commerce copywriter and SEO specialist for a print shop. "
+              "Return ONLY valid minified JSON (no markdown, no code fences, no commentary). "
+              "Provide every en/es field in BOTH English and Spanish. Rules: seo_title <=60 chars; "
+              "seo_description <=160 chars; slug lowercase kebab-case in English; hashtags 10-14 items each starting with '#'; "
+              "features 4-6 short benefit bullets; copy must be accurate, persuasive and ready to publish.")
+    prompt = f"Write the marketing/SEO content bundle for this product.\n\n{ctx}\n\nReturn JSON EXACTLY in this shape:\n{schema}"
+    chat = LlmChat(api_key=key, session_id=f"mktg-{_uuid.uuid4()}", system_message=system).with_model("anthropic", "claude-sonnet-4-6")
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        raise HTTPException(502, f"AI generation failed: {e}")
+    txt = resp if isinstance(resp, str) else (getattr(resp, "content", None) or getattr(resp, "text", None) or str(resp))
+    txt = txt.strip()
+    a, b = txt.find("{"), txt.rfind("}")
+    if a >= 0 and b > a:
+        txt = txt[a:b + 1]
+    try:
+        return _json.loads(txt)
+    except Exception:
+        raise HTTPException(502, "AI returned invalid content, please retry")
 
 # ---------------- Orders (storefront) + inventory deduction ----------------
 async def deduct_inventory_for_order(enriched):

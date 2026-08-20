@@ -18,7 +18,7 @@ import { useRequote } from "@/lib/useRequote";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Calculator, Layers, FileStack, DollarSign, Tag, Package, X } from "lucide-react";
+import { Calculator, Layers, FileStack, DollarSign, Tag, Package, X, Sparkles } from "lucide-react";
 
 const SHEETS = ["8.5x11", "8.5x14", "11x17", "12x18", "13x19"];
 const STD_TIERS = [25, 50, 100, 250, 500, 1000, 2500, 5000];
@@ -97,6 +97,8 @@ export default function PaperPrinting() {
   const [matches, setMatches] = useState([]);
   const [convOpen, setConvOpen] = useState(false);
   const [convForm, setConvForm] = useState(null);
+  const [catalogProducts, setCatalogProducts] = useState([]);
+  const [genLoading, setGenLoading] = useState(false);
   const loadProducts = () => api.get("/products").then((r) => {
     const list = [...r.data].sort((a, b) => (Number(a.finished_w) * Number(a.finished_h)) - (Number(b.finished_w) * Number(b.finished_h)) || Number(a.finished_w) - Number(b.finished_w));
     setProducts(list);
@@ -203,7 +205,9 @@ export default function PaperPrinting() {
       ],
       defaultTurn: "standard",
       addons: { lamination: laminate, hot_foil: hotFoil, round_corners: roundCorners },
+      marketing: null, relatedIds: [],
     });
+    api.get("/catalog-products").then((r) => setCatalogProducts((r.data || []).filter((p) => p.published))).catch(() => {});
     setConvOpen(true);
   };
   const toggleAllowed = (id) => setConvForm((f) => ({ ...f, allowedIds: f.allowedIds.includes(id) ? f.allowedIds.filter((x) => x !== id) : [...f.allowedIds, id] }));
@@ -211,6 +215,21 @@ export default function PaperPrinting() {
   const setTurn = (id, patch) => setConvForm((f) => ({ ...f, turnarounds: f.turnarounds.map((t) => (t.id === id ? { ...t, ...patch } : t)) }));
   const addTurn = () => setConvForm((f) => ({ ...f, turnarounds: [...f.turnarounds, { id: `t${Date.now()}`, label: "", pct: 0 }] }));
   const removeTurn = (id) => setConvForm((f) => { const list = f.turnarounds.filter((t) => t.id !== id); return { ...f, turnarounds: list, defaultTurn: f.defaultTurn === id ? (list[0]?.id || "") : f.defaultTurn }; });
+  const generateAI = async () => {
+    const f = convForm;
+    setGenLoading(true);
+    try {
+      const { data } = await api.post("/marketing/generate", {
+        name: f.name, category: f.category, paper_class: f.paperClass,
+        size: result?.product ? `${num(result.product.finished_w)}" x ${num(result.product.finished_h)}"` : "",
+        sides: f.sides, addons: f.addons, turnarounds: f.turnarounds, sample_price: null,
+      });
+      setConvForm((p) => ({ ...p, marketing: data, description: data.short_description?.en || data.long_description?.en || p.description }));
+      toast.success("AI marketing generated");
+    } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
+    finally { setGenLoading(false); }
+  };
+
   const saveProduct = async () => {
     const f = convForm;
     if (!f.name.trim()) return toast.error("Name required");
@@ -221,6 +240,7 @@ export default function PaperPrinting() {
       await api.post("/catalog-products", {
         name: f.name, category: f.category, description: f.description, published: f.published,
         module: "paper", product_type: "configurable_paper", price: 0, wholesale_price: 0,
+        marketing: f.marketing || {},
         config: {
           base_product_id: productId, base_product_name: result.product?.name || "",
           sheet: canonSheet(sheet), auto_by_class: f.autoByClass, paper_class: f.paperClass,
@@ -228,6 +248,7 @@ export default function PaperPrinting() {
           quantities: STD_TIERS, sides: f.sides, default_sides: f.defaultSides, addons: f.addons,
           turnarounds: f.turnarounds.map((t) => ({ id: t.id, label: (t.label || "").trim() || "Option", pct: Number(t.pct) || 0 })),
           default_turnaround: f.defaultTurn || (f.turnarounds[0]?.id || ""),
+          related_ids: f.relatedIds || [],
           default_paper_id: selectedStock?.stock?.id || "",
           laminate_id: laminateId || "", laminate_sides: laminateSides, foil_id: foilId || "", foil_sides: foilSides,
         },
@@ -595,7 +616,31 @@ export default function PaperPrinting() {
                   <div><Label className="text-xs">Product name</Label><Input data-testid="conv-name" value={convForm.name} onChange={(e) => setConvForm((f) => ({ ...f, name: e.target.value }))} className="rounded-lg mt-1" /></div>
                   <div><Label className="text-xs">Category</Label><Input data-testid="conv-category" value={convForm.category} onChange={(e) => setConvForm((f) => ({ ...f, category: e.target.value }))} className="rounded-lg mt-1" /></div>
                 </div>
-                <div><Label className="text-xs">Description (optional)</Label><Input data-testid="conv-desc" value={convForm.description} onChange={(e) => setConvForm((f) => ({ ...f, description: e.target.value }))} className="rounded-lg mt-1" /></div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Description &amp; marketing</Label>
+                    <button type="button" onClick={generateAI} disabled={genLoading} className="text-[11px] text-[#2495D3] hover:underline inline-flex items-center gap-1 disabled:opacity-50" data-testid="conv-generate-ai">
+                      <Sparkles size={13} /> {genLoading ? "Generating…" : "Generate with AI"}
+                    </button>
+                  </div>
+                  <Input data-testid="conv-desc" value={convForm.description} onChange={(e) => setConvForm((f) => ({ ...f, description: e.target.value }))} className="rounded-lg mt-1" placeholder="Short store description (or generate with AI)" />
+                  {convForm.marketing && (
+                    <div className="mt-2 rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-[11px] text-emerald-800" data-testid="conv-ai-preview">
+                      AI content ready — SEO title, meta description, slug, {(convForm.marketing.hashtags || []).length} hashtags, Instagram / Facebook / Kijiji posts (EN + ES). Saved with the product.
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <Label className="text-xs">Related products ("You may also like")</Label>
+                  <div className="flex flex-wrap gap-2 mt-1" data-testid="conv-related">
+                    {catalogProducts.length === 0 && <span className="text-[11px] text-slate-400">No other products yet.</span>}
+                    {catalogProducts.map((p) => (
+                      <button key={p.id} type="button" onClick={() => setConvForm((f) => ({ ...f, relatedIds: f.relatedIds.includes(p.id) ? f.relatedIds.filter((x) => x !== p.id) : [...f.relatedIds, p.id] }))}
+                        className={`text-xs rounded-full px-3 py-1 border ${convForm.relatedIds.includes(p.id) ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-600 border-slate-300"}`}>{p.name}</button>
+                    ))}
+                  </div>
+                </div>
 
                 <div className="rounded-lg border border-slate-200 p-3">
                   <div className="flex items-center justify-between">
