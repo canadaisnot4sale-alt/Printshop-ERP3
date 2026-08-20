@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import TrainingVideoManager from "@/components/TrainingVideoManager";
 import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye, AlertTriangle, Megaphone, Copy, Sparkles } from "lucide-react";
 
 const BLANK = { name: "", category: "Other", price: 0, wholesale_price: 0, description: "", published: false, bom: [] };
@@ -168,6 +169,7 @@ export default function ProductsCatalog() {
                           <Switch checked={!!p.published} onCheckedChange={() => togglePublish(p)} data-testid="product-publish-toggle" />
                           <span className="text-[10px] text-slate-400">Publish</span>
                         </div>
+                        <TrainingVideoManager category="product" refId={p.id} refLabel={p.name} />
                         <button onClick={() => openEdit(p)} className="p-1.5 text-slate-400 hover:text-[#2495D3]" data-testid="product-edit"><Pencil size={15} /></button>
                         {p.product_type === "configurable_paper" && <button onClick={() => openConfig(p)} className="p-1.5 text-slate-400 hover:text-[#2495D3]" title="Configure & marketing" data-testid="product-configure"><Megaphone size={15} /></button>}
                         <button onClick={() => remove(p.id)} className="p-1.5 text-slate-400 hover:text-red-500" data-testid="product-delete"><Trash2 size={15} /></button>

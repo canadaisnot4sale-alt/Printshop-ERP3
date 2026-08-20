@@ -4,8 +4,9 @@ import PageHeader from "@/components/PageHeader";
 import CrudManager from "@/components/CrudManager";
 import MachineMaintenance from "@/components/MachineMaintenance";
 import { Metric } from "@/components/Metric";
+import TrainingVideoManager from "@/components/TrainingVideoManager";
 import { money } from "@/lib/format";
-import { Cpu, DollarSign, Clock, Wallet, Wrench } from "lucide-react";
+import { Cpu, DollarSign, Clock, Wallet, Wrench, Video } from "lucide-react";
 
 const CATS = ["largeformat", "directprint", "laser", "laserprint", "finishing", "other"];
 
@@ -55,6 +56,23 @@ export default function Machinery() {
         </div>
         <CrudManager endpoint="machines" fields={fields} columns={columns} prefix="machine" onChange={setItems} />
         <p className="text-xs text-slate-400">Monthly cost = (lease OR straight-line depreciation) + maintenance. Hourly cost = monthly ÷ productive hours (per-machine, else shop default). Ink/toner is charged per job in the calculators.</p>
+
+        <div className="pt-4 border-t border-slate-200">
+          <div className="flex items-center gap-2 mb-3">
+            <Video size={18} className="text-[#2495D3]" />
+            <h2 className="font-head font-bold text-lg">Training Videos per Machine</h2>
+          </div>
+          <p className="text-xs text-slate-400 mb-4 -mt-1">Attach how-to and maintenance videos to each machine (e.g. "Roland — service every 6 months"). Employees watch them in the Training Center.</p>
+          <div className="space-y-2 mb-2">
+            {items.map((m) => (
+              <div key={m.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-4 py-2" data-testid="machine-video-row">
+                <span className="text-sm font-medium">{m.name}</span>
+                <TrainingVideoManager category="machine" refId={m.id} refLabel={m.name} variant="button" />
+              </div>
+            ))}
+            {items.length === 0 && <p className="text-xs text-slate-400">Add a machine above first.</p>}
+          </div>
+        </div>
 
         <div className="pt-4 border-t border-slate-200">
           <div className="flex items-center gap-2 mb-4">
