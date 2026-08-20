@@ -61,7 +61,7 @@ export default function DTF() {
     if (rq.garmentId !== undefined) setGarmentId(rq.garmentId || "none");
     if (rq.quantity != null) setQuantity(rq.quantity);
     if (Array.isArray(rq.placements) && rq.placements.length) setPlacements(rq.placements);
-  }, calc);
+  }, calc, { moduleKey: "dtf", inputs: { garmentId, quantity, placements }, hasResult: !!res });
 
   return (
     <div data-testid="dtf-page">

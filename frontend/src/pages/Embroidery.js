@@ -46,7 +46,7 @@ export default function Embroidery() {
     if (rq.quantity != null) setQuantity(rq.quantity);
     if (rq.digitizing != null) setDigitizing(rq.digitizing);
     if (Array.isArray(rq.placements) && rq.placements.length) setPlacements(rq.placements);
-  }, calc);
+  }, calc, { moduleKey: "embroidery", inputs: { garmentId, quantity, digitizing, placements }, hasResult: !!res });
 
   return (
     <div data-testid="embroidery-page">

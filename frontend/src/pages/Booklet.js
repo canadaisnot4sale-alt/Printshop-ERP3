@@ -44,7 +44,7 @@ export default function Booklet() {
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
-  useRequote((rq) => { if (rq.f) setF((p) => ({ ...p, ...rq.f })); }, calc);
+  useRequote((rq) => { if (rq.f) setF((p) => ({ ...p, ...rq.f })); }, calc, { moduleKey: "booklet", inputs: { f }, hasResult: !!res });
 
   const bindingLabel = BINDINGS.find((b) => b.v === f.binding)?.l;
 

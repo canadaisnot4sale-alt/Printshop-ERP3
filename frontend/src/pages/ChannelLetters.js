@@ -24,7 +24,7 @@ export default function ChannelLetters() {
 
   useEffect(() => { api.get("/config").then((r) => setSheetSizes(Object.keys(r.data.big_sheets))); }, []);
   // Default Sheet size to the size of this module's DEFAULT material (unless re-quoting)
-  useDefaultSheetSize("/sheet-materials?module=channel-letters", setSheetSize);
+  useDefaultSheetSize("/sheet-materials?module=channel-letters", setSheetSize, "channel");
 
   const calc = async () => {
     try {
@@ -42,7 +42,7 @@ export default function ChannelLetters() {
   useRequote((rq) => {
     if (Array.isArray(rq.letters) && rq.letters.length) setLetters(rq.letters);
     if (rq.sheetSize) setSheetSize(rq.sheetSize);
-  }, calc);
+  }, calc, { moduleKey: "channel", inputs: { letters, sheetSize }, hasResult: !!sel });
 
   return (
     <div data-testid="channel-letters-page">

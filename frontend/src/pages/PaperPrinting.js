@@ -102,7 +102,7 @@ export default function PaperPrinting() {
     const p = String(s || "").toLowerCase().replace(/["\s]/g, "").replace(/×/g, "x").split("x").map(parseFloat);
     return (p.length === 2 && p.every((n) => !isNaN(n))) ? p.sort((a, b) => a - b).join("x") : s;
   };
-  useDefaultSheetSize("/paper-stocks?module=paper", (s) => setSheet(canonSheet(s)));
+  useDefaultSheetSize("/paper-stocks?module=paper", (s) => setSheet(canonSheet(s)), "paper");
 
   const sheetOpts = [...new Set([...SHEETS, ...(sheet ? [canonSheet(sheet)] : [])])];
   const fmtSheet = (s) => (s ? String(s).replace(/x/i, '"x') + '"' : s);
@@ -164,7 +164,7 @@ export default function PaperPrinting() {
     if (rq.foil_sides) setFoilSides(rq.foil_sides);
     if (rq.side) setSide(rq.side);
     if (rq.focusQty) setFocusQty(rq.focusQty);
-  }, calc);
+  }, calc, { moduleKey: "paper", inputs: { productId, sheet, laminate, laminate_id: laminateId, laminate_sides: laminateSides, hot_foil: hotFoil, foil_id: foilId, foil_sides: foilSides, side, focusQty }, hasResult: !!result });
 
   // Auto-recalc when add-ons change (once a quote already exists) so toggling Lamination / Hot Foil /
   // Round Corners — or switching the laminate/foil material or sides — updates prices without re-clicking Generate.

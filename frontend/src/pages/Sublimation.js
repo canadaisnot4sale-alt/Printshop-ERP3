@@ -61,7 +61,7 @@ export default function Sublimation() {
   useRequote((rq) => {
     if (rq.productId) setProductId(rq.productId);
     if (rq.qty != null) setQty(rq.qty);
-  }, calc);
+  }, calc, { moduleKey: "sublimation", inputs: { productId, qty }, hasResult: !!res });
 
   return (
     <div data-testid="sublimation-page">

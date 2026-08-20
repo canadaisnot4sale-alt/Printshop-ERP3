@@ -49,7 +49,7 @@ export default function Stickers() {
     if (rq.qty != null) setQty(rq.qty);
     if (rq.finishing) setFinishing(rq.finishing);
     if (rq.laminate != null) setLaminate(rq.laminate);
-  }, calc);
+  }, calc, { moduleKey: "stickers", inputs: { w, h, qty, finishing, laminate }, hasResult: !!sel });
 
   const SizeCtl = ({ label, val, set }) => (
     <div className="mb-5">

@@ -58,7 +58,7 @@ export default function RollStickers() {
   useRequote((rq) => {
     if (rq.matId) setMatId(rq.matId);
     if (rq.qty != null) setQty(rq.qty);
-  }, calc);
+  }, calc, { moduleKey: "rollstickers", inputs: { matId, qty }, hasResult: !!res });
 
   return (
     <div data-testid="roll-stickers-page">

@@ -78,6 +78,11 @@ export default function Laser() {
     } catch (e) { toast.error(apiErr(e.response?.data?.detail)); }
   };
 
+  useRequote((rq) => {
+    if (Array.isArray(rq.sizes) && rq.sizes.length) setSizes(rq.sizes);
+    if (rq.cfg) setCfg((p) => ({ ...p, ...rq.cfg }));
+  }, calc, { moduleKey: "laser", inputs: { sizes, cfg }, hasResult: !!sel });
+
   return (
     <div data-testid="laser-page">
       <PageHeader title="Laser Products" eyebrow="Live Pricing" subtitle="Material + cut + engraving · save machine presets" />

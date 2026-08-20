@@ -56,7 +56,7 @@ export default function DirectPrint() {
 
   useEffect(() => { api.get("/config").then((r) => setSheetSizes(Object.keys(r.data.big_sheets))); }, []);
   // Default Sheet size to the size of this module's DEFAULT material (unless re-quoting)
-  useDefaultSheetSize("/sheet-materials?module=direct-print", setSheetSize);
+  useDefaultSheetSize("/sheet-materials?module=direct-print", setSheetSize, "directprint");
 
   const calc = async () => {
     try {
@@ -78,7 +78,7 @@ export default function DirectPrint() {
     if (rq.sheetSize) setSheetSize(rq.sheetSize);
     if (rq.cnc != null) setCnc(rq.cnc);
     if (rq.cncLen != null) setCncLen(rq.cncLen);
-  }, calc);
+  }, calc, { moduleKey: "directprint", inputs: { sizes, sheetSize, cnc, cncLen }, hasResult: !!sel });
 
   return (
     <div data-testid="direct-print-page">

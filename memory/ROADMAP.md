@@ -7,6 +7,7 @@
   - Suggest a "recommended retail price" to hit a chosen margin.
 
 ## Done (2026-06)
+- **In-memory quote persistence across ALL 11 estimating modules**: the generated quote + inputs are kept when navigating between modules (client-side), and reset on a browser refresh (F5). Implemented via `lib/calcCache.js` (module-level in-memory store) + extended `useRequote(applyAll, calc, { moduleKey, inputs, hasResult })`; `useDefaultSheetSize` skips when a cached quote exists. Laser gained a `useRequote` call (didn't have one). Verified via screenshots (switch module → quote stays; refresh → resets).
 - Paper Printing **Product dropdown** now matches the Paper Products table: sorted by finished area ascending (11x17/12x18 at the bottom) and labeled with both dimensions in inch marks (e.g. `Business Card — 3.50" × 2.00"`). Verified via screenshot.
 
 ## P0 / P1 backlog

@@ -95,7 +95,7 @@ export default function LargeFormat() {
     if (rq.laminate != null) setLaminate(rq.laminate);
     if (rq.machineId) setMachineId(rq.machineId);
     if (rq.inkCoverage != null) setInkCoverage(rq.inkCoverage);
-  }, calc);
+  }, calc, { moduleKey: "largeformat", inputs: { sizes, mode, laminate, machineId, inkCoverage }, hasResult: !!sel });
 
   const totalPieces = sizes.reduce((a, s) => a + (+s.qty || 0), 0);
 
