@@ -19,7 +19,7 @@ import { useNavigate } from "react-router-dom";
 import { API } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Calculator, Layers, FileStack, DollarSign, Tag, Package, X, Sparkles } from "lucide-react";
+import { Calculator, Layers, FileStack, DollarSign, Tag, Package, X, Sparkles, Copy } from "lucide-react";
 
 const SHEETS = ["8.5x11", "8.5x14", "11x17", "12x18", "13x19"];
 const STD_TIERS = [25, 50, 100, 250, 500, 1000, 2500, 5000];
@@ -653,8 +653,21 @@ export default function PaperPrinting() {
                   </div>
                   <Input data-testid="conv-desc" value={convForm.description} onChange={(e) => setConvForm((f) => ({ ...f, description: e.target.value }))} className="rounded-lg mt-1" placeholder="Short store description (or generate with AI)" />
                   {convForm.marketing && (
-                    <div className="mt-2 rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-[11px] text-emerald-800" data-testid="conv-ai-preview">
-                      AI content ready — SEO title, meta description, slug, {(convForm.marketing.hashtags || []).length} hashtags, Instagram / Facebook / Kijiji posts (EN + ES). Saved with the product.
+                    <div className="mt-2 space-y-1.5" data-testid="conv-ai-preview">
+                      {(() => {
+                        const m = convForm.marketing;
+                        const gt = (v) => (v && typeof v === "object" ? `EN: ${v.en || ""}\n\nES: ${v.es || ""}` : (v || ""));
+                        const fields = [["SEO title", gt(m.seo_title)], ["SEO description", gt(m.seo_description)], ["Slug", m.slug], ["Hashtags", (m.hashtags || []).join(" ")], ["Short description", gt(m.short_description)], ["Long description", gt(m.long_description)], ["Instagram", gt(m.instagram)], ["Facebook", gt(m.facebook)], ["Kijiji", m.kijiji ? `EN: ${m.kijiji.en?.title || ""}\n${m.kijiji.en?.body || ""}\n\nES: ${m.kijiji.es?.title || ""}\n${m.kijiji.es?.body || ""}` : ""], ["Image alt", gt(m.image_alt)]];
+                        return fields.map(([label, val]) => (
+                          <div key={label} className="rounded-lg border border-slate-200 p-2" data-testid="conv-mk-field">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">{label}</span>
+                              <button type="button" onClick={() => { navigator.clipboard.writeText(val || ""); toast.success("Copied"); }} className="text-slate-400 hover:text-[#2495D3]"><Copy size={13} /></button>
+                            </div>
+                            <div className="text-[11px] text-slate-600 whitespace-pre-wrap line-clamp-4">{val || <span className="text-slate-300">— empty —</span>}</div>
+                          </div>
+                        ));
+                      })()}
                     </div>
                   )}
                 </div>

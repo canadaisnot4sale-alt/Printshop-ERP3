@@ -1,4 +1,6 @@
-## Implemented (2026-08-20) — Customer-visible training videos on store products
+## Implemented (2026-08-20) — Full marketing panel in Convert-to-product
+- The Paper Printing "Convert to product" dialog now renders the FULL marketing preview (SEO title, SEO description, slug, hashtags, short/long description, Instagram, Facebook, Kijiji, image alt — EN/ES) with per-field copy buttons, matching the unified editor. Previously only a one-line summary. Verified: AI generate → 10 fields shown.
+
 - Added `customer_visible` flag to `TrainingVideoIn` + new public endpoint `GET /api/store/products/{pid}/videos` (auth) returning only customer_visible product videos (id, titles, url, embed_url).
 - "Store" toggle added in ALL 3 video-adding areas (unified New/Edit product editor, Paper Printing Convert-to-product, and the reusable `TrainingVideoManager` used on product rows + machines). Convention: any future video-field change must be applied to these 3 areas.
 - StoreProduct page now shows a "How-to & guides" section with the customer-visible videos for that product. Verified: 2 videos (1 visible + 1 internal) → store endpoint returns only the visible one.
