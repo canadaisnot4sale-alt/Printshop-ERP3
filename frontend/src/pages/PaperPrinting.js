@@ -33,8 +33,8 @@ const prodFields = [
 ];
 const prodCols = [
   { name: "name", label: "Product" },
-  { name: "finished", label: "Finished", mono: true, render: (i) => `${num(i.finished_w)} × ${num(i.finished_h)}"` },
-  { name: "bleed", label: "With Bleed", mono: true, render: (i) => `${num(i.bleed_w || i.finished_w)} × ${num(i.bleed_h || i.finished_h)}"` },
+  { name: "finished", label: "Finished", mono: true, render: (i) => `${num(i.finished_w)}" × ${num(i.finished_h)}"` },
+  { name: "bleed", label: "With Bleed", mono: true, render: (i) => `${num(i.bleed_w || i.finished_w)}" × ${num(i.bleed_h || i.finished_h)}"` },
   { name: "gutter", label: "Gutter", mono: true, render: (i) => `${num(i.gutter || 0)}"` },
   { name: "is_default", label: "Default", render: (i) => (i.is_default ? <span className="text-[10px] font-mono uppercase bg-amber-100 text-amber-700 px-2 py-0.5 rounded">Default</span> : "—") },
 ];
@@ -505,7 +505,7 @@ export default function PaperPrinting() {
             )}
           </TabsContent>
           <TabsContent value="products" className="mt-6">
-            {isAdmin && <CrudManager endpoint="products" fields={prodFields} columns={prodCols} prefix="product" onChange={setProducts} />}
+            {isAdmin && <CrudManager endpoint="products" fields={prodFields} columns={prodCols} prefix="product" onChange={setProducts} sortFn={(a, b) => (Number(a.finished_w) * Number(a.finished_h)) - (Number(b.finished_w) * Number(b.finished_h)) || Number(a.finished_w) - Number(b.finished_w)} />}
           </TabsContent>
         </Tabs>
       </div>

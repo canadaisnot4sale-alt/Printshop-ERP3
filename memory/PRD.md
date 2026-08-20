@@ -117,6 +117,9 @@ Note: Direct Print & Channel Letters use full-sheet material costing (whole shee
 ## Fix (2026-06) — v39.1 Exclude laminate/foil from paper comparison
 - calc_paper now filters out paper_type=laminate/hot_foil (they are add-ons, not paper stocks) from the Compare Papers list; Paper Stocks reference tab also excludes them. Verified: Velvete laminate no longer appears as a paper option.
 
+## Fix (2026-06) — v51.1 Paper Products: numeric size sort + inch marks on both dims
+- Paper Products table now sorts numerically by finished area (ascending) instead of alphabetically by name (so 11x17/12x18 sit at the bottom, not top). Added optional `sortFn` prop to CrudManager. Finished/With-Bleed columns now render inch marks on both dimensions (e.g. `3.50" × 2.00"`). Verified via screenshot.
+
 ## Implemented (2026-06) — v51 Custom sheet/piece size in Paper Printing
 - Sheet Size dropdown now has a "Custom…" option; selecting it reveals W (in) & H (in) inputs. `calc/paper` accepts optional custom_w/custom_h → builds a synthetic product (finished = W×H, bleed = +0.25" per dimension, gutter 0) imposed on a forced 12x18 sheet, so the layout/n_up compute correctly for one-off custom-size jobs (no product needed). Auto-recalc includes customW/customH. `PaperCalcIn.product_id` now optional. Verified via curl (5.55×8.90 → 3-up on 12x18, piece 9.15×5.8 w/ bleed) + screenshot. Note: added missing `Input` import to PaperPrinting.js.
 

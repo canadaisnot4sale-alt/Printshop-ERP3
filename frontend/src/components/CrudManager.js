@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 
 // fields: [{name,label,type:'text'|'number'|'switch'|'select',options?}]
-export default function CrudManager({ endpoint, fields, columns, prefix, onChange, readOnly }) {
+export default function CrudManager({ endpoint, fields, columns, prefix, onChange, readOnly, sortFn }) {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({});
@@ -101,7 +101,7 @@ export default function CrudManager({ endpoint, fields, columns, prefix, onChang
             </tr>
           </thead>
           <tbody>
-            {items.map((it) => (
+            {(sortFn ? [...items].sort(sortFn) : items).map((it) => (
               <tr key={it.id} data-testid={`${prefix}-row`} className="border-b border-slate-100 hover:bg-slate-50">
                 {columns.map((c) => (
                   <td key={c.name} className={`px-4 py-2.5 ${c.mono ? "num tabular" : ""}`}>
