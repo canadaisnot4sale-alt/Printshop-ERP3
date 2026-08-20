@@ -1,3 +1,9 @@
+## Implemented (2026-08-20) — Cloudflare Turnstile + Google Login + Training Center
+- **Turnstile captcha** on public registration: frontend widget (`@marsidev/react-turnstile`) in `Login.js` (register mode); backend `verify_turnstile()` calls Cloudflare siteverify. Keys in env: `TURNSTILE_SECRET_KEY` (backend), `REACT_APP_TURNSTILE_SITE_KEY` (frontend). Verified: rejects missing/fake tokens with 400.
+- **Google Login** (Emergent OAuth) verified: `/api/auth/google/session` exchanges session_id→JWT; button in `Login.js`, handled in `AuthContext.js`. Rejects invalid sessions (401).
+- **Training Center** (`/training`, page `Training.js`): NEW `staff` role (only sees Training Center; blocked from all other routes/nav, redirects to /training). Bilingual EN/ES toggle. Tabs: System Manual (11 seeded editable sections, admin CRUD), Products / Machines / General video libraries (link-based: YouTube/Vimeo/Drive/OneDrive → auto embed_url). Backend: `/api/training/manual` + `/api/training/videos` (read=admin+staff via require_staff, write=admin). Seed content in `training_seed.py`. Staff test acct: empleado@test.com / staff123.
+
+
 # Print and Save — Print Shop ERP & Estimating
 
 ## ⏳ PENDING / USER-REQUESTED (remind the user — deferred by them on 2026-06)

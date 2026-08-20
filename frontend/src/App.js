@@ -38,19 +38,23 @@ import StoreHome from "@/pages/StoreHome";
 import StoreLayout from "@/components/StoreLayout";
 import Orders from "@/pages/Orders";
 import PaymentReturn from "@/pages/PaymentReturn";
+import Training from "@/pages/Training";
 
-function Protected({ children, adminOnly }) {
+function Protected({ children, adminOnly, training }) {
   const { user, ready } = useAuth();
   if (!ready) return <div className="p-10 font-mono text-sm">Loading…</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== "admin") return <Navigate to="/" replace />;
   const isCustomer = user.role === "client" || user.role === "reseller";
+  if (user.role === "staff" && !training) return <Navigate to="/training" replace />;
+  if (training && isCustomer) return <Navigate to="/" replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/" replace />;
   const Shell = isCustomer ? StoreLayout : Layout;
   return <Shell>{children}</Shell>;
 }
 
 function HomeRouter() {
   const { user } = useAuth();
+  if (user?.role === "staff") return <Navigate to="/training" replace />;
   return (user?.role === "client" || user?.role === "reseller") ? <StoreHome /> : <Dashboard />;
 }
 
@@ -82,6 +86,7 @@ function App() {
             <Route path="/store" element={<Protected><Storefront /></Protected>} />
             <Route path="/store/product/:id" element={<Protected><StoreProduct /></Protected>} />
             <Route path="/orders" element={<Protected><Orders /></Protected>} />
+            <Route path="/training" element={<Protected training><Training /></Protected>} />
             <Route path="/payment/success" element={<Protected><PaymentReturn /></Protected>} />
             <Route path="/payment/cancel" element={<Protected><PaymentReturn /></Protected>} />
             <Route path="/machinery" element={<Protected adminOnly><Machinery /></Protected>} />

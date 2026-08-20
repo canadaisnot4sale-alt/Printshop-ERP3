@@ -131,6 +131,11 @@ async def require_admin(user=Depends(get_current_user)) -> dict:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
+async def require_staff(user=Depends(get_current_user)) -> dict:
+    if user.get("role") not in ("admin", "staff"):
+        raise HTTPException(status_code=403, detail="Training access required")
+    return user
+
 # ---------------- Models ----------------
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -2457,7 +2462,7 @@ register_user_crud("job-presets", JobPreset, "job_presets")
 register_user_crud("laser-presets", LaserPreset, "laser_presets")
 
 # ---------------- User management (admin) ----------------
-ROLES = ["admin", "client", "reseller"]
+ROLES = ["admin", "staff", "client", "reseller"]
 
 @api_router.get("/users")
 async def list_users(user=Depends(require_admin)):
@@ -3921,7 +3926,112 @@ async def dashboard(user=Depends(get_current_user)):
 async def root():
     return {"message": "Print and Save ERP API"}
 
+# ---------------- Training Center ----------------
+import re as _re
+
+def training_embed_url(url: str) -> str:
+    """Convert common share links (YouTube, Vimeo, Google Drive, OneDrive) to embeddable URLs."""
+    if not url:
+        return ""
+    u = url.strip()
+    m = _re.search(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([\w-]{6,})", u)
+    if m:
+        return f"https://www.youtube.com/embed/{m.group(1)}"
+    m = _re.search(r"vimeo\.com/(?:video/)?(\d+)", u)
+    if m:
+        return f"https://player.vimeo.com/video/{m.group(1)}"
+    m = _re.search(r"drive\.google\.com/file/d/([\w-]+)", u)
+    if m:
+        return f"https://drive.google.com/file/d/{m.group(1)}/preview"
+    if "1drv.ms" in u or "onedrive.live.com" in u or "sharepoint.com" in u:
+        if "embed" in u:
+            return u
+        return u.replace("/redir?", "/embed?") if "/redir?" in u else u
+    return u
+
+class TrainingVideoIn(BaseModel):
+    title_en: str = ""
+    title_es: str = ""
+    description_en: str = ""
+    description_es: str = ""
+    url: str
+    category: str = "general"          # "product" | "machine" | "general"
+    ref_id: Optional[str] = None       # linked catalog product or machine id
+    ref_label: str = ""                # human label of the linked item
+    order: int = 0
+
+class ManualSectionIn(BaseModel):
+    group: str = "getting_started"
+    icon: str = "book"
+    order: int = 0
+    title_en: str = ""
+    title_es: str = ""
+    body_en: str = ""
+    body_es: str = ""
+
+@api_router.get("/training/videos")
+async def list_training_videos(category: Optional[str] = None, ref_id: Optional[str] = None, user=Depends(require_staff)):
+    q = {}
+    if category:
+        q["category"] = category
+    if ref_id:
+        q["ref_id"] = ref_id
+    items = [clean(v) for v in await db.training_videos.find(q).sort([("order", 1), ("created_at", -1)]).to_list(1000)]
+    return items
+
+@api_router.post("/training/videos")
+async def create_training_video(body: TrainingVideoIn, user=Depends(require_admin)):
+    doc = body.model_dump()
+    doc["embed_url"] = training_embed_url(doc["url"])
+    doc["created_at"] = now_iso()
+    res = await db.training_videos.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return clean(doc)
+
+@api_router.put("/training/videos/{vid}")
+async def update_training_video(vid: str, body: TrainingVideoIn, user=Depends(require_admin)):
+    doc = body.model_dump()
+    doc["embed_url"] = training_embed_url(doc["url"])
+    await db.training_videos.update_one({"_id": ObjectId(vid)}, {"$set": doc})
+    return clean(await db.training_videos.find_one({"_id": ObjectId(vid)}))
+
+@api_router.delete("/training/videos/{vid}")
+async def delete_training_video(vid: str, user=Depends(require_admin)):
+    await db.training_videos.delete_one({"_id": ObjectId(vid)})
+    return {"ok": True}
+
+@api_router.get("/training/manual")
+async def list_manual(user=Depends(require_staff)):
+    items = [clean(s) for s in await db.training_manual.find().sort("order", 1).to_list(1000)]
+    return items
+
+@api_router.post("/training/manual")
+async def create_manual_section(body: ManualSectionIn, user=Depends(require_admin)):
+    doc = body.model_dump()
+    doc["created_at"] = now_iso()
+    res = await db.training_manual.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return clean(doc)
+
+@api_router.put("/training/manual/{sid}")
+async def update_manual_section(sid: str, body: ManualSectionIn, user=Depends(require_admin)):
+    await db.training_manual.update_one({"_id": ObjectId(sid)}, {"$set": body.model_dump()})
+    return clean(await db.training_manual.find_one({"_id": ObjectId(sid)}))
+
+@api_router.delete("/training/manual/{sid}")
+async def delete_manual_section(sid: str, user=Depends(require_admin)):
+    await db.training_manual.delete_one({"_id": ObjectId(sid)})
+    return {"ok": True}
+
 app.include_router(api_router)
+
+async def seed_training_manual():
+    if await db.training_manual.count_documents({}) > 0:
+        return
+    from training_seed import MANUAL_SECTIONS
+    docs = [{**s, "created_at": now_iso()} for s in MANUAL_SECTIONS]
+    if docs:
+        await db.training_manual.insert_many(docs)
 
 @app.middleware("http")
 async def _view_as_mw(request, call_next):
@@ -3956,6 +4066,7 @@ async def startup():
     await calibrate_default_ink()
     await unify_materials_clean()
     await seed_materials()
+    await seed_training_manual()
     try:
         init_storage()
         logger.info("Object storage initialized")

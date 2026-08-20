@@ -5,7 +5,7 @@ import {
   LayoutGrid, FileText, BookOpen, Ruler, Sticker, Settings as Cog, LogOut,
   Shirt, Sparkles, Scissors, PanelTop, Type, Users as UsersIcon, FolderOpen,
   Coffee, Disc, BookMarked, Cpu, Receipt, LineChart, Droplet, Boxes, Truck, ReceiptText, PiggyBank,
-  ShoppingCart, Package, Store, ClipboardList,
+  ShoppingCart, Package, Store, ClipboardList, GraduationCap,
 } from "lucide-react";
 
 const NAV = [
@@ -27,6 +27,7 @@ const NAV = [
   { to: "/quote-builder", label: "Quote Builder", icon: ShoppingCart, testid: "nav-quote-builder" },
   { to: "/store", label: "Store", icon: Store, testid: "nav-store" },
   { to: "/orders", label: "Orders", icon: ClipboardList, testid: "nav-orders" },
+  { to: "/training", label: "Training", icon: GraduationCap, testid: "nav-training", staff: true },
   { section: "Business", admin: true },
   { to: "/products-catalog", label: "Products", icon: Package, testid: "nav-products", admin: true },
   { to: "/financials", label: "Financials", icon: LineChart, testid: "nav-financials", admin: true },
@@ -42,13 +43,14 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: Cog, testid: "nav-settings", admin: true },
 ];
 
-const ROLE_LABEL = { admin: "Administrator", client: "Client (Retail)", reseller: "Reseller (Wholesale)" };
+const ROLE_LABEL = { admin: "Administrator", staff: "Staff (Training)", client: "Client (Retail)", reseller: "Reseller (Wholesale)" };
 
 export default function Layout({ children }) {
   const { user, logout, realRole, viewAs, setViewAs } = useAuth();
   const cart = useCart();
   const nav = useNavigate();
   const isAdmin = user?.role === "admin";
+  const isStaff = user?.role === "staff";
 
   return (
     <div className="flex min-h-screen bg-[#F8F9FA]">
@@ -61,7 +63,7 @@ export default function Layout({ children }) {
           </div>
         </div>
         <nav className="flex-1 py-2 overflow-y-auto">
-          {NAV.filter((n) => !n.admin || isAdmin).map((n, i) =>
+          {NAV.filter((n) => (isStaff ? n.staff : (!n.admin || isAdmin))).map((n, i) =>
             n.section ? (
               <div key={i} className="px-5 pt-4 pb-1 text-[10px] font-mono uppercase tracking-widest text-slate-400">{n.section}</div>
             ) : (
