@@ -22,11 +22,13 @@ export function StoreCartProvider({ children }) {
   const remove = (lineKey) => setItems((prev) => prev.filter((x) => x.lineKey !== lineKey));
   const clear = () => setItems([]);
   const total = items.reduce((a, i) => a + (i.unitPrice || 0) * (i.qty || 1), 0);
+  const totalGst = items.reduce((a, i) => a + (i.gst || 0) * (i.qty || 1), 0);
+  const totalPst = items.reduce((a, i) => a + (i.pst || 0) * (i.qty || 1), 0);
   const totalInclTax = items.reduce((a, i) => a + ((i.priceInclTax ?? i.unitPrice) || 0) * (i.qty || 1), 0);
   const count = items.reduce((a, i) => a + (i.qty || 1), 0);
 
   return (
-    <StoreCartContext.Provider value={{ items, add, setQty, remove, clear, total, totalInclTax, count }}>
+    <StoreCartContext.Provider value={{ items, add, setQty, remove, clear, total, totalGst, totalPst, totalInclTax, count }}>
       {children}
     </StoreCartContext.Provider>
   );

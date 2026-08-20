@@ -527,6 +527,15 @@ _CURRENT_MODULE_CV: contextvars.ContextVar = contextvars.ContextVar("calc_module
 def set_calc_module(m):
     _CURRENT_MODULE_CV.set(m)
 
+_VIEW_AS_CV: contextvars.ContextVar = contextvars.ContextVar("view_as", default=None)
+
+def eff_role(user):
+    """Admin can preview the app as a client/reseller via the X-View-As header (affects price scrubbing only, not authorization)."""
+    va = _VIEW_AS_CV.get()
+    if user.get("role") == "admin" and va in ("client", "reseller"):
+        return va
+    return user.get("role")
+
 def discount_for_qty(qty, tiers):
     """Return the discount % for a quantity: the highest tier whose qty threshold <= qty."""
     pct = 0.0
@@ -539,6 +548,9 @@ def discount_for_qty(qty, tiers):
     return pct
 
 def scrub(data, role):
+    va = _VIEW_AS_CV.get()
+    if role == "admin" and va in ("client", "reseller"):
+        role = va
     # 1) Apply volume discount to every priced quantity container (all roles, idempotent).
     tiers = _VOLUME_DISCOUNTS_MAP.get(_CURRENT_MODULE_CV.get()) or _VOLUME_DISCOUNTS_MAP.get("default") or []
     if tiers:
@@ -3210,7 +3222,7 @@ async def _configurable_paper_options(prod, req, user):
     settings = await get_settings()
     gst = float(settings.get("gst_pct", 5) or 0)
     pst = float(settings.get("pst_pct", 7) or 0)
-    role = user.get("role")
+    role = eff_role(user)
     side = req.get("sides") if req.get("sides") in ("4_0", "4_4") else "4_0"
     qty = int(req.get("quantity") or 100)
     is_ws = role == "reseller"
@@ -3225,11 +3237,14 @@ async def _configurable_paper_options(prod, req, user):
         price = row.get(price_key)
         if price is None:
             price = row.get("customer_price_" + side) or row.get("wholesale_price_" + side) or 0
+        gst_amt = round((price or 0) * gst / 100.0, 2)
+        pst_amt = 0.0 if is_ws else round((price or 0) * pst / 100.0, 2)
         options.append({
             "paper_id": r["stock"]["id"], "paper_name": r["stock"]["name"],
             "is_default": bool(r["stock"].get("is_default")),
             "sheets": row.get("sheets"), "n_up": row.get("n_up"),
             "price": price, "unit_price": row.get(unit_key),
+            "subtotal": price, "gst": gst_amt, "pst": pst_amt,
             "price_incl_tax": round((price or 0) * tax_factor, 2),
         })
     options.sort(key=lambda o: o.get("price") or 0)
@@ -3254,13 +3269,18 @@ async def store_paper_price(body: StorePaperPriceIn, user=Depends(get_current_us
         raise HTTPException(404, "Product not found")
     options = await _configurable_paper_options(prod, body.model_dump(), user)
     cfg = prod.get("config") or {}
+    st = await get_settings()
+    role = eff_role(user)
     return {"product": {"id": str(prod["_id"]), "name": prod.get("name"),
                         "category": prod.get("category"), "description": prod.get("description", ""),
                         "image_url": prod.get("image_url", "")},
             "config": {"quantities": cfg.get("quantities") or STANDARD_QTYS,
                        "sides": cfg.get("sides") or ["4_0", "4_4"],
                        "default_sides": cfg.get("default_sides") or "4_0",
-                       "addons": cfg.get("addons") or {}},
+                       "addons": cfg.get("addons") or {},
+                       "gst_pct": float(st.get("gst_pct", 5) or 0),
+                       "pst_pct": float(st.get("pst_pct", 7) or 0),
+                       "role": role},
             "quantity": body.quantity, "sides": body.sides, "options": options}
 
 @api_router.get("/products/paper-match")
@@ -3691,6 +3711,11 @@ async def root():
     return {"message": "Print and Save ERP API"}
 
 app.include_router(api_router)
+
+@app.middleware("http")
+async def _view_as_mw(request, call_next):
+    _VIEW_AS_CV.set(request.headers.get("X-View-As"))
+    return await call_next(request)
 
 app.add_middleware(
     CORSMiddleware,

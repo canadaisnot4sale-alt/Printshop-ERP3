@@ -7,6 +7,8 @@
   - Suggest a "recommended retail price" to hit a chosen margin.
 
 ## Done (2026-06)
+- **Admin "View as" preview (Retail / Wholesale)**: sidebar footer toggle (admin only) sends `X-View-As` header; backend `eff_role()` + `scrub()` honor it (price scrubbing only, not authorization) so admin previews the whole app with client/reseller prices without a separate account. Amber banner + Exit while active. Verified via curl (reseller=wholesale w/ PST 0; client hides wholesale on /calc/paper) + screenshot.
+- **Store tax breakdown**: `/store/paper-price` returns per-option subtotal/GST/PST/total-incl-tax; StoreProduct page + cart checkout show Subtotal · GST · PST · Total incl. tax (PST = — for wholesale). Role-scrubbed. Verified.
 - **Configurable "Grab-n-Go" paper products (quote → sellable product)**: new admin **"Convert to product"** button in Paper Printing pricing bar opens a dialog (name, category, papers offered auto-by-class OR hand-picked, print sides, allowed add-ons lamination/foil/round-corners, publish). Creates a `configurable_paper` CatalogProduct storing the base piece + sheet + allowed papers + options.
   - **Client storefront**: dedicated product page `/store/product/:id` (own URL) — minimalist: quantity pills, One/Both sides, add-on switches, allowed papers side-by-side with **live role-based price incl. tax** (client=retail incl GST+PST, reseller=wholesale incl GST), sticky "Add to cart" bar, collapsible technical details. Reuses `/calc/paper` engine via `POST /api/store/paper-price`.
   - **Anti-duplicate alert**: `GET /api/products/paper-match?product_id=` — Paper Printing shows a banner when a configurable product already exists for the same base piece, so estimators reuse it instead of re-quoting.

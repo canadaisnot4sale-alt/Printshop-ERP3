@@ -8,6 +8,8 @@ const api = axios.create({ baseURL: API, withCredentials: true });
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("pns_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  const va = localStorage.getItem("pns_view_as");
+  if (va === "client" || va === "reseller") config.headers["X-View-As"] = va;
   return config;
 });
 

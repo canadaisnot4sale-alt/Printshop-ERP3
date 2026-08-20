@@ -118,8 +118,11 @@ export default function Storefront() {
                 <div className="num font-semibold w-20 text-right">{money(((v.priceInclTax ?? v.unitPrice) || 0) * v.qty)}</div>
               </div>
             ))}
-            <div className="flex justify-between pt-2 font-bold">
-              <span>Total incl. tax</span><span className="num text-[#2495D3]" data-testid="checkout-total">{money(cart.totalInclTax)}</span>
+            <div className="pt-2 space-y-1">
+              <div className="flex justify-between text-sm"><span className="text-slate-500">Subtotal</span><span className="num">{money(cart.total)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-500">GST</span><span className="num">{money(cart.totalGst)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-500">PST</span><span className="num">{money(cart.totalPst)}</span></div>
+              <div className="flex justify-between font-bold pt-1 border-t border-slate-100"><span>Total incl. tax</span><span className="num text-[#2495D3]" data-testid="checkout-total">{money(cart.totalInclTax)}</span></div>
             </div>
             <Textarea placeholder="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} className="rounded-lg mt-2" />
           </div>

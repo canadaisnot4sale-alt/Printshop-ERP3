@@ -49,6 +49,12 @@ export default function Layout({ children }) {
   const cart = useCart();
   const nav = useNavigate();
   const isAdmin = user?.role === "admin";
+  const viewAs = localStorage.getItem("pns_view_as") || "admin";
+  const setViewAs = (v) => {
+    if (v === "admin") localStorage.removeItem("pns_view_as");
+    else localStorage.setItem("pns_view_as", v);
+    window.location.reload();
+  };
 
   return (
     <div className="flex min-h-screen bg-[#F8F9FA]">
@@ -88,6 +94,17 @@ export default function Layout({ children }) {
           )}
         </nav>
         <div className="border-t border-slate-200 p-4">
+          {isAdmin && (
+            <div className="mb-3" data-testid="view-as-control">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-1">View as</div>
+              <div className="flex gap-1">
+                {[["admin", "Admin"], ["client", "Retail"], ["reseller", "Wholesale"]].map(([v, l]) => (
+                  <button key={v} data-testid={`view-as-${v}`} onClick={() => setViewAs(v)}
+                    className={`flex-1 text-[11px] rounded-md px-2 py-1 border transition-colors ${viewAs === v ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"}`}>{l}</button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="text-xs text-slate-700 font-medium truncate" data-testid="current-user-email">{user?.email}</div>
           <div className="text-[10px] text-[#2495D3] font-mono mb-2" data-testid="current-user-role">{ROLE_LABEL[user?.role] || user?.role}</div>
           <button
@@ -100,6 +117,12 @@ export default function Layout({ children }) {
         </div>
       </aside>
       <main className="flex-1 ml-60 min-h-screen print:ml-0">
+        {isAdmin && viewAs !== "admin" && (
+          <div className="bg-amber-100 text-amber-800 text-xs px-4 py-1.5 text-center font-mono print:hidden" data-testid="view-as-banner">
+            Viewing as {viewAs === "client" ? "Retail (Client)" : "Wholesale (Reseller)"} — prices shown as they see them.
+            <button onClick={() => setViewAs("admin")} className="underline ml-2 font-bold">Exit</button>
+          </div>
+        )}
         <div className="hidden print:flex items-center gap-3 px-8 py-4 border-b-2 border-[#2495D3] mb-2">
           <img src="/logo.webp" alt="Print and Save" className="w-12 h-12 object-contain" />
           <div>

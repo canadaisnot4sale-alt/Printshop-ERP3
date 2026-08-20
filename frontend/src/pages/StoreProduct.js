@@ -62,7 +62,8 @@ export default function StoreProduct() {
     const extras = [addons.lamination && "Lam", addons.hot_foil && "Foil", addons.round_corners && "Round"].filter(Boolean).join(", ");
     const label = `${product?.name} · ${selected.paper_name} · ${qty} pcs · ${SIDE_LABEL[sides]}${extras ? ` · ${extras}` : ""}`;
     cart.add({
-      lineKey, product_id: id, name: label, unitPrice: selected.price, priceInclTax: selected.price_incl_tax, qty: 1,
+      lineKey, product_id: id, name: label, unitPrice: selected.price, priceInclTax: selected.price_incl_tax,
+      gst: selected.gst, pst: selected.pst, qty: 1,
       config: { quantity: qty, sides, paper_id: paperId, laminate: !!addons.lamination, hot_foil: !!addons.hot_foil, round_corners: !!addons.round_corners },
     });
     toast.success("Added to cart");
@@ -159,6 +160,16 @@ export default function StoreProduct() {
               {options.length === 0 && !loading && <div className="text-sm text-slate-400 col-span-2 py-6 text-center">No papers available for these options.</div>}
             </div>
           </div>
+
+          {/* Tax breakdown for the selected paper */}
+          {selected && (
+            <div className="rounded-xl border border-slate-200 p-4" data-testid="sp-tax-breakdown">
+              <div className="flex justify-between text-sm py-0.5"><span className="text-slate-500">Subtotal</span><span className="num">{money(selected.subtotal)}</span></div>
+              <div className="flex justify-between text-sm py-0.5"><span className="text-slate-500">GST {cfg?.gst_pct}%</span><span className="num">{money(selected.gst)}</span></div>
+              <div className="flex justify-between text-sm py-0.5"><span className="text-slate-500">PST {cfg?.pst_pct}%</span><span className="num">{cfg?.role === "reseller" ? "—" : money(selected.pst)}</span></div>
+              <div className="flex justify-between text-base font-bold pt-1.5 border-t border-slate-100 mt-1"><span>Total incl. tax</span><span className="num text-[#2495D3]">{money(selected.price_incl_tax)}</span></div>
+            </div>
+          )}
 
           {/* Technical details (collapsible) */}
           <div>
