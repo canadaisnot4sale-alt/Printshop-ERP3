@@ -10,6 +10,16 @@ export function AuthProvider({ children }) {
   const [viewAs, setViewAsState] = useState(() => localStorage.getItem("pns_view_as") || "admin");
 
   useEffect(() => {
+    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    const hash = window.location.hash || "";
+    if (hash.includes("session_id=")) {
+      const sid = new URLSearchParams(hash.replace(/^#/, "")).get("session_id");
+      api.post("/auth/google/session", { session_id: sid })
+        .then((r) => { localStorage.setItem("pns_token", r.data.token); setUser(r.data.user); })
+        .catch(() => setUser(false))
+        .finally(() => { window.history.replaceState(null, "", window.location.pathname); setReady(true); });
+      return;
+    }
     api
       .get("/auth/me")
       .then((r) => setUser(r.data))

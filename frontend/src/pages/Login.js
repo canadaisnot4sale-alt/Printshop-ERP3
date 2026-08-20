@@ -72,6 +72,18 @@ export default function Login() {
             </Button>
           </form>
           <button
+            type="button"
+            data-testid="google-login-button"
+            onClick={() => {
+              // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+              window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.origin)}`;
+            }}
+            className="w-full mt-3 border border-slate-300 rounded-sm py-2 text-sm font-medium flex items-center justify-center gap-2 hover:bg-slate-50"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" className="w-4 h-4" />
+            Continue with Google
+          </button>
+          <button
             data-testid="toggle-auth-mode"
             onClick={() => setMode(mode === "login" ? "register" : "login")}
             className="text-sm text-[#2495D3] mt-4 hover:underline"

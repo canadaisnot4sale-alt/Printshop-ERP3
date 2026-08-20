@@ -815,6 +815,35 @@ async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     return {"ok": True}
 
+class GoogleSessionIn(BaseModel):
+    session_id: str
+
+@api_router.post("/auth/google/session")
+async def google_session(body: GoogleSessionIn):
+    # Exchange the Emergent OAuth session_id (from URL fragment) for our own JWT. The call to
+    # Emergent's session-data endpoint MUST happen here on the backend, never on the frontend.
+    import urllib.request, json as _json
+    req = urllib.request.Request(
+        "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+        headers={"X-Session-ID": body.session_id})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read())
+    except Exception:
+        raise HTTPException(401, "Invalid Google session")
+    email = (data.get("email") or "").lower()
+    if not email:
+        raise HTTPException(400, "No email from Google")
+    user = await db.users.find_one({"email": email})
+    if not user:
+        res = await db.users.insert_one({"email": email, "name": data.get("name") or email,
+            "role": "client", "auth": "google", "picture": data.get("picture"), "created_at": now_iso()})
+        uid = str(res.inserted_id); role = "client"
+    else:
+        uid = str(user["_id"]); role = user.get("role", "client")
+    token = create_access_token(uid, email)
+    return {"token": token, "user": {"id": uid, "email": email, "name": data.get("name") or email, "role": role}}
+
 @api_router.get("/auth/me")
 async def me(user=Depends(get_current_user)):
     return user
