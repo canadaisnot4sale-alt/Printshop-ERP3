@@ -43,6 +43,9 @@ export default function ProductsCatalog() {
       .catch(() => setCfgVideos([]));
   };
   const setC = (patch) => setCfgProd((p) => ({ ...p, ...patch }));
+  const setBomC = (i, k, v) => setCfgProd((p) => { const bom = [...(p.bom || [])]; bom[i] = { ...bom[i], [k]: v }; if (k === "material_id") { const m = materials.find((x) => x.id === v); bom[i].material_name = m?.name || ""; } return { ...p, bom }; });
+  const addBomC = () => setCfgProd((p) => ({ ...p, bom: [...(p.bom || []), { material_id: "", material_name: "", qty_per_unit: 1, waste_per_order: 0, waste_per_unit: 0 }] }));
+  const rmBomC = (i) => setCfgProd((p) => ({ ...p, bom: (p.bom || []).filter((_, idx) => idx !== i) }));
   const setCfgField = (k, v) => setCfgProd((p) => ({ ...p, config: { ...(p.config || {}), [k]: v } }));
   const setTurn2 = (id, patch) => setCfgProd((p) => ({ ...p, config: { ...p.config, turnarounds: (p.config.turnarounds || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) } }));
   const addTurn2 = () => setCfgProd((p) => ({ ...p, config: { ...p.config, turnarounds: [...(p.config.turnarounds || []), { id: `t${Date.now()}`, label: "", pct: 0 }] } }));
@@ -58,15 +61,20 @@ export default function ProductsCatalog() {
   };
   const saveConfig = async () => {
     try {
+      if (!cfgProd.name || !cfgProd.name.trim()) return toast.error("Name required");
       const { id, your_price, dynamic_pricing, computed_cost, ...rest } = cfgProd;
-      await api.put(`/catalog-products/${id}`, rest);
+      rest.price = Number(rest.price || 0); rest.wholesale_price = Number(rest.wholesale_price || 0);
+      rest.bom = (rest.bom || []).filter((b) => b.material_id).map((b) => ({ ...b, qty_per_unit: Number(b.qty_per_unit || 0), waste_per_order: Number(b.waste_per_order || 0), waste_per_unit: Number(b.waste_per_unit || 0) }));
+      let pid = id;
+      if (id) await api.put(`/catalog-products/${id}`, rest);
+      else { const res = await api.post("/catalog-products", rest); pid = res.data.id; }
       for (const rid of cfgRemovedVideoIds) { try { await api.delete(`/training/videos/${rid}`); } catch (e) {} }
       for (const v of cfgVideos) {
         if (!v.url || !v.url.trim()) continue;
-        const body = { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: id, ref_label: cfgProd.name };
+        const body = { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: pid, ref_label: cfgProd.name };
         if (v.id) await api.put(`/training/videos/${v.id}`, body); else await api.post("/training/videos", body);
       }
-      toast.success("Product updated"); setCfgProd(null); load();
+      toast.success("Product saved"); setCfgProd(null); load();
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
   };
   const gt = (v) => (v && typeof v === "object" ? `EN: ${v.en || ""}\n\nES: ${v.es || ""}` : (v || ""));
@@ -78,7 +86,10 @@ export default function ProductsCatalog() {
     api.get("/materials").then(({ data }) => setMaterials(data)).catch(() => {});
   }, []);
 
-  const openNew = () => { setForm(BLANK); setEditId(null); setDlgVideos([]); setRemovedVideoIds([]); setOpen(true); };
+  const openNew = () => {
+    setCfgProd({ name: "", category: "Other", module: "", price: 0, wholesale_price: 0, description: "", published: false, product_type: "static", config: {}, bom: [], marketing: {} });
+    setRegenTone("professional"); setCfgVideos([]); setCfgRemovedVideoIds([]);
+  };
   const openEdit = (p) => {
     setForm({ name: p.name, category: p.category, module: p.module || "", price: p.price, wholesale_price: p.wholesale_price || 0, description: p.description || "", published: !!p.published, bom: (p.bom || []).map((b) => ({ waste_per_order: 0, waste_per_unit: 0, ...b })) });
     setEditId(p.id); setRemovedVideoIds([]); setOpen(true);
@@ -105,6 +116,7 @@ export default function ProductsCatalog() {
   };
   const matCost = (id) => Number(materials.find((m) => m.id === id)?.unit_cost || 0);
   const bomUnitCost = form.bom.reduce((a, b) => a + matCost(b.material_id) * Number(b.qty_per_unit || 0), 0);
+  const bomUnitCostC = (cfgProd?.bom || []).reduce((a, b) => a + matCost(b.material_id) * Number(b.qty_per_unit || 0), 0);
   const rmBom = (i) => setForm((f) => ({ ...f, bom: f.bom.filter((_, idx) => idx !== i) }));
 
   const save = async () => {
@@ -199,8 +211,7 @@ export default function ProductsCatalog() {
                           <span className="text-[10px] text-slate-400">Publish</span>
                         </div>
                         <TrainingVideoManager category="product" refId={p.id} refLabel={p.name} />
-                        <button onClick={() => openEdit(p)} className="p-1.5 text-slate-400 hover:text-[#2495D3]" data-testid="product-edit"><Pencil size={15} /></button>
-                        {p.product_type === "configurable_paper" && <button onClick={() => openConfig(p)} className="p-1.5 text-slate-400 hover:text-[#2495D3]" title="Configure & marketing" data-testid="product-configure"><Megaphone size={15} /></button>}
+                        <button onClick={() => openConfig(p)} className="p-1.5 text-slate-400 hover:text-[#2495D3]" data-testid="product-edit"><Pencil size={15} /></button>
                         <button onClick={() => remove(p.id)} className="p-1.5 text-slate-400 hover:text-red-500" data-testid="product-delete"><Trash2 size={15} /></button>
                       </div>
                     </td>
@@ -308,8 +319,8 @@ export default function ProductsCatalog() {
       <Dialog open={!!cfgProd} onOpenChange={(v) => !v && setCfgProd(null)}>
         <DialogContent className="rounded-xl max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="config-product-dialog">
           <DialogHeader>
-            <DialogTitle className="font-head">Configure & marketing</DialogTitle>
-            <DialogDescription className="text-xs text-slate-400">Edit options, turnarounds, related products & marketing for this configurable product.</DialogDescription>
+            <DialogTitle className="font-head">{cfgProd?.id ? "Edit product" : "New product"}</DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">One place for everything: pricing, materials, options, training videos & marketing.</DialogDescription>
           </DialogHeader>
           {cfgProd && (
             <div className="grid md:grid-cols-2 gap-5 py-1">
@@ -317,6 +328,25 @@ export default function ProductsCatalog() {
                 <div><Label className="text-xs">Name</Label><Input value={cfgProd.name} onChange={(e) => setC({ name: e.target.value })} className="rounded-lg mt-1" data-testid="cfg-name" /></div>
                 <div><Label className="text-xs">Category</Label><Input value={cfgProd.category} onChange={(e) => setC({ category: e.target.value })} className="rounded-lg mt-1" /></div>
                 <div><Label className="text-xs">Description</Label><Textarea value={cfgProd.description || ""} onChange={(e) => setC({ description: e.target.value })} className="rounded-lg mt-1" /></div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><Label className="text-xs">Retail price ($)</Label><Input type="number" value={cfgProd.price ?? 0} onChange={(e) => setC({ price: e.target.value })} className="rounded-lg mt-1 h-9 num" data-testid="cfg-price" /></div>
+                  <div><Label className="text-xs">Wholesale ($)</Label><Input type="number" value={cfgProd.wholesale_price ?? 0} onChange={(e) => setC({ wholesale_price: e.target.value })} className="rounded-lg mt-1 h-9 num" data-testid="cfg-wholesale" /></div>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between mb-1"><Label className="text-xs font-semibold">Materials (auto-pricing)</Label>
+                    <button type="button" onClick={addBomC} className="text-[11px] text-[#2495D3] hover:underline" data-testid="cfg-bom-add">+ material</button></div>
+                  {(cfgProd.bom || []).map((b, i) => (
+                    <div key={i} className="flex items-center gap-1.5 mb-1.5" data-testid="cfg-bom-row">
+                      <Select value={b.material_id || ""} onValueChange={(v) => setBomC(i, "material_id", v)}>
+                        <SelectTrigger className="rounded-lg h-8 text-xs flex-1"><SelectValue placeholder="Material" /></SelectTrigger>
+                        <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Input type="number" value={b.qty_per_unit} onChange={(e) => setBomC(i, "qty_per_unit", e.target.value)} className="rounded-lg h-8 text-xs w-16 num" title="Qty per unit" />
+                      <button type="button" onClick={() => rmBomC(i)} className="text-slate-300 hover:text-red-500"><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                  {(cfgProd.bom || []).length > 0 && <div className="text-[11px] text-slate-500 mt-1">Material cost/unit: <b className="num">{money(bomUnitCostC)}</b> — retail & wholesale auto-calc from your markups on save.</div>}
+                </div>
                 <div className="rounded-lg border border-slate-200 p-3 space-y-2">
                   <Label className="text-xs font-semibold">Add-ons offered</Label>
                   {["lamination", "hot_foil", "round_corners"].map((k) => (
