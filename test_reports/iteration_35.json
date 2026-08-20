@@ -1,0 +1,50 @@
+{
+  "summary": "Tested Phase 2 (best-sellers + manual sale), Phase 4 (order P&L / ink cost) backend endpoints and the admin frontend (Profit&Loss 'Rentabilidad & más vendidos' panel, promote/share dialog, external-sale dialog, Orders P&L panel + ink deduction). Seeded my own data (material, ink material + machine, published product with BoM, real order) since preview DB was empty; all seeded data cleaned up afterwards. Backend: 14/14 pytest tests pass. Frontend: all flows work end-to-end; found presentation/logic issues around 'quoted margin' when a product has no BoM.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/orders/{oid}/pnl", "issue": "When quoted_known=false (manual sale or product without BoM) quoted_cost=0 so quoted_margin == revenue and variance = -real_cost. The API returns a meaningful-looking quoted_margin/quoted_margin_pct/variance that is actually undefined. Suggest returning quoted_margin=null (or variance=null) when quoted_known is false."},
+      {"endpoint": "GET /api/finance/best-sellers", "issue": "Rows for items without product_id are aggregated by name only, so two different external sales with the same name merge, and items with an empty name fall into a '?' bucket. Also unit_profit/times_to_goal are computed from full revenue when cost_known=false (cost treated as 0), giving over-optimistic 'x N to goal' numbers."},
+      {"endpoint": "GET /api/finance/best-sellers", "issue": "Performance: iterates every non-cancelled order in Python and filters created_at in the loop instead of querying Mongo with {'created_at': {'$gte': cutoff}}; will get slow as orders grow."},
+      {"endpoint": "GET /api/finance/best-sellers", "issue": "Counts orders in any status except 'cancelled' (including 'pending'/unpaid) as sales revenue/profit — verify this matches the intended definition of 'vendido'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Order P&L (Phase 4) for order without BoM", "issue": "Panel shows 'MARGEN COTIZADO $75.00 / sin BoM' and the variance line '⚠️ Ganaste $36.00 menos de lo cotizado' even though no quote cost exists (quoted_known=false). Quoted margin should render as '—' and the variance line should be hidden when quoted_known is false.", "affected_selectors": ["[data-testid=\"pnl-quoted\"]", "[data-testid=\"pnl-variance\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "Profit&Loss → Venta externa dialog", "issues": ["'Fecha (opcional)' uses the native browser date input (mm/dd/yyyy) instead of the shadcn calendar/date-picker used elsewhere"]},
+      {"screen": "Profit&Loss → Promocionar dialog", "issues": ["Share textarea is fixed h-28 with resize-none; longer marketing copy is clipped and needs scrolling with no visual affordance"]},
+      {"screen": "Orders → Invoice dialog", "issues": ["Inner cards (P&L / ink panels) appear to extend slightly past the dialog's right edge in a 1920px viewport screenshot — verify no horizontal overflow in the dialog content container"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase2_4_sales_insights.py",
+    "/app/backend/tests/seed_fe_phase2.py",
+    "/app/test_reports/pytest/pytest_phase2_4.xml"
+  ],
+  "action_items": [
+    "Hide/neutralize 'Margen cotizado' and the variance line in the Orders P&L panel (and optionally in the API) when quoted_known=false",
+    "Consider keying best-sellers rows on (product_id or normalized name) and suppressing times_to_goal/unit_profit when cost_known=false",
+    "Replace the native date input in the 'Venta externa' dialog with the shadcn date picker",
+    "Optional: filter best-sellers orders in the Mongo query by created_at >= cutoff"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 4639 lines — well past the 700-line guideline; split finance / orders / catalog routers into modules.",
+    "best_sellers() does an await inside the row loop (unit_cost_for) but the cost cache keys on product_id so it is fine; the full-collection async cursor scan is the real bottleneck.",
+    "deduct_order_ink and deduct_inventory_for_order now store per-line 'cost' correctly; note ink cost uses material unit_cost/ink_volume_ml and ignores machine.ink_cost_per_ml — confirm that is intended (single source of truth)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase2_4_sales_insights.py",
+    "/app/backend/tests/seed_fe_phase2.py"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% of tested flows functional (2 presentation issues)"},
+  "seed_data_creation": "Created and then deleted: materials TEST_Vinyl_P24/TEST_Ink_Cyan_P24/TESTFE_Vinyl/TESTFE_Ink, machines TEST_Printer_P24/TESTFE_Printer, products TEST_BoM_Product_P24/TEST_NoBoM_Product_P24/TESTFE_Banner, plus test orders and manual sales. Verified DB has no leftover TEST_/TESTFE_ materials, products, machines or orders (one pre-existing 'TEST_Payer' order from an earlier iteration was left untouched).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@printandsave.ca / admin123 (admin), cliente1@test.com / test123 (non-admin, used for 403 RBAC checks)",
+  "context_for_next_testing_agent": "Verified: best-sellers shape + sorting for day/week/month/year, cost_known true/false paths (BoM unit_cost 5.0 => profit = revenue - unit_cost*units), manual-sale (source=manual, status=completed, category filled from product_id, counts in goals.sales_month and best-sellers totals, date-only -> T12:00:00, empty items => 400), order pnl (quoted_cost from BoM*qty, material_cost from inventory_deductions cost, ink_cost after deduct-ink, variance, 404 on unknown id, double ink deduct => 400), RBAC 403 for non-admin on all three endpoints. Frontend verified: sales-insights-panel, period selector, metric tabs, times-to-goal badge, promote dialog (FB/WA/Email/Copy hrefs correct), manual sale creates row without reload, Orders P&L panel refreshes after ink deduct ($75 -> $39 real margin). Re-seed with /app/backend/tests/seed_fe_phase2.py seed|clean for UI testing.",
+  "rca_of_the_issue": "Quoted-margin display defect root cause: order_pnl() initializes quoted_cost=0.0 and only sets quoted_known=True when a catalog product with a BoM is found; it still returns quoted_margin = revenue - 0 and variance = real_margin - revenue. Orders.js renders pnl.quoted_margin unconditionally, so an order with no BoM shows a full-revenue 'quoted margin' and a false 'you earned less than quoted' warning."
+}

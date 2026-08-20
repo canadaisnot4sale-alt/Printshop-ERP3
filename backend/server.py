@@ -2269,6 +2269,169 @@ async def profit_dashboard(months: int = 6, user=Depends(require_admin)):
             "gross_margin_pct": round(margin * 100, 1),
             "current": series[-1] if series else None}
 
+@api_router.get("/finance/goals")
+async def finance_goals(working_days: int = 26, user=Depends(require_admin)):
+    from datetime import datetime, timezone
+    s = await get_settings()
+    oh_hours = s.get("open_hours_per_month", 188) or 188
+    fixed = await db.fixed_costs.find().to_list(500)
+    overhead = sum((f.get("amount") or 0) for f in fixed)
+    machines = await db.machines.find().to_list(500)
+    machines_monthly = sum(machine_computed(clean(m), oh_hours)["monthly_cost"] for m in machines)
+    monthly_overhead = round(overhead + machines_monthly, 2)
+    mk = s.get("retail_markup_pct", 200) or 0
+    margin = mk / (100 + mk) if (100 + mk) else 0
+    monthly_goal = round(monthly_overhead / margin, 2) if margin else 0
+    wd = max(1, working_days)
+    goals = {"day": round(monthly_goal / wd, 2), "week": round(monthly_goal / 4.333, 2),
+             "month": monthly_goal, "year": round(monthly_goal * 12, 2)}
+    now = datetime.now(timezone.utc)
+    mkey = now.strftime("%Y-%m")
+    sales_month = 0.0
+    async for o in db.orders.find({"status": {"$ne": "cancelled"}}):
+        if (o.get("created_at") or "")[:7] == mkey:
+            sales_month += o.get("total") or 0
+    purchases_month = 0.0
+    async for pu in db.purchases.find():
+        if (pu.get("date") or "")[:7] == mkey:
+            purchases_month += (pu.get("subtotal") or 0) + (pu.get("shipping") or 0)
+    sales_month = round(sales_month, 2)
+    net_real = round(sales_month - purchases_month - monthly_overhead, 2)
+    pct = round((sales_month / monthly_goal * 100), 1) if monthly_goal else 0
+    day_of_month = now.day
+    return {"goals": goals, "monthly_overhead": monthly_overhead, "gross_margin_pct": round(margin * 100, 1),
+            "sales_month": sales_month, "purchases_month": round(purchases_month, 2), "net_real": net_real,
+            "progress_pct": pct, "making_money": net_real > 0, "working_days": wd,
+            "expected_pace_pct": round(day_of_month / 30 * 100, 1)}
+
+def _period_cutoff(period: str):
+    now = datetime.now(timezone.utc)
+    if period == "day":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "week":
+        start = now - timedelta(days=7)
+    elif period == "year":
+        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:  # month
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return start.isoformat()
+
+async def _monthly_goal():
+    s = await get_settings()
+    oh_hours = s.get("open_hours_per_month", 188) or 188
+    fixed = await db.fixed_costs.find().to_list(500)
+    overhead = sum((f.get("amount") or 0) for f in fixed)
+    machines = await db.machines.find().to_list(500)
+    machines_monthly = sum(machine_computed(clean(m), oh_hours)["monthly_cost"] for m in machines)
+    monthly_overhead = round(overhead + machines_monthly, 2)
+    mk = s.get("retail_markup_pct", 200) or 0
+    margin = mk / (100 + mk) if (100 + mk) else 0
+    return (round(monthly_overhead / margin, 2) if margin else 0), s
+
+@api_router.get("/finance/best-sellers")
+async def best_sellers(period: str = "month", limit: int = 8, user=Depends(require_admin)):
+    """Rank products by units sold, revenue and REAL profit (revenue - BoM cost) for the period.
+    Also returns 'times_to_goal' = how many more of each to sell to cover the monthly goal."""
+    monthly_goal, s = await _monthly_goal()
+    cutoff = _period_cutoff(period)
+    prods = {str(p["_id"]): p for p in await db.catalog_products.find().to_list(2000)}
+    cost_cache = {}
+    async def unit_cost_for(pid):
+        if not pid:
+            return None
+        if pid in cost_cache:
+            return cost_cache[pid]
+        p = prods.get(pid)
+        c = None
+        if p:
+            pricing = await compute_product_pricing(p, s)
+            c = pricing["computed_cost"] if pricing else None
+        cost_cache[pid] = c
+        return c
+
+    agg = {}
+    async for o in db.orders.find({"status": {"$ne": "cancelled"}}):
+        if (o.get("created_at") or "") < cutoff:
+            continue
+        for it in (o.get("items") or []):
+            key = it.get("product_id") or (it.get("name") or "?")
+            a = agg.setdefault(key, {"product_id": it.get("product_id"), "name": it.get("name"),
+                                     "category": it.get("category"), "units": 0, "revenue": 0.0})
+            a["units"] += it.get("qty") or 0
+            a["revenue"] += it.get("line_total") or 0
+
+    def _pick(v):
+        return (v.get("es") or v.get("en")) if isinstance(v, dict) else v
+    rows = []
+    for key, a in agg.items():
+        units = a["units"] or 0
+        revenue = round(a["revenue"], 2)
+        uc = await unit_cost_for(a["product_id"])
+        cost_known = uc is not None
+        total_cost = round((uc or 0) * units, 2)
+        profit = round(revenue - total_cost, 2)
+        avg_price = (revenue / units) if units else 0
+        unit_profit = round(avg_price - (uc or 0), 2) if cost_known else None
+        times_to_goal = int(math.ceil(monthly_goal / unit_profit)) if (cost_known and unit_profit and unit_profit > 0 and monthly_goal) else None
+        p = prods.get(a["product_id"] or "", {}) or {}
+        mkt = p.get("marketing") or {}
+        share_text = (_pick(mkt.get("instagram")) or _pick(mkt.get("facebook"))
+                      or _pick(mkt.get("seo_description")) or _pick(mkt.get("short_description")) or a["name"])
+        rows.append({**a, "revenue": revenue, "unit_cost": (round(uc, 4) if cost_known else None),
+                     "cost_known": cost_known, "profit": profit, "unit_profit": unit_profit,
+                     "times_to_goal": times_to_goal, "image_url": p.get("image_url", ""),
+                     "share_text": share_text})
+    by_units = sorted(rows, key=lambda r: -r["units"])[:limit]
+    by_profit = sorted(rows, key=lambda r: -r["profit"])[:limit]
+    return {"period": period, "monthly_goal": monthly_goal,
+            "total_units": sum(r["units"] for r in rows),
+            "total_revenue": round(sum(r["revenue"] for r in rows), 2),
+            "total_profit": round(sum(r["profit"] for r in rows), 2),
+            "by_units": by_units, "by_profit": by_profit}
+
+class ManualSaleItemIn(BaseModel):
+    product_id: Optional[str] = None
+    name: str
+    qty: int = 1
+    unit_price: float = 0.0
+
+class ManualSaleIn(BaseModel):
+    customer_name: Optional[str] = None
+    date: Optional[str] = None
+    items: List[ManualSaleItemIn]
+    notes: Optional[str] = None
+
+@api_router.post("/finance/manual-sale")
+async def manual_sale(body: ManualSaleIn, user=Depends(require_admin)):
+    """Record an external/off-system invoice as a completed sale so it counts in goals & best-sellers."""
+    items, total = [], 0.0
+    for it in body.items:
+        lt = round((it.unit_price or 0) * (it.qty or 0), 2)
+        total += lt
+        cat = None
+        if it.product_id:
+            try:
+                p = await db.catalog_products.find_one({"_id": ObjectId(it.product_id)})
+                cat = (p or {}).get("category")
+            except Exception:
+                pass
+        items.append({"product_id": it.product_id, "name": it.name, "category": cat,
+                      "qty": it.qty, "unit_price": it.unit_price, "line_total": lt})
+    if not items:
+        raise HTTPException(400, "No items")
+    created = body.date or now_iso()
+    if len(created) == 10:  # YYYY-MM-DD only
+        created = created + "T12:00:00+00:00"
+    doc = {"user_id": user["id"], "user_email": user["email"], "role": "admin",
+           "customer_name": body.customer_name or "External sale",
+           "items": items, "total": round(total, 2), "notes": body.notes,
+           "status": "completed", "source": "manual", "inventory_deductions": [],
+           "created_at": created}
+    res = await db.orders.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return clean(doc)
+
+
 @api_router.get("/finance/summary")
 async def finance_summary(user=Depends(require_admin)):
     from datetime import datetime, timezone
@@ -3605,9 +3768,11 @@ async def deduct_inventory_for_order(enriched):
         total = round(usage + waste, 3)
         new_stock = round((mat.get("stock_qty") or 0.0) - total, 3)
         await db.materials.update_one({"_id": ObjectId(mid)}, {"$set": {"stock_qty": new_stock}})
+        cost = round((mat.get("unit_cost") or 0.0) * total, 4)
         deductions.append({"material_id": mid, "material_name": mat.get("name"),
                            "unit": mat.get("unit"), "used": round(usage, 3), "waste": waste,
-                           "total": total, "new_stock": new_stock, "short": new_stock < 0})
+                           "total": total, "new_stock": new_stock, "short": new_stock < 0,
+                           "cost": cost})
     # Laminate / hot-foil consumption: tracked by ROLLS. We accumulate linear feet consumed
     # on the currently-open roll and only decrement the physical roll count (stock_qty) once
     # the accumulated usage exceeds a full roll length (lam_length_ft).
@@ -3643,10 +3808,12 @@ async def deduct_inventory_for_order(enriched):
         await db.materials.update_one(
             {"_id": ObjectId(mid)},
             {"$set": {"stock_qty": new_rolls, "lam_open_used_ft": used}})
+        cost = round((mat.get("lam_roll_cost") or 0.0) * rolls_consumed, 4)
         deductions.append({"material_id": mid, "material_name": mat.get("name"),
                            "unit": "roll(s)", "used": rolls_consumed, "waste": 0,
                            "total": rolls_consumed, "new_stock": new_rolls, "short": new_rolls < 0,
-                           "open_roll_used_ft": used, "ft_per_roll_this_order": ft, "sides": sides})
+                           "open_roll_used_ft": used, "ft_per_roll_this_order": ft, "sides": sides,
+                           "cost": cost})
     return deductions
 
 class OrderItemIn(BaseModel):
@@ -3766,16 +3933,23 @@ async def deduct_order_ink(oid: str, body: InkDeductIn, user=Depends(require_adm
     if total_ml <= 0:
         raise HTTPException(400, "No ink stock available for this machine")
     deducted = []
+    ink_cost = 0.0
     for m in inks:
         vol = float(m.get("ink_volume_ml") or 0) or 1
         cur_ml = float(m.get("stock_qty") or 0) * vol
         share = (cur_ml / total_ml) * ml
         new_bottles = round(max(0.0, cur_ml - share) / vol, 4)
         await db.materials.update_one({"_id": m["_id"]}, {"$set": {"stock_qty": new_bottles}})
-        deducted.append({"id": str(m["_id"]), "name": m.get("name"), "ml": round(share, 2), "bottles_left": new_bottles})
-    info = {"machine_id": body.machine_id, "area_sqft": body.area_sqft, "coverage_pct": body.coverage_pct, "ml": ml, "at": now_iso(), "lines": deducted}
+        cost_per_ml = (float(m.get("unit_cost") or 0.0) / vol) if vol else 0.0
+        line_cost = round(share * cost_per_ml, 4)
+        ink_cost += line_cost
+        deducted.append({"id": str(m["_id"]), "name": m.get("name"), "ml": round(share, 2),
+                         "bottles_left": new_bottles, "cost": line_cost})
+    ink_cost = round(ink_cost, 2)
+    info = {"machine_id": body.machine_id, "area_sqft": body.area_sqft, "coverage_pct": body.coverage_pct,
+            "ml": ml, "cost": ink_cost, "at": now_iso(), "lines": deducted}
     await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"ink_deducted": info}})
-    return {"ok": True, "ml": ml, "lines": deducted}
+    return {"ok": True, "ml": ml, "cost": ink_cost, "lines": deducted}
 
 class OrderFileIn(BaseModel):
     file_id: str
@@ -3796,6 +3970,46 @@ async def get_order(oid: str, user=Depends(get_current_user)):
     if user.get("role") != "admin":
         c.pop("inventory_deductions", None)
     return c
+
+@api_router.get("/orders/{oid}/pnl")
+async def order_pnl(oid: str, user=Depends(require_admin)):
+    """Quoted margin (from product BoM) vs REAL margin (actual material + ink deducted) for one order."""
+    o = await db.orders.find_one({"_id": ObjectId(oid)})
+    if not o:
+        raise HTTPException(404, "Order not found")
+    s = await get_settings()
+    revenue = round(o.get("total") or 0, 2)
+    quoted_cost, quoted_known = 0.0, False
+    for it in (o.get("items") or []):
+        pid = it.get("product_id")
+        if not pid:
+            continue
+        try:
+            p = await db.catalog_products.find_one({"_id": ObjectId(pid)})
+        except Exception:
+            p = None
+        if not p:
+            continue
+        pricing = await compute_product_pricing(clean(p), s)
+        if pricing:
+            quoted_cost += (pricing["computed_cost"] or 0) * (it.get("qty") or 0)
+            quoted_known = True
+    quoted_cost = round(quoted_cost, 2)
+    mat_cost = round(sum((d.get("cost") or 0) for d in (o.get("inventory_deductions") or [])), 2)
+    ink = o.get("ink_deducted") or {}
+    ink_cost = round(ink.get("cost") or 0, 2)
+    real_cost = round(mat_cost + ink_cost, 2)
+    real_known = bool((o.get("inventory_deductions")) or ink_cost)
+    quoted_margin = round(revenue - quoted_cost, 2)
+    real_margin = round(revenue - real_cost, 2)
+    return {"revenue": revenue,
+            "quoted_cost": quoted_cost, "quoted_known": quoted_known,
+            "quoted_margin": (quoted_margin if quoted_known else None),
+            "quoted_margin_pct": (round(quoted_margin / revenue * 100, 1) if (quoted_known and revenue) else None),
+            "material_cost": mat_cost, "ink_cost": ink_cost, "real_cost": real_cost,
+            "real_known": real_known, "real_margin": real_margin,
+            "real_margin_pct": round(real_margin / revenue * 100, 1) if revenue else 0,
+            "variance": (round(real_margin - quoted_margin, 2) if (quoted_known and real_known) else None)}
 
 @api_router.post("/orders/{oid}/files")
 async def add_order_file(oid: str, body: OrderFileIn, user=Depends(get_current_user)):

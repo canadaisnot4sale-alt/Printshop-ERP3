@@ -7,6 +7,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, ReferenceLine,
 } from "recharts";
 import { TrendingUp, TrendingDown, Receipt, Landmark, FileText } from "lucide-react";
+import SalesInsights from "@/components/SalesInsights";
 
 const label = (k) => {
   const [y, m] = (k || "").split("-");
@@ -17,10 +18,14 @@ const label = (k) => {
 export default function ProfitDashboard() {
   const [data, setData] = useState(null);
   const [months, setMonths] = useState(6);
+  const [goals, setGoals] = useState(null);
 
   useEffect(() => {
     api.get(`/finance/profit-dashboard?months=${months}`).then(({ data }) => setData(data)).catch(() => {});
   }, [months]);
+  useEffect(() => {
+    api.get(`/finance/goals`).then(({ data }) => setGoals(data)).catch(() => {});
+  }, []);
 
   const cur = data?.current;
   const chart = (data?.series || []).map((s) => ({ ...s, name: label(s.month) }));
@@ -40,6 +45,36 @@ export default function ProfitDashboard() {
       </PageHeader>
 
       <div className="p-8 space-y-6">
+        {goals && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6" data-testid="goals-panel">
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-widest text-slate-400">Sales goals (to cover all costs)</div>
+                <div className={`text-sm font-semibold ${goals.making_money ? "text-emerald-600" : "text-red-500"}`} data-testid="making-money">
+                  {goals.making_money ? "✅ You are making money this month" : "⚠️ Below break-even this month"} · Net real: {money(goals.net_real)}
+                </div>
+              </div>
+              <div className="text-xs text-slate-500">Margin {goals.gross_margin_pct}% · Overhead {money(goals.monthly_overhead)}/mo</div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              {[["Daily", goals.goals.day], ["Weekly", goals.goals.week], ["Monthly", goals.goals.month], ["Yearly", goals.goals.year]].map(([lb, v]) => (
+                <div key={lb} className="rounded-xl bg-slate-50 border border-slate-100 p-3" data-testid={`goal-${lb.toLowerCase()}`}>
+                  <div className="text-[11px] text-slate-400 uppercase tracking-widest">{lb} goal</div>
+                  <div className="text-lg font-black text-slate-800 num">{money(v)}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-slate-500">This month: <b className="num">{money(goals.sales_month)}</b> of <b className="num">{money(goals.goals.month)}</b></span>
+              <span className={`font-semibold ${goals.progress_pct >= goals.expected_pace_pct ? "text-emerald-600" : "text-amber-600"}`} data-testid="goal-progress">{goals.progress_pct}%</span>
+            </div>
+            <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-[#2495D3] to-emerald-500 transition-all" style={{ width: `${Math.min(100, goals.progress_pct)}%` }} />
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1">Expected pace by today: ~{goals.expected_pace_pct}% of the month</div>
+          </div>
+        )}
+        <SalesInsights />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Metric icon={FileText} label={`Quoted · ${cur ? label(cur.month) : ""}`} value={money(cur?.revenue)} sub={`${cur?.quotes || 0} quotes`} />
           <Metric icon={Receipt} label="Real sales (orders)" value={money(cur?.sales)} accent={(cur?.sales ?? 0) > 0} />

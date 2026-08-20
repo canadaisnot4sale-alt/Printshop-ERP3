@@ -27,16 +27,23 @@ export default function Orders() {
   const [paying, setPaying] = useState(null);
   const [machines, setMachines] = useState([]);
   const [ink, setInk] = useState({ machine_id: "", area_sqft: "", coverage_pct: 100 });
+  const [pnl, setPnl] = useState(null);
 
   const load = () => api.get("/orders").then(({ data }) => setOrders(data));
   useEffect(() => { load(); if (isAdmin) api.get("/machines").then(({ data }) => setMachines(data)).catch(() => {}); }, []);
+
+  const loadPnl = (id) => api.get(`/orders/${id}/pnl`).then(({ data }) => setPnl(data)).catch(() => setPnl(null));
+  useEffect(() => {
+    if (detail && isAdmin) { setPnl(null); loadPnl(detail.id); } else setPnl(null);
+  }, [detail?.id]);
 
   const deductInk = async () => {
     if (!ink.machine_id || !ink.area_sqft) { toast.error("Pick a machine and enter the area (ft²)"); return; }
     try {
       const { data } = await api.post(`/orders/${detail.id}/deduct-ink`, { machine_id: ink.machine_id, area_sqft: Number(ink.area_sqft), coverage_pct: Number(ink.coverage_pct) });
       toast.success(`Deducted ${data.ml} ml of ink`);
-      setDetail({ ...detail, ink_deducted: { ml: data.ml, lines: data.lines } });
+      setDetail({ ...detail, ink_deducted: { ml: data.ml, cost: data.cost, lines: data.lines } });
+      loadPnl(detail.id);
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
   };
 
@@ -193,6 +200,30 @@ export default function Orders() {
                   )}
                 </div>
               </div>
+              {isAdmin && pnl && (
+                <div className="rounded-lg border border-slate-200 p-3 print:hidden" data-testid="order-pnl-panel">
+                  <div className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mb-2">Ganancia: cotizada vs real</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-slate-50 p-2.5">
+                      <div className="text-[10px] uppercase text-slate-400">Margen cotizado</div>
+                      <div className={`num text-lg font-black ${!pnl.quoted_known ? "text-slate-300" : pnl.quoted_margin >= 0 ? "text-slate-800" : "text-red-600"}`} data-testid="pnl-quoted">{pnl.quoted_known ? money(pnl.quoted_margin) : "—"}</div>
+                      <div className="text-[11px] text-slate-400">{pnl.quoted_known ? `costo BoM ${money(pnl.quoted_cost)} · ${pnl.quoted_margin_pct}%` : "sin BoM"}</div>
+                    </div>
+                    <div className="rounded-lg bg-emerald-50 p-2.5">
+                      <div className="text-[10px] uppercase text-emerald-600/70">Margen real</div>
+                      <div className={`num text-lg font-black ${pnl.real_margin >= 0 ? "text-emerald-700" : "text-red-600"}`} data-testid="pnl-real">{money(pnl.real_margin)}</div>
+                      <div className="text-[11px] text-slate-500">{pnl.real_known ? `mat ${money(pnl.material_cost)} + tinta ${money(pnl.ink_cost)} · ${pnl.real_margin_pct}%` : "sin consumo registrado"}</div>
+                    </div>
+                  </div>
+                  {pnl.quoted_known && pnl.real_known && pnl.variance != null && (
+                    <div className={`text-xs mt-2 ${pnl.variance >= 0 ? "text-emerald-600" : "text-amber-600"}`} data-testid="pnl-variance">
+                      {pnl.variance >= 0
+                        ? `✓ Ganaste ${money(pnl.variance)} más de lo cotizado`
+                        : `⚠️ Ganaste ${money(Math.abs(pnl.variance))} menos de lo cotizado`}
+                    </div>
+                  )}
+                </div>
+              )}
               {isAdmin && detail.inventory_deductions?.length > 0 && (
                 <div className="bg-slate-50 rounded-lg p-3 text-xs" data-testid="order-deductions">
                   <div className="font-mono uppercase text-[10px] text-slate-400 mb-1">Inventory deducted</div>
