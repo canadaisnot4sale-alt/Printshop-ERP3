@@ -7,6 +7,7 @@
   - Suggest a "recommended retail price" to hit a chosen margin.
 
 ## Done (2026-06)
+- **"View as" is now a full mirror of the client/reseller experience**: AuthContext exposes an *effective role* (admin previewing as client/reseller) that governs ALL UI gating, while the *real role* is kept only for the View-as switch + auth. In Retail/Wholesale the sidebar hides Business + Administration sections, the Dashboard/pages render as the client sees them, prices are role-scrubbed (X-View-As), and the amber banner + "Exit" return to full admin. Verified via screenshot (Retail hides admin nav, keeps toggle). NOTE: estimating modules remain visible to clients per current app design (separate decision if they should be hidden).
 - **Edit configurable product + Marketing view/copy + Client order stages + PDF validation**:
   - **Products page → Configure & marketing** dialog (Megaphone icon on configurable rows): edit name/category/description/published, add-ons, turnarounds (add/rename/%/default/remove), file setup fee, related products; PUT saves full product. Marketing panel lists all fields (SEO title/description/slug/keywords/hashtags/short+long desc/IG/FB/Kijiji/alt) with a **Copy** button each, plus tone selector + **Regenerate** (Claude). Verified via curl (PUT persists) + screenshot (10 marketing fields, copy buttons).
   - **Client order stages**: expanded statuses (pending/paid/received/in_production/ready/completed/cancelled) with color chips + a client-facing **stepper** (Received → In production → Ready → Completed) in the order dialog.

@@ -45,16 +45,10 @@ const NAV = [
 const ROLE_LABEL = { admin: "Administrator", client: "Client (Retail)", reseller: "Reseller (Wholesale)" };
 
 export default function Layout({ children }) {
-  const { user, logout } = useAuth();
+  const { user, logout, realRole, viewAs, setViewAs } = useAuth();
   const cart = useCart();
   const nav = useNavigate();
   const isAdmin = user?.role === "admin";
-  const viewAs = localStorage.getItem("pns_view_as") || "admin";
-  const setViewAs = (v) => {
-    if (v === "admin") localStorage.removeItem("pns_view_as");
-    else localStorage.setItem("pns_view_as", v);
-    window.location.reload();
-  };
 
   return (
     <div className="flex min-h-screen bg-[#F8F9FA]">
@@ -94,7 +88,7 @@ export default function Layout({ children }) {
           )}
         </nav>
         <div className="border-t border-slate-200 p-4">
-          {isAdmin && (
+          {realRole === "admin" && (
             <div className="mb-3" data-testid="view-as-control">
               <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-1">View as</div>
               <div className="flex gap-1">
@@ -117,7 +111,7 @@ export default function Layout({ children }) {
         </div>
       </aside>
       <main className="flex-1 ml-60 min-h-screen print:ml-0">
-        {isAdmin && viewAs !== "admin" && (
+        {realRole === "admin" && viewAs !== "admin" && (
           <div className="bg-amber-100 text-amber-800 text-xs px-4 py-1.5 text-center font-mono print:hidden" data-testid="view-as-banner">
             Viewing as {viewAs === "client" ? "Retail (Client)" : "Wholesale (Reseller)"} — prices shown as they see them.
             <button onClick={() => setViewAs("admin")} className="underline ml-2 font-bold">Exit</button>
