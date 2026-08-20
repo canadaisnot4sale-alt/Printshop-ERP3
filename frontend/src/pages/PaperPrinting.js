@@ -16,6 +16,7 @@ import { money, num } from "@/lib/format";
 import { PricingPanel, useRushRates } from "@/components/Metric";
 import { useRequote } from "@/lib/useRequote";
 import { useNavigate } from "react-router-dom";
+import { API } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Calculator, Layers, FileStack, DollarSign, Tag, Package, X, Sparkles } from "lucide-react";
@@ -205,7 +206,7 @@ export default function PaperPrinting() {
       ],
       defaultTurn: "standard",
       addons: { lamination: laminate, hot_foil: hotFoil, round_corners: roundCorners },
-      marketing: null, relatedIds: [],
+      marketing: null, relatedIds: [], tone: "professional", fileFee: 25, imageUrl: "",
     });
     api.get("/catalog-products").then((r) => setCatalogProducts((r.data || []).filter((p) => p.published))).catch(() => {});
     setConvOpen(true);
@@ -222,12 +223,22 @@ export default function PaperPrinting() {
       const { data } = await api.post("/marketing/generate", {
         name: f.name, category: f.category, paper_class: f.paperClass,
         size: result?.product ? `${num(result.product.finished_w)}" x ${num(result.product.finished_h)}"` : "",
-        sides: f.sides, addons: f.addons, turnarounds: f.turnarounds, sample_price: null,
+        sides: f.sides, addons: f.addons, turnarounds: f.turnarounds, sample_price: null, tone: f.tone,
       });
       setConvForm((p) => ({ ...p, marketing: data, description: data.short_description?.en || data.long_description?.en || p.description }));
       toast.success("AI marketing generated");
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
     finally { setGenLoading(false); }
+  };
+
+  const uploadProductImage = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      const { data } = await api.post("/upload/file", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setConvForm((f) => ({ ...f, imageUrl: data.url }));
+      toast.success("Image uploaded");
+    } catch (err) { toast.error(apiErr(err.response?.data?.detail) || err.message); }
   };
 
   const saveProduct = async () => {
@@ -240,7 +251,7 @@ export default function PaperPrinting() {
       await api.post("/catalog-products", {
         name: f.name, category: f.category, description: f.description, published: f.published,
         module: "paper", product_type: "configurable_paper", price: 0, wholesale_price: 0,
-        marketing: f.marketing || {},
+        marketing: f.marketing || {}, image_url: f.imageUrl || "",
         config: {
           base_product_id: productId, base_product_name: result.product?.name || "",
           sheet: canonSheet(sheet), auto_by_class: f.autoByClass, paper_class: f.paperClass,
@@ -249,6 +260,7 @@ export default function PaperPrinting() {
           turnarounds: f.turnarounds.map((t) => ({ id: t.id, label: (t.label || "").trim() || "Option", pct: Number(t.pct) || 0 })),
           default_turnaround: f.defaultTurn || (f.turnarounds[0]?.id || ""),
           related_ids: f.relatedIds || [],
+          file_handling: { fee: Number(f.fileFee) || 0 },
           default_paper_id: selectedStock?.stock?.id || "",
           laminate_id: laminateId || "", laminate_sides: laminateSides, foil_id: foilId || "", foil_sides: foilSides,
         },
@@ -617,11 +629,20 @@ export default function PaperPrinting() {
                   <div><Label className="text-xs">Category</Label><Input data-testid="conv-category" value={convForm.category} onChange={(e) => setConvForm((f) => ({ ...f, category: e.target.value }))} className="rounded-lg mt-1" /></div>
                 </div>
                 <div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <Label className="text-xs">Description &amp; marketing</Label>
-                    <button type="button" onClick={generateAI} disabled={genLoading} className="text-[11px] text-[#2495D3] hover:underline inline-flex items-center gap-1 disabled:opacity-50" data-testid="conv-generate-ai">
-                      <Sparkles size={13} /> {genLoading ? "Generating…" : "Generate with AI"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <select value={convForm.tone} onChange={(e) => setConvForm((f) => ({ ...f, tone: e.target.value }))} className="text-[11px] border border-slate-300 rounded px-1 py-0.5" data-testid="conv-tone">
+                        <option value="professional">Professional</option>
+                        <option value="friendly">Friendly</option>
+                        <option value="playful">Playful</option>
+                        <option value="luxury">Luxury</option>
+                        <option value="bold">Bold</option>
+                      </select>
+                      <button type="button" onClick={generateAI} disabled={genLoading} className="text-[11px] text-[#2495D3] hover:underline inline-flex items-center gap-1 disabled:opacity-50" data-testid="conv-generate-ai">
+                        <Sparkles size={13} /> {genLoading ? "Generating…" : "Generate with AI"}
+                      </button>
+                    </div>
                   </div>
                   <Input data-testid="conv-desc" value={convForm.description} onChange={(e) => setConvForm((f) => ({ ...f, description: e.target.value }))} className="rounded-lg mt-1" placeholder="Short store description (or generate with AI)" />
                   {convForm.marketing && (
@@ -639,6 +660,19 @@ export default function PaperPrinting() {
                       <button key={p.id} type="button" onClick={() => setConvForm((f) => ({ ...f, relatedIds: f.relatedIds.includes(p.id) ? f.relatedIds.filter((x) => x !== p.id) : [...f.relatedIds, p.id] }))}
                         className={`text-xs rounded-full px-3 py-1 border ${convForm.relatedIds.includes(p.id) ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-600 border-slate-300"}`}>{p.name}</button>
                     ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Product image</Label>
+                    <input type="file" accept="image/*" onChange={uploadProductImage} className="text-[11px] mt-1 block w-full" data-testid="conv-image-upload" />
+                    {convForm.imageUrl && <img src={`${API}${convForm.imageUrl}?auth=${localStorage.getItem("pns_token")}`} alt="preview" className="mt-1 h-14 rounded object-cover" />}
+                  </div>
+                  <div>
+                    <Label className="text-xs">File setup fee ($)</Label>
+                    <Input type="number" value={convForm.fileFee} onChange={(e) => setConvForm((f) => ({ ...f, fileFee: e.target.value }))} className="rounded-lg mt-1 h-9 num" data-testid="conv-file-fee" />
+                    <p className="text-[10px] text-slate-400 mt-1">Charged if the client's file isn't print-ready (editable per product).</p>
                   </div>
                 </div>
 

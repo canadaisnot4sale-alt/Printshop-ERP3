@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { ArrowLeft, ShoppingBag, ChevronDown, Check } from "lucide-react";
+import { API } from "@/lib/api";
+const authImg = (u) => (u ? (u.startsWith("http") ? u : `${API}${u}?auth=${localStorage.getItem("pns_token")}`) : null);
 
 const SIDE_LABEL = { "4_0": "One side", "4_4": "Both sides" };
 const ADDON_LABEL = {
@@ -31,6 +33,7 @@ export default function StoreProduct() {
   const [addons, setAddons] = useState({ lamination: false, hot_foil: false, round_corners: false });
   const [paperId, setPaperId] = useState(null);
   const [turnaround, setTurnaround] = useState(null);
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   const fetchPrice = useCallback(async () => {
     setLoading(true);
@@ -70,13 +73,20 @@ export default function StoreProduct() {
   const addToCart = () => {
     if (!selected) return;
     const turnLabel = (cfg?.turnarounds || []).find((t) => t.id === turnaround)?.label;
-    const lineKey = `${id}|${paperId}|${qty}|${sides}|${addons.lamination ? 1 : 0}${addons.hot_foil ? 1 : 0}${addons.round_corners ? 1 : 0}|${turnaround}`;
+    const fh = cfg?.file_handling || {};
+    const fee = needsSetup ? Number(fh.fee || 0) : 0;
+    const gstP = cfg?.gst_pct || 0, pstP = cfg?.pst_pct || 0, isWs = cfg?.role === "reseller";
+    const feeGst = +(fee * gstP / 100).toFixed(2);
+    const feePst = isWs ? 0 : +(fee * pstP / 100).toFixed(2);
+    const feeIncl = +(fee + feeGst + feePst).toFixed(2);
+    const lineKey = `${id}|${paperId}|${qty}|${sides}|${addons.lamination ? 1 : 0}${addons.hot_foil ? 1 : 0}${addons.round_corners ? 1 : 0}|${turnaround}|${needsSetup ? 1 : 0}`;
     const extras = [addons.lamination && "Lam", addons.hot_foil && "Foil", addons.round_corners && "Round"].filter(Boolean).join(", ");
-    const label = `${product?.name} · ${selected.paper_name} · ${qty} pcs · ${SIDE_LABEL[sides]}${extras ? ` · ${extras}` : ""}${turnLabel ? ` · ${turnLabel}` : ""}`;
+    const label = `${product?.name} · ${selected.paper_name} · ${qty} pcs · ${SIDE_LABEL[sides]}${extras ? ` · ${extras}` : ""}${turnLabel ? ` · ${turnLabel}` : ""}${fee ? " · File setup" : ""}`;
     cart.add({
-      lineKey, product_id: id, name: label, unitPrice: selected.price, priceInclTax: selected.price_incl_tax,
-      gst: selected.gst, pst: selected.pst, qty: 1,
-      config: { quantity: qty, sides, paper_id: paperId, turnaround_id: turnaround, laminate: !!addons.lamination, hot_foil: !!addons.hot_foil, round_corners: !!addons.round_corners },
+      lineKey, product_id: id, name: label,
+      unitPrice: +(selected.price + fee).toFixed(2), priceInclTax: +(selected.price_incl_tax + feeIncl).toFixed(2),
+      gst: +(selected.gst + feeGst).toFixed(2), pst: +(selected.pst + feePst).toFixed(2), qty: 1,
+      config: { quantity: qty, sides, paper_id: paperId, turnaround_id: turnaround, needs_setup: needsSetup, laminate: !!addons.lamination, hot_foil: !!addons.hot_foil, round_corners: !!addons.round_corners },
     });
     toast.success("Added to cart");
     nav("/store");
@@ -94,7 +104,7 @@ export default function StoreProduct() {
       <div className="grid md:grid-cols-2 gap-8">
         <div>
           {product?.image_url
-            ? <img src={product.image_url} alt={product?.name} className="w-full rounded-2xl object-cover aspect-square" />
+            ? <img src={authImg(product.image_url)} alt={product?.name} className="w-full rounded-2xl object-cover aspect-square" />
             : <div className="w-full rounded-2xl bg-slate-100 aspect-square flex items-center justify-center text-slate-300"><ShoppingBag size={64} /></div>}
         </div>
 
@@ -189,6 +199,25 @@ export default function StoreProduct() {
               {options.length === 0 && !loading && <div className="text-sm text-slate-400 col-span-2 py-6 text-center">No papers available for these options.</div>}
             </div>
           </div>
+
+          {/* Your artwork / file setup */}
+          {cfg?.file_handling?.fee > 0 && (
+            <div data-testid="sp-file-setup">
+              <div className="text-sm font-semibold mb-2">Your artwork</div>
+              <div className="space-y-2">
+                <button onClick={() => setNeedsSetup(false)} data-testid="sp-file-ready"
+                  className={`w-full text-left rounded-xl border px-4 py-3 transition-colors ${!needsSetup ? "border-[#2495D3] ring-1 ring-[#2495D3] bg-blue-50/40" : "border-slate-200"}`}>
+                  <div className="text-sm font-medium">I'll upload a print-ready PDF (free)</div>
+                  <div className="text-[11px] text-slate-400">Flattened, high-res PDF using our template (correct bleed &amp; resolution).</div>
+                </button>
+                <button onClick={() => setNeedsSetup(true)} data-testid="sp-file-setup-needed"
+                  className={`w-full text-left rounded-xl border px-4 py-3 transition-colors ${needsSetup ? "border-amber-400 ring-1 ring-amber-400 bg-amber-50/60" : "border-slate-200"}`}>
+                  <div className="text-sm font-medium">I need you to set up my file (+{money(cfg.file_handling.fee)})</div>
+                  <div className="text-[11px] text-slate-500">For TIFF / non-print-ready files we prep it for production. Fee added to your order.</div>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Tax breakdown for the selected paper */}
           {selected && (

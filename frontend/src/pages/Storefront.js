@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ShoppingBag, Plus, Minus, Trash2, Store, CreditCard, Sliders } from "lucide-react";
+import { API } from "@/lib/api";
+const authImg = (u) => (u ? (u.startsWith("http") ? u : `${API}${u}?auth=${localStorage.getItem("pns_token")}`) : null);
 
 export default function Storefront() {
   const { user } = useAuth();
@@ -74,7 +76,7 @@ export default function Storefront() {
                 return (
                   <div key={p.id} data-testid="store-product-card" className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
                     {p.image_url
-                      ? <img src={p.image_url} alt={p.name} className="w-full h-40 object-cover" />
+                      ? <img src={authImg(p.image_url)} alt={p.name} className="w-full h-40 object-cover" />
                       : <div className="w-full h-40 bg-slate-100 flex items-center justify-center text-slate-300"><Store size={36} /></div>}
                     <div className="p-5">
                       <div className="font-head font-bold">{p.name}</div>

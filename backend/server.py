@@ -1046,6 +1046,28 @@ async def upload_invoice(file: UploadFile = File(...), user=Depends(require_admi
     return {"file_id": fid, "filename": file.filename,
             "url": f"/api/files/{fid}/download", "size": result.get("size", len(data))}
 
+ALLOWED_UPLOAD_EXT = {"pdf", "png", "jpg", "jpeg", "tiff", "tif", "ai", "eps", "svg", "webp", "gif"}
+
+@api_router.post("/upload/file")
+async def upload_file_generic(file: UploadFile = File(...), user=Depends(get_current_user)):
+    ext = (file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin")
+    if ext not in ALLOWED_UPLOAD_EXT:
+        raise HTTPException(400, f"File type .{ext} not allowed")
+    ctype = file.content_type or MIME_TYPES.get(ext, "application/octet-stream")
+    path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4()}.{ext}"
+    data = await file.read()
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 50MB).")
+    result = storage_put(path, data, ctype)
+    fid = str(uuid.uuid4())
+    await db.files.insert_one({
+        "id": fid, "storage_path": result["path"], "original_filename": file.filename,
+        "content_type": ctype, "size": result.get("size", len(data)), "uploaded_by": user["id"],
+        "is_deleted": False, "created_at": now_iso(),
+    })
+    return {"file_id": fid, "filename": file.filename, "url": f"/api/files/{fid}/download",
+            "size": result.get("size", len(data)), "content_type": ctype}
+
 @api_router.get("/files/{file_id}/download")
 async def download_file(file_id: str, authorization: str = Header(None), auth: str = Query(None)):
     token = None
@@ -3304,6 +3326,7 @@ async def store_paper_price(body: StorePaperPriceIn, user=Depends(get_current_us
                        "default_sides": cfg.get("default_sides") or "4_0",
                        "addons": cfg.get("addons") or {},
                        "turnarounds": turns, "default_turnaround": tid, "selected_turnaround": tid,
+                       "file_handling": cfg.get("file_handling") or {},
                        "gst_pct": float(st.get("gst_pct", 5) or 0),
                        "pst_pct": float(st.get("pst_pct", 7) or 0),
                        "role": role},
@@ -3324,6 +3347,7 @@ class MarketingGenIn(BaseModel):
     addons: dict = {}
     turnarounds: List[dict] = []
     sample_price: Optional[float] = None
+    tone: str = "professional"
 
 @api_router.post("/marketing/generate")
 async def marketing_generate(body: MarketingGenIn, user=Depends(require_admin)):
@@ -3344,7 +3368,7 @@ async def marketing_generate(body: MarketingGenIn, user=Depends(require_admin)):
               '"seo_description":{"en":"","es":""},"slug":"","keywords":{"en":["",""],"es":["",""]},'
               '"hashtags":["#tag"],"instagram":{"en":"","es":""},"facebook":{"en":"","es":""},'
               '"kijiji":{"en":{"title":"","body":""},"es":{"title":"","body":""}},"image_alt":{"en":"","es":""}}')
-    system = ("You are an expert e-commerce copywriter and SEO specialist for a print shop. "
+    system = (f"You are an expert e-commerce copywriter and SEO specialist for a print shop. Brand tone: {body.tone}. "
               "Return ONLY valid minified JSON (no markdown, no code fences, no commentary). "
               "Provide every en/es field in BOTH English and Spanish. Rules: seo_title <=60 chars; "
               "seo_description <=160 chars; slug lowercase kebab-case in English; hashtags 10-14 items each starting with '#'; "
@@ -3438,7 +3462,7 @@ async def deduct_inventory_for_order(enriched):
 class OrderItemIn(BaseModel):
     product_id: str
     qty: float = 1.0
-    config: Optional[dict] = None    # for configurable products: {quantity, sides, paper_id, laminate, hot_foil, round_corners}
+    config: Optional[dict] = None    # for configurable products: {quantity, sides, paper_id, laminate, hot_foil, round_corners, needs_setup}
 
 class OrderIn(BaseModel):
     items: List[OrderItemIn]
@@ -3471,11 +3495,17 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
                 continue
             price = chosen.get("price") or 0.0
             lt = round(price * it.qty, 2)
+            fh = cfgp.get("file_handling") or {}
+            setup_fee = round(float(fh.get("fee") or 0), 2) if it.config.get("needs_setup") else 0.0
+            lt = round(lt + setup_fee, 2)
             total += lt
             sides_lbl = str(it.config.get("sides") or "4_0").replace("_", "/")
-            name = f"{p.get('name')} · {chosen['paper_name']} · {it.config.get('quantity')} pcs · {sides_lbl}" + (f" · {tlabel}" if tlabel else "")
-            line_items.append({"product_id": it.product_id, "name": name, "category": p.get("category"),
-                               "qty": it.qty, "unit_price": price, "line_total": lt, "config": it.config})
+            name = f"{p.get('name')} · {chosen['paper_name']} · {it.config.get('quantity')} pcs · {sides_lbl}" + (f" · {tlabel}" if tlabel else "") + (" · File setup" if setup_fee else "")
+            li = {"product_id": it.product_id, "name": name, "category": p.get("category"),
+                  "qty": it.qty, "unit_price": price, "line_total": lt, "config": it.config}
+            if setup_fee:
+                li["setup_fee"] = setup_fee
+            line_items.append(li)
             continue
         pricing = await compute_product_pricing(p, s)
         retail = pricing["price"] if pricing else (p.get("price") or 0.0)
@@ -3522,6 +3552,45 @@ async def update_order_status(oid: str, body: OrderStatusIn, user=Depends(requir
 async def delete_order(oid: str, user=Depends(require_admin)):
     await db.orders.delete_one({"_id": ObjectId(oid)})
     return {"ok": True}
+
+class OrderFileIn(BaseModel):
+    file_id: str
+    kind: str = "client"   # "client" (customer artwork) | "proof" (our production/edited file)
+
+async def _get_order_for_user(oid, user):
+    o = await db.orders.find_one({"_id": ObjectId(oid)})
+    if not o:
+        raise HTTPException(404, "Order not found")
+    if user.get("role") != "admin" and o.get("user_id") != user["id"]:
+        raise HTTPException(403, "Not allowed")
+    return o
+
+@api_router.get("/orders/{oid}")
+async def get_order(oid: str, user=Depends(get_current_user)):
+    o = await _get_order_for_user(oid, user)
+    c = clean(o)
+    if user.get("role") != "admin":
+        c.pop("inventory_deductions", None)
+    return c
+
+@api_router.post("/orders/{oid}/files")
+async def add_order_file(oid: str, body: OrderFileIn, user=Depends(get_current_user)):
+    await _get_order_for_user(oid, user)
+    kind = "proof" if (body.kind == "proof" and user.get("role") == "admin") else "client"
+    rec = await db.files.find_one({"id": body.file_id, "is_deleted": False})
+    if not rec:
+        raise HTTPException(404, "File not found")
+    entry = {"file_id": body.file_id, "filename": rec.get("original_filename"), "kind": kind,
+             "uploaded_by": user["id"], "at": now_iso(), "url": f"/api/files/{body.file_id}/download"}
+    await db.orders.update_one({"_id": ObjectId(oid)}, {"$push": {"files": entry}})
+    return clean(await db.orders.find_one({"_id": ObjectId(oid)}))
+
+@api_router.delete("/orders/{oid}/files/{file_id}")
+async def remove_order_file(oid: str, file_id: str, user=Depends(get_current_user)):
+    await _get_order_for_user(oid, user)
+    await db.orders.update_one({"_id": ObjectId(oid)}, {"$pull": {"files": {"file_id": file_id}}})
+    await db.files.update_one({"id": file_id}, {"$set": {"is_deleted": True}})
+    return clean(await db.orders.find_one({"_id": ObjectId(oid)}))
 
 # ---------------- Stripe payment (pay an existing order) ----------------
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"

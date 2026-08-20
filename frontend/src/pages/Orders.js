@@ -12,8 +12,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Printer, FileText, CreditCard } from "lucide-react";
-import { apiErr } from "@/lib/api";
+import { Printer, FileText, CreditCard, Upload, Download, RefreshCw, Trash2 } from "lucide-react";
+import { apiErr, API } from "@/lib/api";
 
 const STATUS = { pending: "bg-amber-100 text-amber-700", paid: "bg-blue-100 text-blue-700", fulfilled: "bg-emerald-100 text-emerald-700", cancelled: "bg-slate-100 text-slate-500" };
 
@@ -36,6 +36,29 @@ export default function Orders() {
   };
 
   const setStatus = async (id, status) => { await api.put(`/orders/${id}/status`, { status }); load(); if (detail?.id === id) setDetail({ ...detail, status }); };
+
+  const token = localStorage.getItem("pns_token");
+  const fileUrl = (fid) => `${API}/files/${fid}/download?auth=${token}`;
+  const uploadFile = async (e, kind) => {
+    const file = e.target.files?.[0]; if (!file || !detail) return;
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      const { data } = await api.post("/upload/file", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      const { data: order } = await api.post(`/orders/${detail.id}/files`, { file_id: data.file_id, kind });
+      setDetail(order); load(); toast.success("File uploaded");
+    } catch (err) { toast.error(apiErr(err.response?.data?.detail) || err.message); }
+    e.target.value = "";
+  };
+  const removeFile = async (fid) => {
+    const { data: order } = await api.delete(`/orders/${detail.id}/files/${fid}`);
+    setDetail(order); load();
+  };
+  const reorder = async (o) => {
+    try {
+      await api.post("/orders", { items: (o.items || []).map((i) => ({ product_id: i.product_id, qty: i.qty, config: i.config || null })), notes: `Reorder of ${o.id.slice(-6)}` });
+      toast.success("Reorder created"); load(); setDetail(null);
+    } catch (err) { toast.error(apiErr(err.response?.data?.detail) || err.message); }
+  };
 
   return (
     <div data-testid="orders-page">
@@ -103,6 +126,37 @@ export default function Orders() {
               </table>
               <div className="flex justify-between font-bold pt-1"><span>Total</span><span className="num text-[#2495D3]">{money(detail.total)}</span></div>
               {detail.notes && <div className="text-xs text-slate-500">Notes: {detail.notes}</div>}
+
+              <div className="border-t border-slate-100 pt-3" data-testid="order-files">
+                <div className="font-mono uppercase text-[10px] text-slate-400 mb-2">Production files</div>
+                <div className="space-y-1">
+                  {(detail.files || []).map((f) => (
+                    <div key={f.file_id} className="flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-1.5" data-testid="order-file-row">
+                      <span className="truncate">
+                        <span className={`inline-block text-[9px] font-mono uppercase mr-2 px-1.5 py-0.5 rounded ${f.kind === "proof" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"}`}>{f.kind === "proof" ? "Our file" : "Client"}</span>
+                        {f.filename}
+                      </span>
+                      <span className="flex items-center gap-2 shrink-0">
+                        <a href={fileUrl(f.file_id)} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-[#2495D3]" title="Download" data-testid="order-file-download"><Download size={14} /></a>
+                        <button onClick={() => removeFile(f.file_id)} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+                      </span>
+                    </div>
+                  ))}
+                  {(detail.files || []).length === 0 && <div className="text-[11px] text-slate-400">No files uploaded yet.</div>}
+                </div>
+                <div className="flex gap-2 mt-2 print:hidden">
+                  <label className="text-xs inline-flex items-center gap-1 cursor-pointer text-[#2495D3] hover:underline" data-testid="order-upload-client">
+                    <Upload size={13} /> Upload my artwork
+                    <input type="file" className="hidden" onChange={(e) => uploadFile(e, "client")} />
+                  </label>
+                  {isAdmin && (
+                    <label className="text-xs inline-flex items-center gap-1 cursor-pointer text-blue-600 hover:underline" data-testid="order-upload-proof">
+                      <Upload size={13} /> Upload production file
+                      <input type="file" className="hidden" onChange={(e) => uploadFile(e, "proof")} />
+                    </label>
+                  )}
+                </div>
+              </div>
               {isAdmin && detail.inventory_deductions?.length > 0 && (
                 <div className="bg-slate-50 rounded-lg p-3 text-xs" data-testid="order-deductions">
                   <div className="font-mono uppercase text-[10px] text-slate-400 mb-1">Inventory deducted</div>
@@ -126,6 +180,7 @@ export default function Orders() {
               </Select>
             ) : <span />}
             <div className="flex gap-2">
+              <Button variant="outline" onClick={() => reorder(detail)} className="rounded-lg" data-testid="order-reorder"><RefreshCw size={15} className="mr-1.5" /> Reorder</Button>
               {detail?.status === "pending" && (
                 <Button onClick={() => pay(detail)} disabled={paying === detail.id} className="bg-emerald-600 hover:bg-emerald-700 rounded-lg" data-testid="invoice-pay">
                   <CreditCard size={15} className="mr-1.5" /> {paying === detail.id ? "Redirecting…" : "Pay now"}
