@@ -1,4 +1,7 @@
-## Implemented (2026-08-20) — Motion & 360° for product images
+## Implemented (2026-08-20) — Spicers supplier training: ink→machine assignment
+- Trained the existing PDF invoice parser for Spicers (rolls/inks/substrates). Added `machine_id` to `PurchaseLine`; parser now auto-detects "ink" lines and auto-suggests the machine by brand keyword match (Roland ink → Roland machine, Mimaki ink → Mimaki machine). Import review UI shows a per-ink-line **machine dropdown** (only when category=ink); on save the material is linked to that machine (`machine_id`). Rolls (laminate/vinyl/banner 54"x150') parse as `roll` with linear specs, no machine.
+- Verified end-to-end with real Spicers PDFs: 4 Roland inks + 3 Mimaki inks auto-mapped to correct machines; 4 rolls classified correctly; materials saved with machine link.
+
 - CSS "ken-burns" slow-zoom on the store product image (always on, free) via inline keyframe in StoreProduct.
 - AI 360° spin: `POST /api/marketing/product-360` (Nano Banana, 4 angles generated concurrently), `PUT /api/products/{pid}/spin` (upsert to `product_spins`), `GET /api/store/products/{pid}/spin`. "360° spin" button in `ProductImageAI` (both unified editor + Convert-to-product). StoreProduct shows an auto-rotating, drag-to-rotate 360 viewer when frames exist, else the ken-burns image. Verified: 4 frames generated → saved → store returns 4 → viewer renders.
 

@@ -1839,6 +1839,7 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
             if not (sup.get(k) or "").strip() and sup_doc.get(k):
                 sup[k] = sup_doc[k]
         data["supplier"] = sup
+    _machines_cache = await db.machines.find().to_list(500)
     for li in data.get("line_items", []):
         li["import"] = True
         li["name"] = (li.get("description") or "")[:60]
@@ -1847,6 +1848,16 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
         desc = li.get("description") or li.get("name") or ""
         det = _detect_media_category(desc)
         li["category"] = det or cat
+        if "ink" in desc.lower():
+            li["category"] = "ink"
+        li["machine_id"] = ""
+        if li["category"] == "ink":
+            dl = desc.lower()
+            for _mc in _machines_cache:
+                nm = (_mc.get("name") or "").lower()
+                brand = nm.split()[0] if nm else ""
+                if brand and brand in dl:
+                    li["machine_id"] = str(_mc["_id"]); li["machine_name"] = _mc.get("name"); break
         m = None
         if li.get("code"):
             m = await db.materials.find_one({"code": {"$regex": f"^{re.escape(li['code'])}$", "$options": "i"}})
@@ -1880,6 +1891,7 @@ class PurchaseLine(BaseModel):
     unit_multiplier: float = 1.0
     size: str = ""
     category: str = ""
+    machine_id: str = ""
 
 class PurchaseSupplier(BaseModel):
     company: str = ""
@@ -1967,6 +1979,8 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                              ("supplier_phone", sup.phone), ("supplier_email", sup.email)]:
                     if v and not match.get(k):
                         upd[k] = v
+                if li.machine_id:
+                    upd["machine_id"] = li.machine_id
                 await db.materials.update_one({"_id": match["_id"]}, {"$set": upd})
                 affected.append({"id": str(match["_id"]), "name": match.get("name"), "action": "updated"})
             else:
@@ -1982,6 +1996,7 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                     "size": size_str,
                     "stock_qty": stock_units, "reorder_point": _rp_default, "reorder_target": round(stock_units, 2),
                     "modules": line_modules, "is_default": False,
+                    "machine_id": li.machine_id or None,
                     "last_purchase_at": now_iso(), "created_at": now_iso(),
                 }
                 doc.update({k: v for k, v in extra.items() if k not in ("unit", "size")})
