@@ -1,4 +1,6 @@
-## Implemented (2026-08-20) — Unified Product Editor
+## Implemented (2026-08-20) — Unified Product Editor + field parity with Convert-to-product
+- Added **Product image upload** (`uploadImageC` → POST /upload/file, preview via API export) and **pre-filled default turnarounds** (Standard 0 / Next day 10 / Same day 15) to the unified New product editor, matching the Paper Printing "Convert to product" form. Now both product-creation flows share the fundamentals: name, category, description, retail+wholesale price, product image, materials, add-ons, file fee, turnarounds, related products, training videos, and AI marketing (Regenerate). Verified via UI.
+
 - Merged the two ProductsCatalog dialogs (basic "New/Edit" + "Configure & marketing") into ONE editor. `openNew` and the row Pencil now open the same `cfgProd` dialog (title "New product" / "Edit product"). Removed the redundant megaphone button; the old basic dialog stays in code but is never opened.
 - The unified editor has everything for ALL product types: name, category, description, Retail + Wholesale price, Materials/BoM (cfg-specific handlers setBomC/addBomC/rmBomC + bomUnitCostC), Add-ons, File fee, Turnarounds, Related products, Training videos, and the full AI Marketing column (now available for every product, not just configurable). `saveConfig` handles both create (POST) and update (PUT) + video sync. Verified via UI: New product → price+video+marketing, save, reopen via Pencil, video persists.
 

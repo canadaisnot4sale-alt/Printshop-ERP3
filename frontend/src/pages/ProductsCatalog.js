@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api, { apiErr } from "@/lib/api";
+import api, { apiErr, API } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import { Metric } from "@/components/Metric";
 import { money } from "@/lib/format";
@@ -87,8 +87,16 @@ export default function ProductsCatalog() {
   }, []);
 
   const openNew = () => {
-    setCfgProd({ name: "", category: "Other", module: "", price: 0, wholesale_price: 0, description: "", published: false, product_type: "static", config: {}, bom: [], marketing: {} });
+    setCfgProd({ name: "", category: "Other", module: "", price: 0, wholesale_price: 0, description: "", published: false, product_type: "static", image_url: "",
+      config: { turnarounds: [{ id: "standard", label: "Standard", pct: 0 }, { id: "next_day", label: "Next day", pct: 10 }, { id: "same_day", label: "Same day", pct: 15 }], default_turnaround: "standard" },
+      bom: [], marketing: {} });
     setRegenTone("professional"); setCfgVideos([]); setCfgRemovedVideoIds([]);
+  };
+  const uploadImageC = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const fd = new FormData(); fd.append("file", file);
+    try { const { data } = await api.post("/upload/file", fd, { headers: { "Content-Type": "multipart/form-data" } }); setC({ image_url: data.url }); toast.success("Image uploaded"); }
+    catch (err) { toast.error(apiErr(err.response?.data?.detail) || err.message); }
   };
   const openEdit = (p) => {
     setForm({ name: p.name, category: p.category, module: p.module || "", price: p.price, wholesale_price: p.wholesale_price || 0, description: p.description || "", published: !!p.published, bom: (p.bom || []).map((b) => ({ waste_per_order: 0, waste_per_unit: 0, ...b })) });
@@ -331,6 +339,11 @@ export default function ProductsCatalog() {
                 <div className="grid grid-cols-2 gap-2">
                   <div><Label className="text-xs">Retail price ($)</Label><Input type="number" value={cfgProd.price ?? 0} onChange={(e) => setC({ price: e.target.value })} className="rounded-lg mt-1 h-9 num" data-testid="cfg-price" /></div>
                   <div><Label className="text-xs">Wholesale ($)</Label><Input type="number" value={cfgProd.wholesale_price ?? 0} onChange={(e) => setC({ wholesale_price: e.target.value })} className="rounded-lg mt-1 h-9 num" data-testid="cfg-wholesale" /></div>
+                </div>
+                <div>
+                  <Label className="text-xs">Product image</Label>
+                  <input type="file" accept="image/*" onChange={uploadImageC} className="text-[11px] mt-1 block w-full" data-testid="cfg-image-upload" />
+                  {cfgProd.image_url && <img src={`${API}${cfgProd.image_url}?auth=${localStorage.getItem("pns_token")}`} alt="preview" className="mt-1 h-14 rounded object-cover" />}
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3">
                   <div className="flex items-center justify-between mb-1"><Label className="text-xs font-semibold">Materials (auto-pricing)</Label>
