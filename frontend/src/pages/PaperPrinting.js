@@ -206,7 +206,7 @@ export default function PaperPrinting() {
       ],
       defaultTurn: "standard",
       addons: { lamination: laminate, hot_foil: hotFoil, round_corners: roundCorners },
-      marketing: null, relatedIds: [], tone: "professional", fileFee: 25, imageUrl: "",
+      marketing: null, relatedIds: [], tone: "professional", fileFee: 25, imageUrl: "", videos: [],
       template: result?.product ? { width_in: +(Number(result.product.finished_w) + 0.25).toFixed(2), height_in: +(Number(result.product.finished_h) + 0.25).toFixed(2) } : null,
     });
     api.get("/catalog-products").then((r) => setCatalogProducts((r.data || []).filter((p) => p.published))).catch(() => {});
@@ -249,7 +249,7 @@ export default function PaperPrinting() {
     if (f.sides.length === 0) return toast.error("Allow at least one print side");
     if (!f.turnarounds || f.turnarounds.length === 0) return toast.error("Add at least one turnaround option");
     try {
-      await api.post("/catalog-products", {
+      const res = await api.post("/catalog-products", {
         name: f.name, category: f.category, description: f.description, published: f.published,
         module: "paper", product_type: "configurable_paper", price: 0, wholesale_price: 0,
         marketing: f.marketing || {}, image_url: f.imageUrl || "",
@@ -267,6 +267,11 @@ export default function PaperPrinting() {
           laminate_id: laminateId || "", laminate_sides: laminateSides, foil_id: foilId || "", foil_sides: foilSides,
         },
       });
+      const newPid = res.data.id;
+      for (const v of (f.videos || [])) {
+        if (!v.url || !v.url.trim()) continue;
+        try { await api.post("/training/videos", { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: newPid, ref_label: f.name }); } catch (e) {}
+      }
       toast.success("Product created — clients can now order it");
       setConvOpen(false);
       api.get(`/products/paper-match?product_id=${productId}`).then((r) => setMatches(r.data || [])).catch(() => {});
@@ -735,6 +740,21 @@ export default function PaperPrinting() {
                     </div>
                   ))}
                   <p className="text-[11px] text-slate-400">Surcharge % applies to both Retail &amp; Wholesale. The Default is preselected in the store.</p>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs font-semibold">Training videos</Label>
+                    <button type="button" onClick={() => setConvForm((f) => ({ ...f, videos: [...(f.videos || []), { url: "", title_es: "", title_en: "" }] }))} className="text-[11px] text-[#2495D3] hover:underline" data-testid="conv-add-video">+ Add video</button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mb-2">Paste a YouTube (unlisted) / Vimeo / Drive link and name it (e.g. "How to make this"). Employees see it in the Training Center.</p>
+                  {(convForm.videos || []).map((v, i) => (
+                    <div key={i} className="flex items-center gap-2 mb-2" data-testid="conv-video-row">
+                      <Input value={v.title_es} onChange={(e) => setConvForm((f) => ({ ...f, videos: f.videos.map((x, idx) => (idx === i ? { ...x, title_es: e.target.value } : x)) }))} placeholder="Nombre / Name" className="rounded-lg h-8 text-xs w-40" data-testid={`conv-video-title-${i}`} />
+                      <Input value={v.url} onChange={(e) => setConvForm((f) => ({ ...f, videos: f.videos.map((x, idx) => (idx === i ? { ...x, url: e.target.value } : x)) }))} placeholder="https://youtu.be/..." className="rounded-lg h-8 text-xs flex-1 num" data-testid={`conv-video-url-${i}`} />
+                      <button type="button" onClick={() => setConvForm((f) => ({ ...f, videos: f.videos.filter((_, idx) => idx !== i) }))} className="text-slate-300 hover:text-red-500 shrink-0"><X size={14} /></button>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="flex items-center justify-between">
