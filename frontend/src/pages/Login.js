@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
+import { Turnstile } from "@marsidev/react-turnstile";
 import api, { apiErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -15,20 +16,29 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const siteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY;
 
   if (user) return <Navigate to="/" replace />;
 
   const submit = async (e) => {
     e.preventDefault();
+    if (mode === "register" && siteKey && !captchaToken) {
+      toast.error("Please complete the captcha verification");
+      return;
+    }
     setLoading(true);
     try {
       const path = mode === "login" ? "/auth/login" : "/auth/register";
-      const body = mode === "login" ? { email, password } : { email, password, name: name || "User" };
+      const body = mode === "login"
+        ? { email, password }
+        : { email, password, name: name || "User", turnstile_token: captchaToken };
       const { data } = await api.post(path, body);
       login(data);
       toast.success(mode === "login" ? "Welcome back" : "Account created");
       nav("/");
     } catch (err) {
+      setCaptchaToken(null);
       toast.error(apiErr(err.response?.data?.detail) || err.message);
     } finally {
       setLoading(false);
@@ -67,6 +77,17 @@ export default function Login() {
               <Label className="text-xs">Password</Label>
               <Input data-testid="password-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="rounded-sm mt-1" />
             </div>
+            {mode === "register" && siteKey && (
+              <div data-testid="turnstile-widget" className="flex justify-center">
+                <Turnstile
+                  siteKey={siteKey}
+                  options={{ action: "register", theme: "light" }}
+                  onSuccess={(t) => setCaptchaToken(t)}
+                  onError={() => setCaptchaToken(null)}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              </div>
+            )}
             <Button data-testid="submit-auth-button" disabled={loading} className="w-full bg-[#2495D3] hover:bg-[#1E7AA9] rounded-sm">
               {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Register"}
             </Button>

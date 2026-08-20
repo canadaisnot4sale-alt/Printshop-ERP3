@@ -136,6 +136,7 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str
     name: str = "User"
+    turnstile_token: str | None = None
 
 class LoginIn(BaseModel):
     email: EmailStr
@@ -786,8 +787,27 @@ def equipment_cost(eq):
     }
 
 # ---------------- Auth routes ----------------
+async def verify_turnstile(token: str | None):
+    secret = os.environ.get("TURNSTILE_SECRET_KEY")
+    if not secret:
+        return  # captcha not configured; skip
+    if not token:
+        raise HTTPException(status_code=400, detail="Captcha verification required")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={"secret": secret, "response": token})
+            resp.raise_for_status()
+            result = resp.json()
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=503, detail="Verification service temporarily unavailable")
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail="Captcha verification failed")
+
 @api_router.post("/auth/register")
 async def register(body: RegisterIn, response: Response):
+    await verify_turnstile(body.turnstile_token)
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already registered")
