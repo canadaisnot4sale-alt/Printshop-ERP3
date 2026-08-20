@@ -11,8 +11,8 @@ export default function Login() {
   const { user, login } = useAuth();
   const nav = useNavigate();
   const [mode, setMode] = useState("login");
-  const [email, setEmail] = useState("admin@printandsave.ca");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -51,7 +51,7 @@ export default function Login() {
           <h1 className="font-head font-bold text-xl mb-1">
             {mode === "login" ? "Sign in" : "Create account"}
           </h1>
-          <p className="text-sm text-slate-500 mb-6">Print Shop ERP & Estimating</p>
+          <p className="text-sm text-slate-500 mb-6">{mode === "login" ? "Sign in to see prices and order." : "Create your account to see prices and order online."}</p>
           <form onSubmit={submit} className="space-y-4">
             {mode === "register" && (
               <div>
