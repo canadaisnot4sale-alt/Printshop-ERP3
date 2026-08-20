@@ -11,6 +11,10 @@
 ## Original Problem Statement
 Excel-style ERP/estimating system for a print shop automating pricing, material management, production calculations and cost analysis across 5 modules: Paper Printing, Booklet, Large Format, Sticker Calculator, Equipment & Production Cost. Everything interconnected so material/equipment/markup/product changes flow through all quotes.
 
+### Recent additions (2026-06)
+- Configurable "Grab-n-Go" paper products: Paper Printing quote → sellable configurable product (client picks qty/paper/add-ons, live role-based price incl. tax) at `/store/product/:id`; anti-duplicate alert when a product already exists for the base piece. NOTE: inventory deduction for configurable-paper orders deferred.
+- In-memory quote persistence across all 11 estimating modules (kept on module switch, reset on browser refresh).
+
 ## User Choices
 - Cover ALL modules at a basic level in v1
 - Auth: JWT email + password

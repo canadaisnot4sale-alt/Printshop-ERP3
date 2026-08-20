@@ -15,10 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { money, num } from "@/lib/format";
 import { PricingPanel, useRushRates } from "@/components/Metric";
 import { useRequote } from "@/lib/useRequote";
+import { useNavigate } from "react-router-dom";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Calculator, Layers, FileStack, DollarSign, Tag } from "lucide-react";
+import { Calculator, Layers, FileStack, DollarSign, Tag, Package } from "lucide-react";
 
 const SHEETS = ["8.5x11", "8.5x14", "11x17", "12x18", "13x19"];
+const STD_TIERS = [25, 50, 100, 250, 500, 1000, 2500, 5000];
 
 const prodFields = [
   { name: "name", label: "Product Name", type: "text", full: true },
@@ -90,6 +93,10 @@ export default function PaperPrinting() {
   const [loading, setLoading] = useState(false);
 
   const [paperMats, setPaperMats] = useState([]);
+  const nav = useNavigate();
+  const [matches, setMatches] = useState([]);
+  const [convOpen, setConvOpen] = useState(false);
+  const [convForm, setConvForm] = useState(null);
   const loadProducts = () => api.get("/products").then((r) => {
     const list = [...r.data].sort((a, b) => (Number(a.finished_w) * Number(a.finished_h)) - (Number(b.finished_w) * Number(b.finished_h)) || Number(a.finished_w) - Number(b.finished_w));
     setProducts(list);
@@ -119,6 +126,12 @@ export default function PaperPrinting() {
       if (d) setFoilId((cur) => cur || d.id);
     }).catch(() => {});
   }, []);
+
+  // Anti-duplicate: if a configurable product already exists for this piece, alert the estimator.
+  useEffect(() => {
+    if (!isAdmin || !productId) { setMatches([]); return; }
+    api.get(`/products/paper-match?product_id=${productId}`).then((r) => setMatches(r.data || [])).catch(() => setMatches([]));
+  }, [isAdmin, productId]);
 
   const [customW, setCustomW] = useState("");
   const [customH, setCustomH] = useState("");
@@ -175,6 +188,44 @@ export default function PaperPrinting() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [laminate, laminateId, laminateSides, hotFoil, foilId, foilSides, roundCorners, customW, customH]);
 
+  const openConvert = () => {
+    if (!result || !selectedStock) return;
+    const cls = paperClass(selectedStock.stock.name);
+    const clsIds = paperMats.filter((m) => paperClass(m.name) === cls).map((m) => m.id);
+    setConvForm({
+      name: result.product?.name || "Product", category: "Business Cards", description: "", published: true,
+      autoByClass: true, paperClass: cls, allowedIds: clsIds.length ? clsIds : paperMats.map((m) => m.id),
+      sides: ["4_0", "4_4"], defaultSides: side,
+      addons: { lamination: laminate, hot_foil: hotFoil, round_corners: roundCorners },
+    });
+    setConvOpen(true);
+  };
+  const toggleAllowed = (id) => setConvForm((f) => ({ ...f, allowedIds: f.allowedIds.includes(id) ? f.allowedIds.filter((x) => x !== id) : [...f.allowedIds, id] }));
+  const toggleSide = (s) => setConvForm((f) => ({ ...f, sides: f.sides.includes(s) ? f.sides.filter((x) => x !== s) : [...f.sides, s] }));
+  const saveProduct = async () => {
+    const f = convForm;
+    if (!f.name.trim()) return toast.error("Name required");
+    if (!f.autoByClass && f.allowedIds.length === 0) return toast.error("Select at least one paper");
+    if (f.sides.length === 0) return toast.error("Allow at least one print side");
+    try {
+      await api.post("/catalog-products", {
+        name: f.name, category: f.category, description: f.description, published: f.published,
+        module: "paper", product_type: "configurable_paper", price: 0, wholesale_price: 0,
+        config: {
+          base_product_id: productId, base_product_name: result.product?.name || "",
+          sheet: canonSheet(sheet), auto_by_class: f.autoByClass, paper_class: f.paperClass,
+          allowed_paper_ids: f.autoByClass ? [] : f.allowedIds,
+          quantities: STD_TIERS, sides: f.sides, default_sides: f.defaultSides, addons: f.addons,
+          default_paper_id: selectedStock?.stock?.id || "",
+          laminate_id: laminateId || "", laminate_sides: laminateSides, foil_id: foilId || "", foil_sides: foilSides,
+        },
+      });
+      toast.success("Product created — clients can now order it");
+      setConvOpen(false);
+      api.get(`/products/paper-match?product_id=${productId}`).then((r) => setMatches(r.data || [])).catch(() => {});
+    } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
+  };
+
   const qtys = result?.qtys || [];
   const rowFor = (r, qty) => r?.quote.rows.find((x) => x.qty === qty);
   const retailOf = (row) => row?.[`customer_price_${side}`];
@@ -192,6 +243,14 @@ export default function PaperPrinting() {
     <div data-testid="paper-page">
       <PageHeader title="Paper Printing" subtitle="Imposition, cost comparison & instant pricing" testid="paper-header" eyebrow="Live Pricing" />
       <div className="p-8">
+        {isAdmin && matches.length > 0 && (
+          <div data-testid="paper-dup-alert" className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+            <div className="text-sm text-amber-800">
+              Ya existe {matches.length > 1 ? `${matches.length} productos` : `el producto "${matches[0].name}"`} con estas especificaciones. Úsalo en la tienda en vez de recotizar.
+            </div>
+            <Button size="sm" variant="outline" className="rounded-lg border-amber-400 text-amber-800 shrink-0" onClick={() => nav("/products-catalog")} data-testid="paper-dup-view">Ver producto</Button>
+          </div>
+        )}
         <Tabs defaultValue="calc">
           <TabsList className="rounded-full bg-slate-100 p-1">
             <TabsTrigger value="calc" data-testid="tab-calc" className="rounded-full">Calculator</TabsTrigger>
@@ -340,7 +399,10 @@ export default function PaperPrinting() {
                           <div className="mt-2 text-[11px] font-mono uppercase tracking-widest text-emerald-600" data-testid="paper-volume-discount">Volume discount · {focusRow.volume_discount_pct}% off @ {focusQty} pc</div>
                         )}
                       </div>
-                      <div className="mt-4"><SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} inputs={{ productId, sheet, laminate, laminate_id: laminateId, laminate_sides: laminateSides, hot_foil: hotFoil, foil_id: foilId, foil_sides: foilSides, side, focusQty }} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} /></div>
+                      <div className="mt-4 flex items-center gap-2 flex-wrap">
+                        <SaveQuoteBar module="Paper" title={`${result.product?.name} · ${selectedStock.stock.name} · ${focusQty} ${side.replace("_", "/")}`} inputs={{ productId, sheet, laminate, laminate_id: laminateId, laminate_sides: laminateSides, hot_foil: hotFoil, foil_id: foilId, foil_sides: foilSides, side, focusQty }} summary={{ product: result.product, stock: selectedStock.stock, sheet: result.sheet_key, side, focus_qty: focusQty, row: focusRow }} />
+                        {isAdmin && <Button data-testid="convert-to-product-button" onClick={openConvert} variant="outline" size="sm" className="rounded-sm"><Package size={15} className="mr-1.5" />Convert to product</Button>}
+                      </div>
                     </div>
                   </div>
 
@@ -508,6 +570,72 @@ export default function PaperPrinting() {
             {isAdmin && <CrudManager endpoint="products" fields={prodFields} columns={prodCols} prefix="product" onChange={setProducts} sortFn={(a, b) => (Number(a.finished_w) * Number(a.finished_h)) - (Number(b.finished_w) * Number(b.finished_h)) || Number(a.finished_w) - Number(b.finished_w)} />}
           </TabsContent>
         </Tabs>
+
+        {convForm && (
+          <Dialog open={convOpen} onOpenChange={setConvOpen}>
+            <DialogContent className="rounded-xl max-w-lg max-h-[85vh] overflow-y-auto" data-testid="convert-product-dialog">
+              <DialogHeader>
+                <DialogTitle className="font-head">Convert to product</DialogTitle>
+                <DialogDescription className="text-xs text-slate-400">Creates a configurable product your clients can order (they pick quantity, paper & add-ons).</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-1">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label className="text-xs">Product name</Label><Input data-testid="conv-name" value={convForm.name} onChange={(e) => setConvForm((f) => ({ ...f, name: e.target.value }))} className="rounded-lg mt-1" /></div>
+                  <div><Label className="text-xs">Category</Label><Input data-testid="conv-category" value={convForm.category} onChange={(e) => setConvForm((f) => ({ ...f, category: e.target.value }))} className="rounded-lg mt-1" /></div>
+                </div>
+                <div><Label className="text-xs">Description (optional)</Label><Input data-testid="conv-desc" value={convForm.description} onChange={(e) => setConvForm((f) => ({ ...f, description: e.target.value }))} className="rounded-lg mt-1" /></div>
+
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Papers offered — auto by class ({convForm.paperClass})</Label>
+                    <Switch data-testid="conv-auto-class" checked={convForm.autoByClass} onCheckedChange={(v) => setConvForm((f) => ({ ...f, autoByClass: v }))} />
+                  </div>
+                  {convForm.autoByClass ? (
+                    <p className="text-[11px] text-slate-500 mt-2">All <b>{convForm.paperClass}</b> papers are offered automatically (new ones you add later appear too).</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 mt-2" data-testid="conv-paper-chips">
+                      {paperMats.map((m) => (
+                        <button key={m.id} type="button" onClick={() => toggleAllowed(m.id)}
+                          className={`text-xs rounded-full px-3 py-1 border transition-colors ${convForm.allowedIds.includes(m.id) ? "bg-[#2495D3] text-white border-[#2495D3]" : "bg-white text-slate-600 border-slate-300"}`}>
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <Label className="text-xs">Print sides offered</Label>
+                  <div className="flex gap-2 mt-1">
+                    {[["4_0", "One side"], ["4_4", "Both sides"]].map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => toggleSide(v)} data-testid={`conv-side-${v}`}
+                        className={`text-xs rounded-full px-3 py-1 border ${convForm.sides.includes(v) ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                  <Label className="text-xs font-semibold">Add-ons the client can choose</Label>
+                  {[["lamination", "Lamination"], ["hot_foil", "Hot Foil"], ["round_corners", "Round Corners"]].map(([k, l]) => (
+                    <div key={k} className="flex items-center justify-between">
+                      <span className="text-xs text-slate-600">{l}</span>
+                      <Switch data-testid={`conv-addon-${k}`} checked={!!convForm.addons[k]} onCheckedChange={(v) => setConvForm((f) => ({ ...f, addons: { ...f.addons, [k]: v } }))} />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Publish now (visible in Store)</Label>
+                  <Switch data-testid="conv-published" checked={convForm.published} onCheckedChange={(v) => setConvForm((f) => ({ ...f, published: v }))} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConvOpen(false)} className="rounded-lg">Cancel</Button>
+                <Button data-testid="conv-save" onClick={saveProduct} className="bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg">Create product</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </div>
   );

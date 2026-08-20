@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
+import { StoreCartProvider } from "@/context/StoreCartContext";
 import { Toaster } from "@/components/ui/sonner";
 import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
@@ -32,6 +33,7 @@ import Purchases from "@/pages/Purchases";
 import QuoteBuilder from "@/pages/QuoteBuilder";
 import ProductsCatalog from "@/pages/ProductsCatalog";
 import Storefront from "@/pages/Storefront";
+import StoreProduct from "@/pages/StoreProduct";
 import Orders from "@/pages/Orders";
 import PaymentReturn from "@/pages/PaymentReturn";
 
@@ -48,6 +50,7 @@ function App() {
     <div className="App">
       <AuthProvider>
         <CartProvider>
+        <StoreCartProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -68,6 +71,7 @@ function App() {
             <Route path="/quote-builder" element={<Protected><QuoteBuilder /></Protected>} />
             <Route path="/products-catalog" element={<Protected adminOnly><ProductsCatalog /></Protected>} />
             <Route path="/store" element={<Protected><Storefront /></Protected>} />
+            <Route path="/store/product/:id" element={<Protected><StoreProduct /></Protected>} />
             <Route path="/orders" element={<Protected><Orders /></Protected>} />
             <Route path="/payment/success" element={<Protected><PaymentReturn /></Protected>} />
             <Route path="/payment/cancel" element={<Protected><PaymentReturn /></Protected>} />
@@ -84,6 +88,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
+        </StoreCartProvider>
         </CartProvider>
         <Toaster position="top-right" />
       </AuthProvider>

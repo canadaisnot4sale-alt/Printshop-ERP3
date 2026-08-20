@@ -3020,6 +3020,8 @@ class CatalogProduct(BaseModel):
     published: bool = False
     source_quote_id: Optional[str] = None
     specs: dict = {}
+    product_type: str = "static"       # "static" | "configurable_paper"
+    config: dict = {}                  # for configurable_paper: base_product_id, sheet, allowed papers, addons, sides...
     # BoM: [{material_id, material_name, qty_per_unit, waste_per_order, waste_per_unit}]
     bom: List[dict] = []
 
@@ -3167,6 +3169,106 @@ async def quote_to_product(quote_id: str, body: ToProductIn, user=Depends(requir
     doc["_id"] = res.inserted_id
     return clean(doc)
 
+# ---------------- Configurable paper products (Grab-n-Go storefront) ----------------
+def _paper_class(name=""):
+    t = (name or "").lower()
+    if re.search(r"(cover|cardstock|card stock|c2s|c1s|\d+\s*pt\b)", t):
+        return "cardstock"
+    if re.search(r"(copy|digital copy)", t):
+        return "copy"
+    if re.search(r"(text|book|bond|writing)", t):
+        return "text"
+    return "other"
+
+async def _resolve_allowed_papers(config):
+    """Explicit list, or (auto_by_class) live list of paper stocks of a given class."""
+    if config.get("auto_by_class"):
+        cls = config.get("paper_class") or "cardstock"
+        docs = await db.materials.find({"category": "paper", "modules": {"$in": ["paper"]}}).to_list(500)
+        return [str(d["_id"]) for d in docs
+                if (d.get("paper_type") or "normal") == "normal" and _paper_class(d.get("name")) == cls]
+    return config.get("allowed_paper_ids") or []
+
+async def _configurable_paper_options(prod, req, user):
+    """Price each allowed paper for the chosen quantity/side/add-ons, role-scrubbed + tax-included."""
+    cfg = prod.get("config") or {}
+    allowed = await _resolve_allowed_papers(cfg)
+    laminate = bool(req.get("laminate"))
+    hot_foil = bool(req.get("hot_foil"))
+    paper_in = PaperCalcIn(
+        product_id=cfg.get("base_product_id"),
+        sheet_key=cfg.get("sheet") or "12x18",
+        laminate=laminate,
+        laminate_id=(cfg.get("laminate_id") or None) if laminate else None,
+        laminate_sides=int(cfg.get("laminate_sides") or 2),
+        foil_id=(cfg.get("foil_id") or None) if hot_foil else None,
+        foil_sides=int(cfg.get("foil_sides") or 2),
+        round_corners=bool(req.get("round_corners")),
+        stock_ids=allowed or None,
+    )
+    data = await calc_paper(paper_in, user)
+    settings = await get_settings()
+    gst = float(settings.get("gst_pct", 5) or 0)
+    pst = float(settings.get("pst_pct", 7) or 0)
+    role = user.get("role")
+    side = req.get("sides") if req.get("sides") in ("4_0", "4_4") else "4_0"
+    qty = int(req.get("quantity") or 100)
+    is_ws = role == "reseller"
+    price_key = ("wholesale_price_" if is_ws else "customer_price_") + side
+    unit_key = ("wholesale_unit_" if is_ws else "retail_unit_") + side
+    tax_factor = (1 + gst / 100.0) if is_ws else (1 + (gst + pst) / 100.0)
+    options = []
+    for r in data.get("results", []):
+        row = next((x for x in r.get("quote", {}).get("rows", []) if x.get("qty") == qty), None)
+        if not row:
+            continue
+        price = row.get(price_key)
+        if price is None:
+            price = row.get("customer_price_" + side) or row.get("wholesale_price_" + side) or 0
+        options.append({
+            "paper_id": r["stock"]["id"], "paper_name": r["stock"]["name"],
+            "is_default": bool(r["stock"].get("is_default")),
+            "sheets": row.get("sheets"), "n_up": row.get("n_up"),
+            "price": price, "unit_price": row.get(unit_key),
+            "price_incl_tax": round((price or 0) * tax_factor, 2),
+        })
+    options.sort(key=lambda o: o.get("price") or 0)
+    return options
+
+class StorePaperPriceIn(BaseModel):
+    product_id: str
+    quantity: int = 100
+    sides: str = "4_0"
+    laminate: bool = False
+    hot_foil: bool = False
+    round_corners: bool = False
+
+@api_router.post("/store/paper-price")
+async def store_paper_price(body: StorePaperPriceIn, user=Depends(get_current_user)):
+    prod = await db.catalog_products.find_one({"_id": ObjectId(body.product_id)})
+    if not prod:
+        raise HTTPException(404, "Product not found")
+    if prod.get("product_type") != "configurable_paper":
+        raise HTTPException(400, "Not a configurable paper product")
+    if user.get("role") != "admin" and not prod.get("published"):
+        raise HTTPException(404, "Product not found")
+    options = await _configurable_paper_options(prod, body.model_dump(), user)
+    cfg = prod.get("config") or {}
+    return {"product": {"id": str(prod["_id"]), "name": prod.get("name"),
+                        "category": prod.get("category"), "description": prod.get("description", ""),
+                        "image_url": prod.get("image_url", "")},
+            "config": {"quantities": cfg.get("quantities") or STANDARD_QTYS,
+                       "sides": cfg.get("sides") or ["4_0", "4_4"],
+                       "default_sides": cfg.get("default_sides") or "4_0",
+                       "addons": cfg.get("addons") or {}},
+            "quantity": body.quantity, "sides": body.sides, "options": options}
+
+@api_router.get("/products/paper-match")
+async def paper_match(product_id: str, user=Depends(require_admin)):
+    docs = await db.catalog_products.find(
+        {"product_type": "configurable_paper", "config.base_product_id": product_id}).to_list(50)
+    return [{"id": str(d["_id"]), "name": d.get("name"), "published": bool(d.get("published"))} for d in docs]
+
 # ---------------- Orders (storefront) + inventory deduction ----------------
 async def deduct_inventory_for_order(enriched):
     """enriched: [{product(dict), qty}]. Deduct BoM usage (qty_per_unit * qty) per material,
@@ -3240,6 +3342,7 @@ async def deduct_inventory_for_order(enriched):
 class OrderItemIn(BaseModel):
     product_id: str
     qty: float = 1.0
+    config: Optional[dict] = None    # for configurable products: {quantity, sides, paper_id, laminate, hot_foil, round_corners}
 
 class OrderIn(BaseModel):
     items: List[OrderItemIn]
@@ -3259,6 +3362,19 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
         if not prod or not prod.get("published"):
             continue
         p = clean(prod)
+        if prod.get("product_type") == "configurable_paper" and it.config:
+            opts = await _configurable_paper_options(prod, it.config, user)
+            chosen = next((o for o in opts if o["paper_id"] == it.config.get("paper_id")), None) or (opts[0] if opts else None)
+            if not chosen:
+                continue
+            price = chosen.get("price") or 0.0
+            lt = round(price * it.qty, 2)
+            total += lt
+            sides_lbl = str(it.config.get("sides") or "4_0").replace("_", "/")
+            name = f"{p.get('name')} · {chosen['paper_name']} · {it.config.get('quantity')} pcs · {sides_lbl}"
+            line_items.append({"product_id": it.product_id, "name": name, "category": p.get("category"),
+                               "qty": it.qty, "unit_price": price, "line_total": lt, "config": it.config})
+            continue
         pricing = await compute_product_pricing(p, s)
         retail = pricing["price"] if pricing else (p.get("price") or 0.0)
         wholesale = (pricing["wholesale_price"] if pricing else p.get("wholesale_price")) or retail
