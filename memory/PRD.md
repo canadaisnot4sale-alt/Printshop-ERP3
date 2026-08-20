@@ -1,7 +1,8 @@
 ## Implemented (2026-08-20) — Ink by volume + machine + auto-deduction (Phase A + B)
 - **Phase A**: ink materials now measured by bottle VOLUME (1L/440/220 ml). Import parser auto-detects volume from description (regex L/ml), stores `ink_volume_ml`, `unit="bottle"`, `stock_qty`=# bottles, cost per bottle, linked to machine. Purchases import UI: per-ink-line machine + volume dropdowns. Verified: 4 Roland inks → vol 500ml, 1 bottle each, unit bottle.
 - **Phase B**: `POST /api/orders/{oid}/deduct-ink` {machine_id, area_sqft, coverage_pct}. Deducts ml = area × coverage% × settings.ink_ml_per_sqft_full, split proportionally across that machine's inks (reduces bottle stock), records `ink_deducted` on the order (idempotent — blocks double deduction). Orders detail (admin) has an "Ink used" panel: machine + area(ft²) + coverage(25/50/75/100) → Deduct. Triggered manually when marking in production. Verified: 20ft²×50%×10 = 100ml deducted 2000→1900; double-deduct blocked.
-- NOTE: ink rate is global (Settings `ink_ml_per_sqft_full`, default 10 ml/ft²); can be made per-machine later. Coverage tiers 25/50/75/100 — refine with real data over time.
+- **Per-SKU training memory** (`ink_presets` collection): on save, the system remembers `code → machine_id + ink_volume_ml`; on the next PDF parse, ink lines with a known code auto-fill machine + volume. Also auto-detects volume (L/ml) from the description. Verified: trained ILUS17MBA1 → auto-fills Mimaki + 1L on re-parse; other SKUs detect 1000ml from PDF.
+
 
 - Added a "Supplier" dropdown filter next to the category filter on the Materials page (with per-supplier counts + clear link). Filters are MUTUALLY EXCLUSIVE — choosing a supplier resets the category to All and vice-versa (only one active at a time). Verified.
 

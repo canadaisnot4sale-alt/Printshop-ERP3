@@ -1859,6 +1859,16 @@ async def parse_purchase(file: UploadFile = File(...), user=Depends(require_admi
                 brand = nm.split()[0] if nm else ""
                 if brand and brand in dl:
                     li["machine_id"] = str(_mc["_id"]); li["machine_name"] = _mc.get("name"); break
+            _mv = re.search(r"(\d+(?:\.\d+)?)\s*(l|ml)\b", dl)
+            if _mv:
+                _v = float(_mv.group(1)); li["ink_volume_ml"] = _v * 1000 if _mv.group(2) == "l" else _v
+            if li.get("code"):
+                _pre = await db.ink_presets.find_one({"code": li["code"]})
+                if _pre:
+                    if _pre.get("machine_id"):
+                        li["machine_id"] = _pre["machine_id"]
+                    if _pre.get("ink_volume_ml"):
+                        li["ink_volume_ml"] = _pre["ink_volume_ml"]
         m = None
         if li.get("code"):
             m = await db.materials.find_one({"code": {"$regex": f"^{re.escape(li['code'])}$", "$options": "i"}})
@@ -1954,6 +1964,8 @@ async def create_purchase(body: PurchaseIn, user=Depends(require_admin)):
                 stock_units = li.quantity      # ink stock is counted in bottles
                 unit_cost = li.unit_price       # cost per bottle
                 extra = {}; size_str = ""
+                if li.code and (li.machine_id or li.ink_volume_ml):
+                    await db.ink_presets.update_one({"code": li.code}, {"$set": {"code": li.code, "machine_id": li.machine_id or None, "ink_volume_ml": li.ink_volume_ml or 0, "updated_at": now_iso()}}, upsert=True)
             line_modules = list(dict.fromkeys((cat_mods or []) + (body.modules or [])))
             match = None
             if li.material_id:
