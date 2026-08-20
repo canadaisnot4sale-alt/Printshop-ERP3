@@ -39,6 +39,7 @@ export default function ProductsCatalog() {
   const copy = (t) => { navigator.clipboard.writeText(t || ""); toast.success("Copied"); };
   const openConfig = (p) => {
     setCfgProd(JSON.parse(JSON.stringify(p))); setRegenTone("professional"); setCfgRemovedVideoIds([]);
+    api.get(`/store/products/${p.id}/spin`).then(({ data }) => setCfgProd((cur) => (cur ? { ...cur, spin_frames: data.frames || [] } : cur))).catch(() => {});
     api.get("/training/videos", { params: { category: "product", ref_id: p.id } })
       .then(({ data }) => setCfgVideos(data.map((v) => ({ id: v.id, url: v.url, title_es: v.title_es || "", title_en: v.title_en || "", customer_visible: !!v.customer_visible }))))
       .catch(() => setCfgVideos([]));
@@ -75,6 +76,7 @@ export default function ProductsCatalog() {
         const body = { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: pid, ref_label: cfgProd.name, customer_visible: !!v.customer_visible };
         if (v.id) await api.put(`/training/videos/${v.id}`, body); else await api.post("/training/videos", body);
       }
+      if ((cfgProd.spin_frames || []).length) { try { await api.put(`/products/${pid}/spin`, { frames: cfgProd.spin_frames }); } catch (e) {} }
       toast.success("Product saved"); setCfgProd(null); load();
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
   };
@@ -102,6 +104,7 @@ export default function ProductsCatalog() {
   const openEdit = (p) => {
     setForm({ name: p.name, category: p.category, module: p.module || "", price: p.price, wholesale_price: p.wholesale_price || 0, description: p.description || "", published: !!p.published, bom: (p.bom || []).map((b) => ({ waste_per_order: 0, waste_per_unit: 0, ...b })) });
     setEditId(p.id); setRemovedVideoIds([]); setOpen(true);
+    api.get(`/store/products/${p.id}/spin`).then(({ data }) => setCfgProd((cur) => (cur ? { ...cur, spin_frames: data.frames || [] } : cur))).catch(() => {});
     api.get("/training/videos", { params: { category: "product", ref_id: p.id } })
       .then(({ data }) => setDlgVideos(data.map((v) => ({ id: v.id, url: v.url, title_es: v.title_es || "", title_en: v.title_en || "" }))))
       .catch(() => setDlgVideos([]));
@@ -345,7 +348,7 @@ export default function ProductsCatalog() {
                   <Label className="text-xs">Product image</Label>
                   <input type="file" accept="image/*" onChange={uploadImageC} className="text-[11px] mt-1 block w-full" data-testid="cfg-image-upload" />
                   {cfgProd.image_url && <img src={`${API}${cfgProd.image_url}?auth=${localStorage.getItem("pns_token")}`} alt="preview" className="mt-1 h-14 rounded object-cover" />}
-                  <ProductImageAI name={cfgProd.name} description={cfgProd.description} value={cfgProd.image_url} onGenerated={(url) => setC({ image_url: url })} />
+                  <ProductImageAI name={cfgProd.name} description={cfgProd.description} value={cfgProd.image_url} onGenerated={(url) => setC({ image_url: url })} spinFrames={cfgProd.spin_frames || []} onFrames={(f) => setC({ spin_frames: f })} />
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3">
                   <div className="flex items-center justify-between mb-1"><Label className="text-xs font-semibold">Materials (auto-pricing)</Label>

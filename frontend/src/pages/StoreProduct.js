@@ -28,6 +28,8 @@ export default function StoreProduct() {
   const [loading, setLoading] = useState(false);
   const [showTech, setShowTech] = useState(false);
   const [videos, setVideos] = useState([]);
+  const [spin, setSpin] = useState([]);
+  const [spinIdx, setSpinIdx] = useState(0);
 
   const [qty, setQty] = useState(100);
   const [sides, setSides] = useState("4_0");
@@ -58,6 +60,8 @@ export default function StoreProduct() {
 
   useEffect(() => { fetchPrice(); }, [fetchPrice]);
   useEffect(() => { api.get(`/store/products/${id}/videos`).then(({ data }) => setVideos(data)).catch(() => {}); }, [id]);
+  useEffect(() => { api.get(`/store/products/${id}/spin`).then(({ data }) => setSpin(data.frames || [])).catch(() => {}); }, [id]);
+  useEffect(() => { if (spin.length < 2) return; const t = setInterval(() => setSpinIdx((i) => (i + 1) % spin.length), 700); return () => clearInterval(t); }, [spin]);
 
   useEffect(() => {
     if (product?.name) {
@@ -99,14 +103,21 @@ export default function StoreProduct() {
 
   return (
     <div data-testid="store-product-page" className="max-w-5xl mx-auto p-6 pb-28">
+      <style>{`@keyframes kenburns{0%{transform:scale(1)}100%{transform:scale(1.08)}}.kenburns{animation:kenburns 6s ease-in-out infinite alternate}`}</style>
       <button onClick={() => nav("/store")} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4" data-testid="store-back">
         <ArrowLeft size={16} /> Back to store
       </button>
 
       <div className="grid md:grid-cols-2 gap-8">
         <div>
-          {product?.image_url
-            ? <img src={authImg(product.image_url)} alt={product?.name} className="w-full rounded-2xl object-cover aspect-square" />
+          {spin.length > 1 ? (
+            <div className="w-full rounded-2xl overflow-hidden aspect-square bg-slate-50 relative select-none cursor-ew-resize" data-testid="sp-spin"
+                 onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); const p = (e.clientX - r.left) / r.width; setSpinIdx(Math.min(spin.length - 1, Math.max(0, Math.floor(p * spin.length)))); }}>
+              <img src={authImg(spin[spinIdx])} alt={product?.name} className="w-full h-full object-cover" draggable={false} />
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] bg-black/50 text-white px-2 py-0.5 rounded-full">360° · drag to rotate</div>
+            </div>
+          ) : product?.image_url
+            ? <div className="w-full rounded-2xl overflow-hidden aspect-square"><img src={authImg(product.image_url)} alt={product?.name} className="w-full h-full object-cover kenburns" /></div>
             : <div className="w-full rounded-2xl bg-slate-100 aspect-square flex items-center justify-center text-slate-300"><ShoppingBag size={64} /></div>}
         </div>
 

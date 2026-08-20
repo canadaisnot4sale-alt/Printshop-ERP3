@@ -1,4 +1,7 @@
-## Implemented (2026-08-20) — AI product image generation (Gemini Nano Banana)
+## Implemented (2026-08-20) — Motion & 360° for product images
+- CSS "ken-burns" slow-zoom on the store product image (always on, free) via inline keyframe in StoreProduct.
+- AI 360° spin: `POST /api/marketing/product-360` (Nano Banana, 4 angles generated concurrently), `PUT /api/products/{pid}/spin` (upsert to `product_spins`), `GET /api/store/products/{pid}/spin`. "360° spin" button in `ProductImageAI` (both unified editor + Convert-to-product). StoreProduct shows an auto-rotating, drag-to-rotate 360 viewer when frames exist, else the ken-burns image. Verified: 4 frames generated → saved → store returns 4 → viewer renders.
+
 - New endpoint `POST /api/marketing/product-image` (admin): uses Emergent LLM key + Gemini `gemini-3.1-flash-image-preview`. Two modes: text-to-image (from prompt or name+description) and image editing (transform an uploaded reference photo into a clean product shot). Saves PNG via storage_put → returns `/api/files/{id}/download`.
 - Reusable `ProductImageAI` component (prompt input + "Generate with AI" + "Enhance my photo" upload, downscales to 1024px before sending). Wired into BOTH the unified New/Edit product editor and Paper Printing "Convert to product". Verified: text-to-image returns a valid 554KB PNG; UI buttons render in both dialogs.
 

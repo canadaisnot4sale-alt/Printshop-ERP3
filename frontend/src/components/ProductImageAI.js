@@ -3,7 +3,7 @@ import api, { apiErr, API } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Sparkles, Upload, Loader2 } from "lucide-react";
+import { Sparkles, Upload, Loader2, RotateCw } from "lucide-react";
 
 // Downscale an image file to <=1024px and return base64 (no data-url prefix)
 const fileToBase64 = (file) =>
@@ -30,25 +30,40 @@ const fileToBase64 = (file) =>
 
 const authImg = (u) => (u ? (u.startsWith("http") ? u : `${API}${u}?auth=${localStorage.getItem("pns_token")}`) : null);
 
-export default function ProductImageAI({ name, description, value, onGenerated }) {
+export default function ProductImageAI({ name, description, value, onGenerated, onFrames, spinFrames = [] }) {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [spinning, setSpinning] = useState(false);
+  const [ref, setRef] = useState(null);
+
+  const payload = (reference_image_base64) => ({ prompt, name: name || "", description: description || "", reference_image_base64 });
 
   const run = async (reference_image_base64) => {
     setLoading(true);
     try {
-      const { data } = await api.post("/marketing/product-image", { prompt, name: name || "", description: description || "", reference_image_base64 });
+      const { data } = await api.post("/marketing/product-image", payload(reference_image_base64));
       onGenerated(data.url);
       toast.success("Image generated");
     } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
     finally { setLoading(false); }
   };
 
+  const gen360 = async () => {
+    if (!onFrames) return;
+    setSpinning(true);
+    try {
+      const { data } = await api.post("/marketing/product-360", payload(ref));
+      onFrames(data.frames || []);
+      toast.success(`360° spin generated (${(data.frames || []).length} frames)`);
+    } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
+    finally { setSpinning(false); }
+  };
+
   const onEnhance = async (e) => {
     const file = e.target.files?.[0]; e.target.value = "";
     if (!file) return;
     setLoading(true);
-    try { const b64 = await fileToBase64(file); await run(b64); }
+    try { const b64 = await fileToBase64(file); setRef(b64); await run(b64); }
     catch (err) { setLoading(false); toast.error("Could not read image"); }
   };
 
@@ -64,7 +79,13 @@ export default function ProductImageAI({ name, description, value, onGenerated }
           <Upload size={14} /> Enhance my photo
           <input type="file" accept="image/*" className="hidden" onChange={onEnhance} data-testid="pai-enhance" />
         </label>
+        {onFrames && (
+          <Button type="button" size="sm" variant="outline" disabled={spinning} onClick={gen360} className="h-8" data-testid="pai-360">
+            {spinning ? <Loader2 size={14} className="animate-spin mr-1" /> : <RotateCw size={14} className="mr-1" />} 360° spin
+          </Button>
+        )}
       </div>
+      {spinFrames.length > 0 && <div className="text-[11px] text-emerald-600">✓ 360° spin ready ({spinFrames.length} frames) — customers can rotate it in the store.</div>}
     </div>
   );
 }

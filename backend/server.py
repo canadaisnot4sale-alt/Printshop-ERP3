@@ -3490,6 +3490,48 @@ async def generate_product_image(body: ProductImageGenIn, user=Depends(require_a
         "meta": {}, "is_deleted": False, "created_at": now_iso()})
     return {"url": f"/api/files/{fid}/download"}
 
+@api_router.post("/marketing/product-360")
+async def generate_product_360(body: ProductImageGenIn, user=Depends(require_admin)):
+    import uuid as _uuid, base64 as _b64, asyncio as _asyncio
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    key = os.environ.get("EMERGENT_LLM_KEY")
+    if not key:
+        raise HTTPException(500, "LLM key not configured")
+    base = (body.prompt or "").strip() or f"{body.name}. {body.description}".strip(" .")
+    angles = ["front view straight on", "rotated 45 degrees to the right", "left side profile view", "rotated 135 degrees showing the back-left"]
+    async def gen_one(angle):
+        instr = (f"Professional e-commerce product photo of {base}, {angle}. Keep the SAME product, same colors, same lighting and the "
+                 f"same neutral seamless light-grey background across all angles, centered, square composition, no text, no watermark.")
+        chat = LlmChat(api_key=key, session_id=f"spin-{_uuid.uuid4()}", system_message="You are a turntable product photographer.").with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+        msg = UserMessage(text=instr, file_contents=[ImageContent(body.reference_image_base64)]) if body.reference_image_base64 else UserMessage(text=instr)
+        _t, imgs = await chat.send_message_multimodal_response(msg)
+        if not imgs:
+            return None
+        data = _b64.b64decode(imgs[0]["data"])
+        path = f"{APP_NAME}/uploads/{user['id']}/{_uuid.uuid4()}.png"
+        r = storage_put(path, data, "image/png")
+        fid = str(_uuid.uuid4())
+        await db.files.insert_one({"id": fid, "storage_path": r["path"], "original_filename": "ai-spin.png",
+            "content_type": "image/png", "size": r.get("size", len(data)), "uploaded_by": user["id"],
+            "meta": {}, "is_deleted": False, "created_at": now_iso()})
+        return f"/api/files/{fid}/download"
+    results = await _asyncio.gather(*[gen_one(a) for a in angles], return_exceptions=True)
+    frames = [u for u in results if isinstance(u, str)]
+    if not frames:
+        raise HTTPException(502, "No frames generated, please retry")
+    return {"frames": frames}
+
+@api_router.put("/products/{pid}/spin")
+async def save_product_spin(pid: str, body: dict, user=Depends(require_admin)):
+    frames = body.get("frames") or []
+    await db.product_spins.update_one({"product_id": pid}, {"$set": {"product_id": pid, "frames": frames, "updated_at": now_iso()}}, upsert=True)
+    return {"ok": True, "count": len(frames)}
+
+@api_router.get("/store/products/{pid}/spin")
+async def store_product_spin(pid: str, user=Depends(get_current_user)):
+    doc = await db.product_spins.find_one({"product_id": pid})
+    return {"frames": (doc or {}).get("frames", [])}
+
 # ---------------- Orders (storefront) + inventory deduction ----------------
 async def deduct_inventory_for_order(enriched):
     """enriched: [{product(dict), qty}]. Deduct BoM usage (qty_per_unit * qty) per material,

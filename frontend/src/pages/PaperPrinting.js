@@ -207,7 +207,7 @@ export default function PaperPrinting() {
       ],
       defaultTurn: "standard",
       addons: { lamination: laminate, hot_foil: hotFoil, round_corners: roundCorners },
-      marketing: null, relatedIds: [], tone: "professional", fileFee: 25, imageUrl: "", videos: [],
+      marketing: null, relatedIds: [], tone: "professional", fileFee: 25, imageUrl: "", videos: [], spinFrames: [],
       template: result?.product ? { width_in: +(Number(result.product.finished_w) + 0.25).toFixed(2), height_in: +(Number(result.product.finished_h) + 0.25).toFixed(2) } : null,
     });
     api.get("/catalog-products").then((r) => setCatalogProducts((r.data || []).filter((p) => p.published))).catch(() => {});
@@ -273,6 +273,7 @@ export default function PaperPrinting() {
         if (!v.url || !v.url.trim()) continue;
         try { await api.post("/training/videos", { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: newPid, ref_label: f.name, customer_visible: !!v.customer_visible }); } catch (e) {}
       }
+      if ((f.spinFrames || []).length) { try { await api.put(`/products/${newPid}/spin`, { frames: f.spinFrames }); } catch (e) {} }
       toast.success("Product created — clients can now order it");
       setConvOpen(false);
       api.get(`/products/paper-match?product_id=${productId}`).then((r) => setMatches(r.data || [])).catch(() => {});
@@ -689,7 +690,7 @@ export default function PaperPrinting() {
                     <Label className="text-xs">Product image</Label>
                     <input type="file" accept="image/*" onChange={uploadProductImage} className="text-[11px] mt-1 block w-full" data-testid="conv-image-upload" />
                     {convForm.imageUrl && <img src={`${API}${convForm.imageUrl}?auth=${localStorage.getItem("pns_token")}`} alt="preview" className="mt-1 h-14 rounded object-cover" />}
-                    <ProductImageAI name={convForm.name} description={convForm.description || convForm.marketing?.short_description?.en} value={convForm.imageUrl} onGenerated={(url) => setConvForm((f) => ({ ...f, imageUrl: url }))} />
+                    <ProductImageAI name={convForm.name} description={convForm.description || convForm.marketing?.short_description?.en} value={convForm.imageUrl} onGenerated={(url) => setConvForm((f) => ({ ...f, imageUrl: url }))} spinFrames={convForm.spinFrames || []} onFrames={(fr) => setConvForm((f) => ({ ...f, spinFrames: fr }))} />
                   </div>
                   <div>
                     <Label className="text-xs">File setup fee ($)</Label>
