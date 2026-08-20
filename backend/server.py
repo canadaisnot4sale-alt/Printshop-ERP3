@@ -3958,6 +3958,7 @@ class TrainingVideoIn(BaseModel):
     category: str = "general"          # "product" | "machine" | "general"
     ref_id: Optional[str] = None       # linked catalog product or machine id
     ref_label: str = ""                # human label of the linked item
+    customer_visible: bool = False     # also show on the product page in the store
     order: int = 0
 
 class ManualSectionIn(BaseModel):
@@ -3999,6 +4000,11 @@ async def update_training_video(vid: str, body: TrainingVideoIn, user=Depends(re
 async def delete_training_video(vid: str, user=Depends(require_admin)):
     await db.training_videos.delete_one({"_id": ObjectId(vid)})
     return {"ok": True}
+
+@api_router.get("/store/products/{pid}/videos")
+async def store_product_videos(pid: str, user=Depends(get_current_user)):
+    vids = await db.training_videos.find({"category": "product", "ref_id": pid, "customer_visible": True}).sort("order", 1).to_list(100)
+    return [{"id": str(v["_id"]), "title_en": v.get("title_en", ""), "title_es": v.get("title_es", ""), "url": v.get("url", ""), "embed_url": v.get("embed_url", "")} for v in vids]
 
 @api_router.get("/training/manual")
 async def list_manual(user=Depends(require_staff)):

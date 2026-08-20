@@ -270,7 +270,7 @@ export default function PaperPrinting() {
       const newPid = res.data.id;
       for (const v of (f.videos || [])) {
         if (!v.url || !v.url.trim()) continue;
-        try { await api.post("/training/videos", { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: newPid, ref_label: f.name }); } catch (e) {}
+        try { await api.post("/training/videos", { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: newPid, ref_label: f.name, customer_visible: !!v.customer_visible }); } catch (e) {}
       }
       toast.success("Product created — clients can now order it");
       setConvOpen(false);
@@ -745,13 +745,14 @@ export default function PaperPrinting() {
                 <div className="border-t border-slate-100 pt-3">
                   <div className="flex items-center justify-between mb-1">
                     <Label className="text-xs font-semibold">Training videos</Label>
-                    <button type="button" onClick={() => setConvForm((f) => ({ ...f, videos: [...(f.videos || []), { url: "", title_es: "", title_en: "" }] }))} className="text-[11px] text-[#2495D3] hover:underline" data-testid="conv-add-video">+ Add video</button>
+                    <button type="button" onClick={() => setConvForm((f) => ({ ...f, videos: [...(f.videos || []), { url: "", title_es: "", title_en: "", customer_visible: false }] }))} className="text-[11px] text-[#2495D3] hover:underline" data-testid="conv-add-video">+ Add video</button>
                   </div>
                   <p className="text-[11px] text-slate-400 mb-2">Paste a YouTube (unlisted) / Vimeo / Drive link and name it (e.g. "How to make this"). Employees see it in the Training Center.</p>
                   {(convForm.videos || []).map((v, i) => (
                     <div key={i} className="flex items-center gap-2 mb-2" data-testid="conv-video-row">
                       <Input value={v.title_es} onChange={(e) => setConvForm((f) => ({ ...f, videos: f.videos.map((x, idx) => (idx === i ? { ...x, title_es: e.target.value } : x)) }))} placeholder="Nombre / Name" className="rounded-lg h-8 text-xs w-40" data-testid={`conv-video-title-${i}`} />
                       <Input value={v.url} onChange={(e) => setConvForm((f) => ({ ...f, videos: f.videos.map((x, idx) => (idx === i ? { ...x, url: e.target.value } : x)) }))} placeholder="https://youtu.be/..." className="rounded-lg h-8 text-xs flex-1 num" data-testid={`conv-video-url-${i}`} />
+                      <label className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0" title="Show on the product page in the store"><input type="checkbox" checked={!!v.customer_visible} onChange={(e) => setConvForm((f) => ({ ...f, videos: f.videos.map((x, idx) => (idx === i ? { ...x, customer_visible: e.target.checked } : x)) }))} data-testid={`conv-video-store-${i}`} /> Store</label>
                       <button type="button" onClick={() => setConvForm((f) => ({ ...f, videos: f.videos.filter((_, idx) => idx !== i) }))} className="text-slate-300 hover:text-red-500 shrink-0"><X size={14} /></button>
                     </div>
                   ))}

@@ -27,6 +27,7 @@ export default function StoreProduct() {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showTech, setShowTech] = useState(false);
+  const [videos, setVideos] = useState([]);
 
   const [qty, setQty] = useState(100);
   const [sides, setSides] = useState("4_0");
@@ -56,6 +57,7 @@ export default function StoreProduct() {
   }, [id, qty, sides, addons, turnaround]);
 
   useEffect(() => { fetchPrice(); }, [fetchPrice]);
+  useEffect(() => { api.get(`/store/products/${id}/videos`).then(({ data }) => setVideos(data)).catch(() => {}); }, [id]);
 
   useEffect(() => {
     if (product?.name) {
@@ -244,6 +246,25 @@ export default function StoreProduct() {
           </div>
         </div>
       </div>
+
+      {/* How-to videos shared with customers */}
+      {videos.length > 0 && (
+        <div className="mt-12" data-testid="sp-videos">
+          <h2 className="font-head font-black text-xl mb-4">How-to &amp; guides</h2>
+          <div className="grid gap-6 md:grid-cols-2">
+            {videos.map((v) => (
+              <div key={v.id} className="rounded-xl overflow-hidden border border-slate-200 bg-white" data-testid="sp-video">
+                <div className="aspect-video bg-slate-900">
+                  {v.embed_url
+                    ? <iframe src={v.embed_url} title={v.title_en || v.title_es || "video"} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                    : <a href={v.url} target="_blank" rel="noreferrer" className="w-full h-full flex items-center justify-center text-white/70 text-sm">Open video</a>}
+                </div>
+                {(v.title_es || v.title_en) && <div className="p-3 text-sm font-semibold">{v.title_es || v.title_en}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* You may also like */}
       {(product?.related?.length > 0) && (

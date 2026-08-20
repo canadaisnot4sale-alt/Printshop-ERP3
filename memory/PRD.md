@@ -1,4 +1,8 @@
-## Implemented (2026-08-20) — Unified Product Editor + field parity with Convert-to-product
+## Implemented (2026-08-20) — Customer-visible training videos on store products
+- Added `customer_visible` flag to `TrainingVideoIn` + new public endpoint `GET /api/store/products/{pid}/videos` (auth) returning only customer_visible product videos (id, titles, url, embed_url).
+- "Store" toggle added in ALL 3 video-adding areas (unified New/Edit product editor, Paper Printing Convert-to-product, and the reusable `TrainingVideoManager` used on product rows + machines). Convention: any future video-field change must be applied to these 3 areas.
+- StoreProduct page now shows a "How-to & guides" section with the customer-visible videos for that product. Verified: 2 videos (1 visible + 1 internal) → store endpoint returns only the visible one.
+
 - Added **Product image upload** (`uploadImageC` → POST /upload/file, preview via API export) and **pre-filled default turnarounds** (Standard 0 / Next day 10 / Same day 15) to the unified New product editor, matching the Paper Printing "Convert to product" form. Now both product-creation flows share the fundamentals: name, category, description, retail+wholesale price, product image, materials, add-ons, file fee, turnarounds, related products, training videos, and AI marketing (Regenerate). Verified via UI.
 
 - Merged the two ProductsCatalog dialogs (basic "New/Edit" + "Configure & marketing") into ONE editor. `openNew` and the row Pencil now open the same `cfgProd` dialog (title "New product" / "Edit product"). Removed the redundant megaphone button; the old basic dialog stays in code but is never opened.

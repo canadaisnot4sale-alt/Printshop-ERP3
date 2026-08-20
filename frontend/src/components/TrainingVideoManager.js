@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { Video, Plus, Trash2, ExternalLink } from "lucide-react";
 
-const EMPTY = { title_en: "", title_es: "", description_en: "", description_es: "", url: "" };
+const EMPTY = { title_en: "", title_es: "", description_en: "", description_es: "", url: "", customer_visible: false };
 
 export default function TrainingVideoManager({ category, refId, refLabel, variant = "icon" }) {
   const es = (localStorage.getItem("pns_train_lang") || "es") !== "en";
@@ -36,6 +36,10 @@ export default function TrainingVideoManager({ category, refId, refLabel, varian
     if (!window.confirm(t("Delete this video?", "¿Eliminar este video?"))) return;
     await api.delete(`/training/videos/${id}`); load();
   };
+  const toggleVisible = async (v, val) => {
+    try { await api.put(`/training/videos/${v.id}`, { ...v, customer_visible: val }); load(); }
+    catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
+  };
 
   return (
     <>
@@ -60,6 +64,7 @@ export default function TrainingVideoManager({ category, refId, refLabel, varian
                   <div className="text-sm font-medium truncate">{(es ? v.title_es : v.title_en) || v.url}</div>
                   <a href={v.url} target="_blank" rel="noreferrer" className="text-[11px] text-slate-400 hover:text-[#2495D3] flex items-center gap-1"><ExternalLink size={11} /> {t("Open", "Abrir")}</a>
                 </div>
+                <label className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0" title={t("Show on the product page in the store", "Mostrar en la página del producto en la tienda")}><input type="checkbox" checked={!!v.customer_visible} onChange={(e) => toggleVisible(v, e.target.checked)} data-testid={`vm-store-${v.id}`} /> Store</label>
                 <button onClick={() => del(v.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
               </div>
             ))}
@@ -73,6 +78,7 @@ export default function TrainingVideoManager({ category, refId, refLabel, varian
                   <Input placeholder="Título (ES)" data-testid="vm-title-es" value={form.title_es} onChange={(e) => setForm({ ...form, title_es: e.target.value })} />
                   <Input placeholder="Title (EN)" value={form.title_en} onChange={(e) => setForm({ ...form, title_en: e.target.value })} />
                 </div>
+                <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={!!form.customer_visible} onChange={(e) => setForm({ ...form, customer_visible: e.target.checked })} data-testid="vm-store" /> {t("Show to customers (retail/wholesale) on this product", "Mostrar a clientes (retail/wholesale) en este producto")}</label>
                 <div className="flex gap-2 justify-end">
                   <Button size="sm" variant="outline" onClick={() => setAdding(false)}>{t("Cancel", "Cancelar")}</Button>
                   <Button size="sm" className="bg-[#2495D3] hover:bg-[#1E7AA9]" onClick={save} data-testid="vm-save">{t("Save", "Guardar")}</Button>

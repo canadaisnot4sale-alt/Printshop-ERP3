@@ -39,7 +39,7 @@ export default function ProductsCatalog() {
   const openConfig = (p) => {
     setCfgProd(JSON.parse(JSON.stringify(p))); setRegenTone("professional"); setCfgRemovedVideoIds([]);
     api.get("/training/videos", { params: { category: "product", ref_id: p.id } })
-      .then(({ data }) => setCfgVideos(data.map((v) => ({ id: v.id, url: v.url, title_es: v.title_es || "", title_en: v.title_en || "" }))))
+      .then(({ data }) => setCfgVideos(data.map((v) => ({ id: v.id, url: v.url, title_es: v.title_es || "", title_en: v.title_en || "", customer_visible: !!v.customer_visible }))))
       .catch(() => setCfgVideos([]));
   };
   const setC = (patch) => setCfgProd((p) => ({ ...p, ...patch }));
@@ -71,7 +71,7 @@ export default function ProductsCatalog() {
       for (const rid of cfgRemovedVideoIds) { try { await api.delete(`/training/videos/${rid}`); } catch (e) {} }
       for (const v of cfgVideos) {
         if (!v.url || !v.url.trim()) continue;
-        const body = { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: pid, ref_label: cfgProd.name };
+        const body = { url: v.url.trim(), title_es: v.title_es, title_en: v.title_en || v.title_es, category: "product", ref_id: pid, ref_label: cfgProd.name, customer_visible: !!v.customer_visible };
         if (v.id) await api.put(`/training/videos/${v.id}`, body); else await api.post("/training/videos", body);
       }
       toast.success("Product saved"); setCfgProd(null); load();
@@ -391,12 +391,13 @@ export default function ProductsCatalog() {
                 <div className="rounded-lg border border-slate-200 p-3">
                   <div className="flex items-center justify-between mb-1">
                     <Label className="text-xs font-semibold flex items-center gap-1"><Video size={13} /> Training videos</Label>
-                    <button type="button" onClick={() => setCfgVideos((v) => [...v, { url: "", title_es: "", title_en: "" }])} className="text-[11px] text-[#2495D3] hover:underline" data-testid="cfg-add-video">+ Add</button>
+                    <button type="button" onClick={() => setCfgVideos((v) => [...v, { url: "", title_es: "", title_en: "", customer_visible: false }])} className="text-[11px] text-[#2495D3] hover:underline" data-testid="cfg-add-video">+ Add</button>
                   </div>
                   {cfgVideos.map((v, i) => (
                     <div key={i} className="flex items-center gap-1.5 mb-1.5" data-testid="cfg-video-row">
                       <Input value={v.title_es} onChange={(e) => setCfgVideos((l) => l.map((x, idx) => (idx === i ? { ...x, title_es: e.target.value } : x)))} placeholder="Nombre / Name" className="rounded-lg h-8 text-xs w-32" data-testid={`cfg-video-title-${i}`} />
                       <Input value={v.url} onChange={(e) => setCfgVideos((l) => l.map((x, idx) => (idx === i ? { ...x, url: e.target.value } : x)))} placeholder="https://youtu.be/..." className="rounded-lg h-8 text-xs flex-1 num" data-testid={`cfg-video-url-${i}`} />
+                      <label className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0" title="Show on the product page in the store"><input type="checkbox" checked={!!v.customer_visible} onChange={(e) => setCfgVideos((l) => l.map((x, idx) => (idx === i ? { ...x, customer_visible: e.target.checked } : x)))} data-testid={`cfg-video-store-${i}`} /> Store</label>
                       <button type="button" onClick={() => { setCfgVideos((l) => l.filter((_, idx) => idx !== i)); if (v.id) setCfgRemovedVideoIds((r) => [...r, v.id]); }} className="text-slate-300 hover:text-red-500"><Trash2 size={13} /></button>
                     </div>
                   ))}
