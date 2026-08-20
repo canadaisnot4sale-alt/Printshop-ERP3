@@ -3453,6 +3453,43 @@ async def marketing_generate(body: MarketingGenIn, user=Depends(require_admin)):
     except Exception:
         raise HTTPException(502, "AI returned invalid content, please retry")
 
+class ProductImageGenIn(BaseModel):
+    prompt: str = ""
+    name: str = ""
+    description: str = ""
+    reference_image_base64: Optional[str] = None
+
+@api_router.post("/marketing/product-image")
+async def generate_product_image(body: ProductImageGenIn, user=Depends(require_admin)):
+    import uuid as _uuid, base64 as _b64
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    key = os.environ.get("EMERGENT_LLM_KEY")
+    if not key:
+        raise HTTPException(500, "LLM key not configured")
+    base_prompt = (body.prompt or "").strip() or f"{body.name}. {body.description}".strip(" .")
+    if body.reference_image_base64:
+        instruction = (f"Transform this photo into a clean, professional e-commerce product photo. Keep the real product exactly as shown. "
+                       f"Place it on a neutral seamless light-grey background with soft studio lighting, centered, square composition, no text or watermark. Context: {base_prompt}")
+    else:
+        instruction = (f"Professional e-commerce product photo: {base_prompt}. Clean seamless neutral background, soft studio lighting, "
+                       f"centered, high detail, square composition, no text, no watermark.")
+    chat = LlmChat(api_key=key, session_id=f"img-{_uuid.uuid4()}", system_message="You are an expert product photographer.").with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+    msg = UserMessage(text=instruction, file_contents=[ImageContent(body.reference_image_base64)]) if body.reference_image_base64 else UserMessage(text=instruction)
+    try:
+        _text, images = await chat.send_message_multimodal_response(msg)
+    except Exception as e:
+        raise HTTPException(502, f"AI image generation failed: {e}")
+    if not images:
+        raise HTTPException(502, "No image was generated, please retry")
+    image_bytes = _b64.b64decode(images[0]["data"])
+    path = f"{APP_NAME}/uploads/{user['id']}/{_uuid.uuid4()}.png"
+    result = storage_put(path, image_bytes, "image/png")
+    fid = str(_uuid.uuid4())
+    await db.files.insert_one({"id": fid, "storage_path": result["path"], "original_filename": "ai-product.png",
+        "content_type": "image/png", "size": result.get("size", len(image_bytes)), "uploaded_by": user["id"],
+        "meta": {}, "is_deleted": False, "created_at": now_iso()})
+    return {"url": f"/api/files/{fid}/download"}
+
 # ---------------- Orders (storefront) + inventory deduction ----------------
 async def deduct_inventory_for_order(enriched):
     """enriched: [{product(dict), qty}]. Deduct BoM usage (qty_per_unit * qty) per material,

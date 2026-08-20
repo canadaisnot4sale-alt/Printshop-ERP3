@@ -1,4 +1,7 @@
-## Implemented (2026-08-20) — Full marketing panel in Convert-to-product
+## Implemented (2026-08-20) — AI product image generation (Gemini Nano Banana)
+- New endpoint `POST /api/marketing/product-image` (admin): uses Emergent LLM key + Gemini `gemini-3.1-flash-image-preview`. Two modes: text-to-image (from prompt or name+description) and image editing (transform an uploaded reference photo into a clean product shot). Saves PNG via storage_put → returns `/api/files/{id}/download`.
+- Reusable `ProductImageAI` component (prompt input + "Generate with AI" + "Enhance my photo" upload, downscales to 1024px before sending). Wired into BOTH the unified New/Edit product editor and Paper Printing "Convert to product". Verified: text-to-image returns a valid 554KB PNG; UI buttons render in both dialogs.
+
 - The Paper Printing "Convert to product" dialog now renders the FULL marketing preview (SEO title, SEO description, slug, hashtags, short/long description, Instagram, Facebook, Kijiji, image alt — EN/ES) with per-field copy buttons, matching the unified editor. Previously only a one-line summary. Verified: AI generate → 10 fields shown.
 
 - Added `customer_visible` flag to `TrainingVideoIn` + new public endpoint `GET /api/store/products/{pid}/videos` (auth) returning only customer_visible product videos (id, titles, url, embed_url).

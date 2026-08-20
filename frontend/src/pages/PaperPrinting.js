@@ -8,6 +8,7 @@ import NestingCanvas from "@/components/NestingCanvas";
 import { SaveQuoteBar } from "@/components/SaveQuote";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import ProductImageAI from "@/components/ProductImageAI";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -688,6 +689,7 @@ export default function PaperPrinting() {
                     <Label className="text-xs">Product image</Label>
                     <input type="file" accept="image/*" onChange={uploadProductImage} className="text-[11px] mt-1 block w-full" data-testid="conv-image-upload" />
                     {convForm.imageUrl && <img src={`${API}${convForm.imageUrl}?auth=${localStorage.getItem("pns_token")}`} alt="preview" className="mt-1 h-14 rounded object-cover" />}
+                    <ProductImageAI name={convForm.name} description={convForm.description || convForm.marketing?.short_description?.en} value={convForm.imageUrl} onGenerated={(url) => setConvForm((f) => ({ ...f, imageUrl: url }))} />
                   </div>
                   <div>
                     <Label className="text-xs">File setup fee ($)</Label>

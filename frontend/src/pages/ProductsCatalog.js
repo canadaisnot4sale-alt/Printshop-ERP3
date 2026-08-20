@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import TrainingVideoManager from "@/components/TrainingVideoManager";
+import ProductImageAI from "@/components/ProductImageAI";
 import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye, AlertTriangle, Megaphone, Copy, Sparkles, Video } from "lucide-react";
 
 const BLANK = { name: "", category: "Other", price: 0, wholesale_price: 0, description: "", published: false, bom: [] };
@@ -344,6 +345,7 @@ export default function ProductsCatalog() {
                   <Label className="text-xs">Product image</Label>
                   <input type="file" accept="image/*" onChange={uploadImageC} className="text-[11px] mt-1 block w-full" data-testid="cfg-image-upload" />
                   {cfgProd.image_url && <img src={`${API}${cfgProd.image_url}?auth=${localStorage.getItem("pns_token")}`} alt="preview" className="mt-1 h-14 rounded object-cover" />}
+                  <ProductImageAI name={cfgProd.name} description={cfgProd.description} value={cfgProd.image_url} onGenerated={(url) => setC({ image_url: url })} />
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3">
                   <div className="flex items-center justify-between mb-1"><Label className="text-xs font-semibold">Materials (auto-pricing)</Label>
