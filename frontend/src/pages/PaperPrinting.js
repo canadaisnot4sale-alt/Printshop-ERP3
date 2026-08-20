@@ -207,6 +207,7 @@ export default function PaperPrinting() {
       defaultTurn: "standard",
       addons: { lamination: laminate, hot_foil: hotFoil, round_corners: roundCorners },
       marketing: null, relatedIds: [], tone: "professional", fileFee: 25, imageUrl: "",
+      template: result?.product ? { width_in: +(Number(result.product.finished_w) + 0.25).toFixed(2), height_in: +(Number(result.product.finished_h) + 0.25).toFixed(2) } : null,
     });
     api.get("/catalog-products").then((r) => setCatalogProducts((r.data || []).filter((p) => p.published))).catch(() => {});
     setConvOpen(true);
@@ -261,6 +262,7 @@ export default function PaperPrinting() {
           default_turnaround: f.defaultTurn || (f.turnarounds[0]?.id || ""),
           related_ids: f.relatedIds || [],
           file_handling: { fee: Number(f.fileFee) || 0 },
+          template: f.template || null,
           default_paper_id: selectedStock?.stock?.id || "",
           laminate_id: laminateId || "", laminate_sides: laminateSides, foil_id: foilId || "", foil_sides: foilSides,
         },

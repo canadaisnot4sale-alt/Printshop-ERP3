@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, CheckCircle2, Eye, AlertTriangle, Megaphone, Copy, Sparkles } from "lucide-react";
 
 const BLANK = { name: "", category: "Other", price: 0, wholesale_price: 0, description: "", published: false, bom: [] };
 
@@ -27,6 +27,30 @@ export default function ProductsCatalog() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
+  const [cfgProd, setCfgProd] = useState(null);
+  const [regenTone, setRegenTone] = useState("professional");
+  const [regenLoading, setRegenLoading] = useState(false);
+  const copy = (t) => { navigator.clipboard.writeText(t || ""); toast.success("Copied"); };
+  const openConfig = (p) => { setCfgProd(JSON.parse(JSON.stringify(p))); setRegenTone("professional"); };
+  const setC = (patch) => setCfgProd((p) => ({ ...p, ...patch }));
+  const setCfgField = (k, v) => setCfgProd((p) => ({ ...p, config: { ...(p.config || {}), [k]: v } }));
+  const setTurn2 = (id, patch) => setCfgProd((p) => ({ ...p, config: { ...p.config, turnarounds: (p.config.turnarounds || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) } }));
+  const addTurn2 = () => setCfgProd((p) => ({ ...p, config: { ...p.config, turnarounds: [...(p.config.turnarounds || []), { id: `t${Date.now()}`, label: "", pct: 0 }] } }));
+  const rmTurn2 = (id) => setCfgProd((p) => { const l = (p.config.turnarounds || []).filter((t) => t.id !== id); return { ...p, config: { ...p.config, turnarounds: l, default_turnaround: p.config.default_turnaround === id ? (l[0]?.id || "") : p.config.default_turnaround } }; });
+  const toggleRel = (rid) => setCfgProd((p) => { const cur = p.config.related_ids || []; return { ...p, config: { ...p.config, related_ids: cur.includes(rid) ? cur.filter((x) => x !== rid) : [...cur, rid] } }; });
+  const regen = async () => {
+    setRegenLoading(true);
+    try {
+      const c = cfgProd.config || {};
+      const { data } = await api.post("/marketing/generate", { name: cfgProd.name, category: cfgProd.category, paper_class: c.paper_class || "", size: "", sides: c.sides || [], addons: c.addons || {}, turnarounds: c.turnarounds || [], tone: regenTone });
+      setC({ marketing: data }); toast.success("Marketing regenerated");
+    } catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); } finally { setRegenLoading(false); }
+  };
+  const saveConfig = async () => {
+    try { const { id, your_price, dynamic_pricing, computed_cost, ...rest } = cfgProd; await api.put(`/catalog-products/${id}`, rest); toast.success("Product updated"); setCfgProd(null); load(); }
+    catch (e) { toast.error(apiErr(e.response?.data?.detail) || e.message); }
+  };
+  const gt = (v) => (v && typeof v === "object" ? `EN: ${v.en || ""}\n\nES: ${v.es || ""}` : (v || ""));
 
   const load = () => api.get("/catalog-products").then(({ data }) => setItems(data));
   useEffect(() => {
@@ -145,6 +169,7 @@ export default function ProductsCatalog() {
                           <span className="text-[10px] text-slate-400">Publish</span>
                         </div>
                         <button onClick={() => openEdit(p)} className="p-1.5 text-slate-400 hover:text-[#2495D3]" data-testid="product-edit"><Pencil size={15} /></button>
+                        {p.product_type === "configurable_paper" && <button onClick={() => openConfig(p)} className="p-1.5 text-slate-400 hover:text-[#2495D3]" title="Configure & marketing" data-testid="product-configure"><Megaphone size={15} /></button>}
                         <button onClick={() => remove(p.id)} className="p-1.5 text-slate-400 hover:text-red-500" data-testid="product-delete"><Trash2 size={15} /></button>
                       </div>
                     </td>
@@ -228,6 +253,78 @@ export default function ProductsCatalog() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} className="rounded-lg">Cancel</Button>
             <Button data-testid="product-save-button" onClick={save} className="bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg">Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!cfgProd} onOpenChange={(v) => !v && setCfgProd(null)}>
+        <DialogContent className="rounded-xl max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="config-product-dialog">
+          <DialogHeader>
+            <DialogTitle className="font-head">Configure & marketing</DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">Edit options, turnarounds, related products & marketing for this configurable product.</DialogDescription>
+          </DialogHeader>
+          {cfgProd && (
+            <div className="grid md:grid-cols-2 gap-5 py-1">
+              <div className="space-y-3">
+                <div><Label className="text-xs">Name</Label><Input value={cfgProd.name} onChange={(e) => setC({ name: e.target.value })} className="rounded-lg mt-1" data-testid="cfg-name" /></div>
+                <div><Label className="text-xs">Category</Label><Input value={cfgProd.category} onChange={(e) => setC({ category: e.target.value })} className="rounded-lg mt-1" /></div>
+                <div><Label className="text-xs">Description</Label><Textarea value={cfgProd.description || ""} onChange={(e) => setC({ description: e.target.value })} className="rounded-lg mt-1" /></div>
+                <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                  <Label className="text-xs font-semibold">Add-ons offered</Label>
+                  {["lamination", "hot_foil", "round_corners"].map((k) => (
+                    <div key={k} className="flex items-center justify-between"><span className="text-xs capitalize">{k.replace("_", " ")}</span>
+                      <Switch checked={!!(cfgProd.config?.addons || {})[k]} onCheckedChange={(v) => setCfgField("addons", { ...(cfgProd.config?.addons || {}), [k]: v })} data-testid={`cfg-addon-${k}`} /></div>
+                  ))}
+                </div>
+                <div><Label className="text-xs">File setup fee ($)</Label><Input type="number" value={cfgProd.config?.file_handling?.fee ?? 0} onChange={(e) => setCfgField("file_handling", { fee: Number(e.target.value) || 0 })} className="rounded-lg mt-1 h-9 num" data-testid="cfg-fee" /></div>
+                <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                  <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Turnarounds</Label>
+                    <button type="button" onClick={addTurn2} className="text-[11px] text-[#2495D3] hover:underline">+ Add</button></div>
+                  {(cfgProd.config?.turnarounds || []).map((t) => (
+                    <div key={t.id} className="flex items-center gap-1.5" data-testid="cfg-turn-row">
+                      <button type="button" onClick={() => setCfgField("default_turnaround", t.id)} className={`text-[9px] rounded px-1 py-1 border shrink-0 ${cfgProd.config.default_turnaround === t.id ? "bg-emerald-500 text-white border-emerald-500" : "border-slate-300 text-slate-500"}`}>Def</button>
+                      <Input value={t.label} onChange={(e) => setTurn2(t.id, { label: e.target.value })} className="rounded-lg h-8 text-xs flex-1" />
+                      <Input type="number" value={t.pct} onChange={(e) => setTurn2(t.id, { pct: Number(e.target.value) || 0 })} className="rounded-lg h-8 text-xs w-14 num" />
+                      <button type="button" onClick={() => rmTurn2(t.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <Label className="text-xs font-semibold">Related products</Label>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {items.filter((x) => x.id !== cfgProd.id).map((x) => (
+                      <button key={x.id} type="button" onClick={() => toggleRel(x.id)} className={`text-[11px] rounded-full px-2 py-0.5 border ${(cfgProd.config?.related_ids || []).includes(x.id) ? "bg-[#2495D3] text-white border-[#2495D3]" : "border-slate-300 text-slate-600"}`}>{x.name}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Marketing content</Label>
+                  <div className="flex items-center gap-1.5">
+                    <select value={regenTone} onChange={(e) => setRegenTone(e.target.value)} className="text-[11px] border border-slate-300 rounded px-1 py-0.5" data-testid="cfg-tone">
+                      {["professional", "friendly", "playful", "luxury", "bold"].map((x) => <option key={x} value={x}>{x}</option>)}
+                    </select>
+                    <button type="button" onClick={regen} disabled={regenLoading} className="text-[11px] text-[#2495D3] hover:underline inline-flex items-center gap-1 disabled:opacity-50" data-testid="cfg-regen"><Sparkles size={12} /> {regenLoading ? "…" : "Regenerate"}</button>
+                  </div>
+                </div>
+                {[["SEO title", gt(cfgProd.marketing?.seo_title)], ["SEO description", gt(cfgProd.marketing?.seo_description)], ["Slug", cfgProd.marketing?.slug], ["Hashtags", (cfgProd.marketing?.hashtags || []).join(" ")], ["Short description", gt(cfgProd.marketing?.short_description)], ["Long description", gt(cfgProd.marketing?.long_description)], ["Instagram", gt(cfgProd.marketing?.instagram)], ["Facebook", gt(cfgProd.marketing?.facebook)], ["Kijiji", cfgProd.marketing?.kijiji ? `EN: ${cfgProd.marketing.kijiji.en?.title || ""}\n${cfgProd.marketing.kijiji.en?.body || ""}\n\nES: ${cfgProd.marketing.kijiji.es?.title || ""}\n${cfgProd.marketing.kijiji.es?.body || ""}` : ""], ["Image alt", gt(cfgProd.marketing?.image_alt)]].map(([label, val]) => (
+                  <div key={label} className="rounded-lg border border-slate-200 p-2" data-testid="mk-field">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">{label}</span>
+                      <button type="button" onClick={() => copy(val)} className="text-slate-400 hover:text-[#2495D3]" data-testid="mk-copy"><Copy size={13} /></button>
+                    </div>
+                    <div className="text-[11px] text-slate-600 whitespace-pre-wrap line-clamp-4">{val || <span className="text-slate-300">— generate to fill —</span>}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <div className="flex items-center gap-3 mr-auto"><Switch checked={!!cfgProd?.published} onCheckedChange={(v) => setC({ published: v })} data-testid="cfg-published" /><Label className="text-xs">Published</Label></div>
+            <Button variant="outline" onClick={() => setCfgProd(null)} className="rounded-lg">Cancel</Button>
+            <Button onClick={saveConfig} className="bg-[#2495D3] hover:bg-[#1E7AA9] rounded-lg" data-testid="cfg-save">Save changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

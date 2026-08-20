@@ -15,7 +15,9 @@ import { toast } from "sonner";
 import { Printer, FileText, CreditCard, Upload, Download, RefreshCw, Trash2 } from "lucide-react";
 import { apiErr, API } from "@/lib/api";
 
-const STATUS = { pending: "bg-amber-100 text-amber-700", paid: "bg-blue-100 text-blue-700", fulfilled: "bg-emerald-100 text-emerald-700", cancelled: "bg-slate-100 text-slate-500" };
+const STATUS = { pending: "bg-amber-100 text-amber-700", paid: "bg-blue-100 text-blue-700", received: "bg-indigo-100 text-indigo-700", in_production: "bg-purple-100 text-purple-700", ready: "bg-teal-100 text-teal-700", fulfilled: "bg-emerald-100 text-emerald-700", completed: "bg-emerald-100 text-emerald-700", cancelled: "bg-slate-100 text-slate-500" };
+const STATUS_LIST = ["pending", "paid", "received", "in_production", "ready", "completed", "cancelled"];
+const STAGES = [["paid", "Received"], ["in_production", "In production"], ["ready", "Ready"], ["completed", "Completed"]];
 
 export default function Orders() {
   const { user } = useAuth();
@@ -44,6 +46,15 @@ export default function Orders() {
     const fd = new FormData(); fd.append("file", file);
     try {
       const { data } = await api.post("/upload/file", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      if (kind === "client" && data.pdf_width_in) {
+        const tmpl = (detail.items || []).map((i) => i.template).find(Boolean);
+        if (tmpl) {
+          const ok = (Math.abs(data.pdf_width_in - tmpl.width_in) < 0.15 && Math.abs(data.pdf_height_in - tmpl.height_in) < 0.15)
+            || (Math.abs(data.pdf_width_in - tmpl.height_in) < 0.15 && Math.abs(data.pdf_height_in - tmpl.width_in) < 0.15);
+          if (!ok) toast.warning(`Your PDF is ${data.pdf_width_in}"×${data.pdf_height_in}" but the template expects ~${tmpl.width_in}"×${tmpl.height_in}" (with bleed). We may need to adjust it — a setup fee could apply.`, { duration: 8000 });
+          else toast.success("PDF size matches the template ✓");
+        }
+      }
       const { data: order } = await api.post(`/orders/${detail.id}/files`, { file_id: data.file_id, kind });
       setDetail(order); load(); toast.success("File uploaded");
     } catch (err) { toast.error(apiErr(err.response?.data?.detail) || err.message); }
@@ -109,6 +120,20 @@ export default function Orders() {
           </DialogHeader>
           {detail && (
             <div className="space-y-3" id="invoice-print">
+              {!isAdmin && detail.status !== "cancelled" && (
+                <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3" data-testid="order-stepper">
+                  {STAGES.map(([key, label], i) => {
+                    const idx = STAGES.findIndex(([k]) => k === detail.status);
+                    const done = idx >= i && idx >= 0;
+                    return (
+                      <div key={key} className="flex-1 text-center">
+                        <div className={`mx-auto w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${done ? "bg-[#2495D3] text-white" : "bg-slate-200 text-slate-400"}`}>{i + 1}</div>
+                        <div className={`text-[10px] mt-1 ${done ? "text-[#2495D3] font-semibold" : "text-slate-400"}`}>{label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <table className="w-full text-sm">
                 <thead><tr className="text-[10px] font-mono uppercase text-slate-400 border-b border-slate-200">
                   <th className="text-left py-1.5">Product</th><th className="text-right">Qty</th><th className="text-right">Price</th><th className="text-right">Total</th>
@@ -175,7 +200,7 @@ export default function Orders() {
               <Select value={detail?.status} onValueChange={(v) => setStatus(detail.id, v)}>
                 <SelectTrigger className="rounded-lg w-40 h-9" data-testid="order-status-select"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["pending", "paid", "fulfilled", "cancelled"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  {STATUS_LIST.map((s) => <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>)}
                 </SelectContent>
               </Select>
             ) : <span />}

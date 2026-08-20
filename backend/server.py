@@ -1059,14 +1059,24 @@ async def upload_file_generic(file: UploadFile = File(...), user=Depends(get_cur
     if len(data) > 50 * 1024 * 1024:
         raise HTTPException(400, "File too large (max 50MB).")
     result = storage_put(path, data, ctype)
+    meta = {}
+    if ext == "pdf":
+        try:
+            import pypdf, io as _io
+            rdr = pypdf.PdfReader(_io.BytesIO(data))
+            box = rdr.pages[0].mediabox
+            meta = {"pdf_width_in": round(float(box.width) / 72.0, 2),
+                    "pdf_height_in": round(float(box.height) / 72.0, 2), "pdf_pages": len(rdr.pages)}
+        except Exception:
+            meta = {}
     fid = str(uuid.uuid4())
     await db.files.insert_one({
         "id": fid, "storage_path": result["path"], "original_filename": file.filename,
         "content_type": ctype, "size": result.get("size", len(data)), "uploaded_by": user["id"],
-        "is_deleted": False, "created_at": now_iso(),
+        "meta": meta, "is_deleted": False, "created_at": now_iso(),
     })
     return {"file_id": fid, "filename": file.filename, "url": f"/api/files/{fid}/download",
-            "size": result.get("size", len(data)), "content_type": ctype}
+            "size": result.get("size", len(data)), "content_type": ctype, **meta}
 
 @api_router.get("/files/{file_id}/download")
 async def download_file(file_id: str, authorization: str = Header(None), auth: str = Query(None)):
@@ -3502,7 +3512,8 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
             sides_lbl = str(it.config.get("sides") or "4_0").replace("_", "/")
             name = f"{p.get('name')} · {chosen['paper_name']} · {it.config.get('quantity')} pcs · {sides_lbl}" + (f" · {tlabel}" if tlabel else "") + (" · File setup" if setup_fee else "")
             li = {"product_id": it.product_id, "name": name, "category": p.get("category"),
-                  "qty": it.qty, "unit_price": price, "line_total": lt, "config": it.config}
+                  "qty": it.qty, "unit_price": price, "line_total": lt, "config": it.config,
+                  "template": cfgp.get("template") or None}
             if setup_fee:
                 li["setup_fee"] = setup_fee
             line_items.append(li)
