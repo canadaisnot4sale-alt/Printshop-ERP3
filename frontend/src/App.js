@@ -39,13 +39,14 @@ import StoreLayout from "@/components/StoreLayout";
 import Orders from "@/pages/Orders";
 import PaymentReturn from "@/pages/PaymentReturn";
 import Training from "@/pages/Training";
+import { TourProvider } from "@/context/TourContext";
 
 function Protected({ children, adminOnly, training }) {
-  const { user, ready } = useAuth();
+  const { user, ready, tourMode } = useAuth();
   if (!ready) return <div className="p-10 font-mono text-sm">Loading…</div>;
   if (!user) return <Navigate to="/login" replace />;
   const isCustomer = user.role === "client" || user.role === "reseller";
-  if (user.role === "staff" && !training) return <Navigate to="/training" replace />;
+  if (user.role === "staff" && !training && !tourMode) return <Navigate to="/training" replace />;
   if (training && isCustomer) return <Navigate to="/" replace />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/" replace />;
   const Shell = isCustomer ? StoreLayout : Layout;
@@ -65,6 +66,7 @@ function App() {
         <CartProvider>
         <StoreCartProvider>
         <BrowserRouter>
+          <TourProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Protected><HomeRouter /></Protected>} />
@@ -101,6 +103,7 @@ function App() {
             <Route path="/settings" element={<Protected adminOnly><Settings /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </TourProvider>
         </BrowserRouter>
         </StoreCartProvider>
         </CartProvider>

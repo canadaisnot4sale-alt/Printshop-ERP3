@@ -7,6 +7,7 @@ export const useAuth = () => useContext(AuthContext);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null); // null = checking
   const [ready, setReady] = useState(false);
+  const [tourMode, setTourMode] = useState(false);
   const [viewAs, setViewAsState] = useState(() => localStorage.getItem("pns_view_as") || "admin");
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export function AuthProvider({ children }) {
     try { await api.post("/auth/logout"); } catch (e) {}
     localStorage.removeItem("pns_token");
     localStorage.removeItem("pns_view_as");
+    setTourMode(false);
     setUser(false);
   };
 
@@ -53,7 +55,7 @@ export function AuthProvider({ children }) {
     : user;
 
   return (
-    <AuthContext.Provider value={{ user: effUser, realRole, viewAs, setViewAs, ready, login, logout }}>
+    <AuthContext.Provider value={{ user: effUser, realRole, viewAs, setViewAs, ready, login, logout, tourMode, setTourMode }}>
       {children}
     </AuthContext.Provider>
   );

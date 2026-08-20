@@ -1,3 +1,10 @@
+## Implemented (2026-08-20) — Interactive Guided Tours (driver.js)
+- **Guided Tours** in Training Center ("Recorridos" tab): step-by-step interactive tours that highlight REAL system buttons with spotlight, arrows, numbered progress and Next/Back (bilingual, follows the ES/EN toggle stored in `pns_train_lang`).
+- Library: `driver.js` (react-joyride v3 was tried first but its tooltip API was unstable → replaced). Runner: `context/TourContext.js` (`TourProvider` inside BrowserRouter, exposes `startTour(id)`). Tour definitions in `lib/tours.js` (single-route tours targeting existing data-testids).
+- 3 tours seeded: `overview` (sidebar walkthrough, admin+staff), `paper_quote` (how to quote paper, admin+staff), `training_admin` (managing training content, admin only). Role-filtered on the cards.
+- Staff support: `tourMode` flag in AuthContext lets a staff user navigate to the tour's real pages during an active tour (Protected + Layout honor it); reverts on tour end/logout so staff stays restricted to /training otherwise.
+
+
 ## Implemented (2026-08-20) — Cloudflare Turnstile + Google Login + Training Center
 - **Turnstile captcha** on public registration: frontend widget (`@marsidev/react-turnstile`) in `Login.js` (register mode); backend `verify_turnstile()` calls Cloudflare siteverify. Keys in env: `TURNSTILE_SECRET_KEY` (backend), `REACT_APP_TURNSTILE_SITE_KEY` (frontend). Verified: rejects missing/fake tokens with 400.
 - **Google Login** (Emergent OAuth) verified: `/api/auth/google/session` exchanges session_id→JWT; button in `Login.js`, handled in `AuthContext.js`. Rejects invalid sessions (401).

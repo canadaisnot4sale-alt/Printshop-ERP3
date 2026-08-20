@@ -46,7 +46,7 @@ const NAV = [
 const ROLE_LABEL = { admin: "Administrator", staff: "Staff (Training)", client: "Client (Retail)", reseller: "Reseller (Wholesale)" };
 
 export default function Layout({ children }) {
-  const { user, logout, realRole, viewAs, setViewAs } = useAuth();
+  const { user, logout, realRole, viewAs, setViewAs, tourMode } = useAuth();
   const cart = useCart();
   const nav = useNavigate();
   const isAdmin = user?.role === "admin";
@@ -63,7 +63,7 @@ export default function Layout({ children }) {
           </div>
         </div>
         <nav className="flex-1 py-2 overflow-y-auto">
-          {NAV.filter((n) => (isStaff ? n.staff : (!n.admin || isAdmin))).map((n, i) =>
+          {NAV.filter((n) => ((isAdmin || tourMode) ? true : (isStaff ? n.staff : !n.admin))).map((n, i) =>
             n.section ? (
               <div key={i} className="px-5 pt-4 pb-1 text-[10px] font-mono uppercase tracking-widest text-slate-400">{n.section}</div>
             ) : (

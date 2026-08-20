@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import api, { apiErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useTour } from "@/context/TourContext";
+import { TOURS } from "@/lib/tours";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,15 +12,17 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
-import { GraduationCap, Plus, Pencil, Trash2, PlayCircle, ExternalLink } from "lucide-react";
+import { GraduationCap, Plus, Pencil, Trash2, PlayCircle, ExternalLink, Route } from "lucide-react";
 
 const EMPTY_VIDEO = { title_en: "", title_es: "", description_en: "", description_es: "", url: "", category: "general", ref_id: "", ref_label: "", order: 0 };
 const EMPTY_SECTION = { group: "getting_started", icon: "book", order: 999, title_en: "", title_es: "", body_en: "", body_es: "" };
 
 export default function Training() {
   const { user } = useAuth();
+  const { startTour } = useTour();
   const isAdmin = user?.role === "admin";
-  const [lang, setLang] = useState("es");
+  const [lang, setLangState] = useState(() => localStorage.getItem("pns_train_lang") || "es");
+  const setLang = (v) => { setLangState(v); localStorage.setItem("pns_train_lang", v); };
   const [manual, setManual] = useState([]);
   const [videos, setVideos] = useState([]);
   const [refs, setRefs] = useState({ product: [], machine: [] });
@@ -110,6 +114,7 @@ export default function Training() {
       <Tabs defaultValue="manual">
         <TabsList data-testid="training-tabs">
           <TabsTrigger value="manual" data-testid="tab-manual">{t("System Manual", "Manual del Sistema")}</TabsTrigger>
+          <TabsTrigger value="tours" data-testid="tab-tours">{t("Guided Tours", "Recorridos")}</TabsTrigger>
           <TabsTrigger value="product" data-testid="tab-product">{t("Products", "Productos")}</TabsTrigger>
           <TabsTrigger value="machine" data-testid="tab-machine">{t("Machines", "Máquinas")}</TabsTrigger>
           <TabsTrigger value="general" data-testid="tab-general">{t("General Library", "Biblioteca General")}</TabsTrigger>
@@ -146,6 +151,25 @@ export default function Training() {
             </div>
           ))}
           {manual.length === 0 && <p className="text-sm text-slate-500">{t("No content yet.", "Aún no hay contenido.")}</p>}
+        </TabsContent>
+
+        {/* GUIDED TOURS */}
+        <TabsContent value="tours" className="mt-6">
+          <p className="text-sm text-slate-500 mb-4">{t("Interactive step-by-step tours that highlight the real buttons in the system with arrows.", "Recorridos interactivos paso a paso que resaltan los botones reales del sistema con flechas.")}</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {TOURS.filter((tr) => tr.roles.includes(user?.role)).map((tr) => (
+              <div key={tr.id} className="border border-slate-200 rounded-md bg-white p-5 flex flex-col" data-testid={`tour-card-${tr.id}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Route size={16} className="text-[#2495D3]" />
+                  <div className="font-semibold text-sm">{t(tr.title_en, tr.title_es)}</div>
+                </div>
+                <p className="text-sm text-slate-600 flex-1">{t(tr.desc_en, tr.desc_es)}</p>
+                <Button size="sm" className="bg-[#2495D3] hover:bg-[#1E7AA9] mt-3 self-start" data-testid={`start-tour-${tr.id}`} onClick={() => startTour(tr.id)}>
+                  <PlayCircle size={15} className="mr-1" /> {t("Start tour", "Iniciar recorrido")}
+                </Button>
+              </div>
+            ))}
+          </div>
         </TabsContent>
 
         {/* VIDEO TABS */}
